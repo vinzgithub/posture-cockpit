@@ -2,11 +2,13 @@
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """JSON API, for Home Assistant, cron or any monitoring tool.
 
-- ``GET /api/v1/domains``: the latest score of every domain;
+- ``GET /api/v1/domains``: the latest score of every domain the key's owner sees;
 - ``POST /api/v1/domains/<name>/scan``: scan a followed domain again.
 
 Authentication: ``Authorization: Bearer <key>``, with a key created on the
-settings page. See docs/user/HOME_ASSISTANT.md.
+settings page. A key has the rights of its owner: the domains of internal
+perimeters are only listed and scanned with an administrator's key.
+See docs/user/HOME_ASSISTANT.md.
 """
 
 from __future__ import annotations
@@ -18,20 +20,24 @@ from fastapi.responses import JSONResponse
 
 from ...core import scoring
 from ...core.model import Finding, Status
+from ...scanner import InternalScansDisabled
 from ...security import token_hash
-from ...storage import Scan
-from ..scanning import scan_and_save
+from ...storage import Row, Scan
+from ..deps import client_key
+from ..scanning import perimeter_of, scan_and_save
 from ..services import services
 
 router = APIRouter(prefix="/api/v1")
 
 
-def _user_id(request: Request) -> int | None:
+def _user(request: Request) -> Row | None:
     """The user the bearer key belongs to, or None."""
     scheme, _, token = request.headers.get("authorization", "").partition(" ")
     if scheme.lower() != "bearer" or not token.strip():
         return None
-    return services(request).accounts.check_token(token_hash(token.strip()))
+    accounts = services(request).accounts
+    user_id = accounts.check_token(token_hash(token.strip()))
+    return accounts.get(user_id) if user_id is not None else None
 
 
 def _unauthorized() -> JSONResponse:
@@ -62,23 +68,31 @@ def _summary(scan: Scan) -> dict:
 
 @router.get("/domains")
 async def domains(request: Request):
-    """The latest result of every domain."""
-    if _user_id(request) is None:
+    """The latest result of every domain the key's owner may see."""
+    user = _user(request)
+    if user is None:
         return _unauthorized()
     s = services(request)
-    scans = (s.scans.get(row["scan_id"]) for row in s.scans.domains() if row["scan_id"])
+    rows = s.scans.domains(internal=bool(user["is_admin"]))
+    scans = (s.scans.get(row["scan_id"]) for row in rows if row["scan_id"])
     return {"domains": [_summary(scan) for scan in scans if scan is not None]}
 
 
 @router.post("/domains/{name}/scan")
 async def scan(request: Request, name: str):
     """Scans a domain already followed, e.g. once a month from a Home Assistant automation or cron."""
-    user_id = _user_id(request)
-    if user_id is None:
+    user = _user(request)
+    if user is None:
         return _unauthorized()
     s = services(request)
-    if s.scans.domain(name) is None:
+    domain = s.scans.domain(name)
+    if domain is None or (domain["perimeter_id"] is not None and not user["is_admin"]):
         return JSONResponse({"error": "unknown domain"}, status_code=404)
-    scan = s.scans.get(await scan_and_save(s, name, user_id))
-    assert scan is not None
-    return _summary(scan)
+    try:
+        scan_id = await scan_and_save(s, name, user, perimeter=perimeter_of(s, domain), client=client_key(request),
+                                      via="api")
+    except InternalScansDisabled:
+        return JSONResponse({"error": "internal scans are disabled on this instance"}, status_code=403)
+    result = s.scans.get(scan_id)
+    assert result is not None
+    return _summary(result)

@@ -19,7 +19,7 @@ from ..core.registry import Registry
 from ..i18n import Catalog
 from ..scanner import Scanner
 from ..security import LoginThrottle
-from ..storage import Accounts, Database, InstanceSettings, Scans
+from ..storage import Accounts, AuditLog, Database, InstanceSettings, Perimeters, Scans
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 STATIC_DIR = Path(__file__).parent / "static"
@@ -31,6 +31,8 @@ class Services:
     db: Database
     accounts: Accounts
     scans: Scans
+    perimeters: Perimeters
+    audit: AuditLog
     settings: InstanceSettings
     registry: Registry
     catalog: Catalog

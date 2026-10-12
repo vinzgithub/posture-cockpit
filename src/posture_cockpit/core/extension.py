@@ -54,6 +54,7 @@ class Check:
     weight: int      # importance in the score, from 1 (minor) to 10 (essential)
     run: CheckFunction
     extension: str
+    internal: bool = True  # whether it applies to sites audited inside an internal perimeter
 
     @property
     def title_key(self) -> str:
@@ -78,8 +79,12 @@ class Extension:
         self.messages: dict[str, dict[str, str]] = {lang: dict(texts) for lang, texts in (messages or {}).items()}
         self.checks: list[Check] = []
 
-    def check(self, name: str, *, category: str, weight: int) -> Callable[[CheckFunction], CheckFunction]:
-        """Decorator that registers ``async def f(ctx) -> Outcome`` as the check ``<extension>.<name>``."""
+    def check(self, name: str, *, category: str, weight: int,
+              internal: bool = True) -> Callable[[CheckFunction], CheckFunction]:
+        """Decorator that registers ``async def f(ctx) -> Outcome`` as the check ``<extension>.<name>``.
+
+        ``internal=False``: the check only makes sense on the Internet (SPF, DNSSEC…);
+        in an internal perimeter it is reported as not applicable without running."""
         if not _ID.fullmatch(name):
             raise ValueError(f"invalid check name {name!r}")
         if not 1 <= weight <= 10:
@@ -89,7 +94,7 @@ class Extension:
             check_id = f"{self.id}.{name}"
             if any(c.id == check_id for c in self.checks):
                 raise ValueError(f"check {check_id} declared twice")
-            self.checks.append(Check(check_id, category, weight, function, self.id))
+            self.checks.append(Check(check_id, category, weight, function, self.id, internal))
             return function
 
         return register
@@ -114,6 +119,7 @@ class CheckContext:
     domain: str      # lower-case, ASCII (internationalised names in their xn-- form)
     net: Network
     now: datetime
+    internal: bool = False  # the scan runs inside an internal perimeter
     _memo: dict[str, asyncio.Future[Any]] = field(default_factory=dict, repr=False)
 
     def fqdn(self, label: str) -> str:

@@ -9,6 +9,7 @@
 
 <section class="plan-hero">
   <div class="plan-hero-text">
+    {% if domain.perimeter %}<p class="eyebrow"><span class="tag-internal">{{ t('perimeter.internal_audit', name=domain.perimeter) }}</span></p>{% endif %}
     <p class="eyebrow-muted">{{ t('plan.scanned', domain=plan.domain, date=date(plan.scan.started_at), time=plan.scan.started_at[11:16]) }}</p>
     <h1>{{ plan.headline }}</h1>
     <p class="lead">{{ plan.subline }}</p>

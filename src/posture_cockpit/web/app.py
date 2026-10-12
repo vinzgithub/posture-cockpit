@@ -23,9 +23,9 @@ from ..core.registry import Registry
 from ..i18n import Catalog
 from ..scanner import Scanner
 from ..security import LoginThrottle
-from ..storage import Accounts, Database, InstanceSettings, Scans
+from ..storage import Accounts, AuditLog, Database, InstanceSettings, Perimeters, Scans
 from . import deps
-from .routes import account, admin, api, auth, domains, report
+from .routes import account, admin, api, auth, domains, perimeters, report
 from .services import STATIC_DIR, TEMPLATES_DIR, Services
 
 # Strict policy: no inline script or style, nothing loaded from elsewhere.
@@ -41,7 +41,8 @@ def create_app(config: Config | None = None, registry: Registry | None = None,
     db = Database(config.db_path)
     settings = InstanceSettings(db)
     services = Services(
-        config=config, db=db, accounts=Accounts(db), scans=Scans(db), settings=settings, registry=registry,
+        config=config, db=db, accounts=Accounts(db), scans=Scans(db), perimeters=Perimeters(db), audit=AuditLog(db),
+        settings=settings, registry=registry,
         catalog=Catalog(registry.messages),
         scanner=Scanner(registry, config, disabled=settings.disabled_extensions, network_factory=network_factory),
         throttle=LoginThrottle(), templates=Jinja2Templates(directory=TEMPLATES_DIR),
@@ -66,7 +67,7 @@ def create_app(config: Config | None = None, registry: Registry | None = None,
                        max_age=config.session_max_age, same_site="lax", https_only=config.cookie_secure)
 
     _add_error_pages(app)
-    for module in (auth, account, admin, domains, report, api):
+    for module in (auth, account, admin, perimeters, domains, report, api):
         app.include_router(module.router)
 
     @app.get("/healthz")

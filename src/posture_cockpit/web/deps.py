@@ -128,6 +128,23 @@ def require_admin(request: Request) -> Row:
     return user
 
 
+def visible_domain(request: Request, name: str, user: Row) -> Row:
+    """The domain ``name`` if ``user`` may see it, otherwise a 404.
+
+    The domains of internal perimeters are for administrators only: for anyone
+    else they do not exist (the same answer as for an unknown name)."""
+    row = services(request).scans.domain(name)
+    if row is None or (row["perimeter_id"] is not None and not user["is_admin"]):
+        raise HTTPException(404)
+    return row
+
+
+# --------------------------------------------------------------------- audit
+def audit(request: Request, action: str, /, *, user: Row | None = None, target: str = "", **detail: Any) -> None:
+    """Writes an entry in the audit log, with the address of the client. Never pass a secret."""
+    services(request).audit.record(action, user=user, target=target, client=client_key(request), **detail)
+
+
 # -------------------------------------------------------------------- forms
 async def checked_form(request: Request) -> FormData:
     """The submitted form, once its CSRF token is checked (the X-CSRF-Token header also works)."""

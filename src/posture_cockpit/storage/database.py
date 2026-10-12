@@ -6,14 +6,22 @@ The repositories (:class:`~.accounts.Accounts`, :class:`~.scans.Scans`) hold the
 queries; this class only owns the connection. SQLite runs in WAL mode so pages
 can read while a scan is being saved.
 
-Migrations: :data:`~.schema.MIGRATIONS` is a list of SQL scripts. The database
+Migrations: :data:`~.schema.MIGRATIONS` is a list of SQL scripts, or Python
+functions for changes SQL alone cannot make (recomputing values). The database
 remembers how many it has applied (``meta.schema_version``) and applies the
 next ones at start-up, each in its own transaction. To change the schema,
-*append* a script; never edit one that has been released.
+*append* a migration; never edit one that has been released.
+
+Before migrating a database that already holds data, a copy of it is written
+to ``backups/`` next to it. While migrating, foreign keys are switched off (the
+procedure SQLite documents for rebuilding a table: otherwise dropping the old
+table would delete the rows that refer to it) and checked again before each
+commit. The database file is readable by its owner only.
 """
 
 from __future__ import annotations
 
+import os
 import sqlite3
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
@@ -22,7 +30,7 @@ from pathlib import Path
 from threading import RLock
 from typing import Any
 
-from .schema import MIGRATIONS
+from .schema import MIGRATIONS, Migration
 
 Row = sqlite3.Row
 
@@ -33,10 +41,11 @@ def utcnow() -> str:
 
 
 class Database:
-    def __init__(self, path: Path, migrations: Sequence[str] = MIGRATIONS):
+    def __init__(self, path: Path, migrations: Sequence[Migration] = MIGRATIONS):
         path.parent.mkdir(parents=True, exist_ok=True)
         self.path = path
         self._lock = RLock()
+        _private_file(path)
         self._conn = sqlite3.connect(str(path), check_same_thread=False, isolation_level=None)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA foreign_keys = ON")
@@ -97,17 +106,76 @@ class Database:
     def schema_version(self) -> int:
         return int(self.get_meta("schema_version") or 0)
 
-    def _migrate(self, migrations: Sequence[str]) -> None:
-        for version in range(self.schema_version + 1, len(migrations) + 1):
-            script = migrations[version - 1]
+    def _migrate(self, migrations: Sequence[Migration]) -> None:
+        first = self.schema_version + 1
+        if first > len(migrations):
+            return
+        if first > 1:
+            self.backup(f"schema{first - 1}")
+        with self._lock:
+            self._conn.execute("PRAGMA foreign_keys = OFF")  # has no effect inside a transaction
+            try:
+                for version in range(first, len(migrations) + 1):
+                    self._apply(version, migrations[version - 1])
+            finally:
+                self._conn.execute("PRAGMA foreign_keys = ON")
+
+    def _apply(self, version: int, migration: Migration) -> None:
+        self._conn.execute("BEGIN")
+        try:
+            if callable(migration):
+                migration(self._conn)
+            else:
+                for statement in _statements(migration):
+                    self._conn.execute(statement)
+            broken = self._conn.execute("PRAGMA foreign_key_check").fetchall()
+            if broken:
+                raise sqlite3.IntegrityError(f"migration {version} leaves broken references: {broken[:3]}")
+            self._conn.execute("INSERT INTO meta(key, value) VALUES('schema_version', ?) "
+                               "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (str(version),))
+            self._conn.execute("COMMIT")
+        except BaseException:
+            if self._conn.in_transaction:
+                self._conn.execute("ROLLBACK")
+            raise
+
+    def backup(self, label: str) -> Path:
+        """Copies the database to ``backups/<name>-<label>-<time>.db`` next to it and returns the path."""
+        folder = self.path.parent / "backups"
+        folder.mkdir(exist_ok=True)
+        stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+        target = folder / f"{self.path.stem}-{label}-{stamp}.db"
+        _private_file(target)
+        copy = sqlite3.connect(str(target))
+        try:
             with self._lock:
-                try:
-                    # executescript() runs several statements; BEGIN/COMMIT make them one transaction.
-                    self._conn.executescript(
-                        f"BEGIN;\n{script.strip().rstrip(';')};\n"
-                        f"INSERT INTO meta(key, value) VALUES('schema_version', '{version}') "
-                        "ON CONFLICT(key) DO UPDATE SET value = excluded.value;\nCOMMIT;")
-                except sqlite3.Error:
-                    if self._conn.in_transaction:
-                        self._conn.execute("ROLLBACK")
-                    raise
+                self._conn.backup(copy)
+        finally:
+            copy.close()
+        return target
+
+
+def _private_file(path: Path) -> None:
+    """Creates ``path`` readable by its owner only, or restricts it if it exists.
+
+    SQLite gives its journal files the permissions of the database file."""
+    if path.exists():
+        os.chmod(path, 0o600)
+    else:
+        os.close(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600))
+
+
+def _statements(script: str) -> Iterator[str]:
+    """The statements of an SQL script, one at a time (executescript() would commit on its own).
+
+    A semicolon inside a string or a comment does not end a statement: SQLite's
+    own parser (complete_statement) decides. The last statement may omit its semicolon."""
+    pieces = script.split(";")
+    buffer = ""
+    for index, piece in enumerate(pieces):
+        last = index == len(pieces) - 1
+        buffer += piece if last else piece + ";"
+        if last or sqlite3.complete_statement(buffer):
+            if any(line.strip() and not line.strip().startswith("--") for line in buffer.splitlines()):
+                yield buffer
+            buffer = ""

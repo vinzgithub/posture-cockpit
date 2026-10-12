@@ -56,25 +56,33 @@ class Scans:
         self.db = db
 
     # ---------------------------------------------------------------- domains
-    def add_domain(self, name: str, user_id: int | None) -> int:
-        """Id of the domain, created if needed."""
+    def add_domain(self, name: str, user_id: int | None, perimeter_id: int | None = None) -> int:
+        """Id of the domain, created if needed (in ``perimeter_id``, or on the Internet).
+
+        A domain keeps the perimeter it was created in: callers check it first."""
         row = self.db.one("SELECT id FROM domains WHERE name = ?", (name,))
         if row:
             return int(row["id"])
-        cur = self.db.execute("INSERT INTO domains(name, created_at, created_by) VALUES(?, ?, ?)",
-                              (name, utcnow(), user_id))
+        cur = self.db.execute("INSERT INTO domains(name, created_at, created_by, perimeter_id) VALUES(?, ?, ?, ?)",
+                              (name, utcnow(), user_id, perimeter_id))
         return int(cur.lastrowid or 0)
 
     def domain(self, name: str) -> Row | None:
-        return self.db.one("SELECT * FROM domains WHERE name = ?", (name,))
+        """The domain, with the name of its perimeter (``perimeter``, None on the Internet)."""
+        return self.db.one("SELECT d.*, p.name AS perimeter FROM domains d "
+                           "LEFT JOIN perimeters p ON p.id = d.perimeter_id WHERE d.name = ?", (name,))
 
-    def domains(self) -> list[Row]:
-        """Every domain with its latest scan (id, score, grade, date), most recently scanned first."""
+    def domains(self, *, internal: bool) -> list[Row]:
+        """Every domain with its latest scan (id, score, grade, date), most recently scanned first.
+
+        ``internal``: include the domains of internal perimeters (for administrators only)."""
         return self.db.all(
-            "SELECT d.*, s.id AS scan_id, s.score, s.grade, s.started_at FROM domains d "
+            "SELECT d.*, p.name AS perimeter, s.id AS scan_id, s.score, s.grade, s.started_at FROM domains d "
+            "LEFT JOIN perimeters p ON p.id = d.perimeter_id "
             "LEFT JOIN scans s ON s.id = (SELECT id FROM scans WHERE domain_id = d.id"
             " ORDER BY started_at DESC, id DESC LIMIT 1) "
-            "ORDER BY s.started_at IS NULL, s.started_at DESC, d.name")
+            "WHERE ? OR d.perimeter_id IS NULL "
+            "ORDER BY s.started_at IS NULL, s.started_at DESC, d.name", (int(internal),))
 
     def set_dns_host(self, domain_id: int, host_id: str) -> None:
         self.db.execute("UPDATE domains SET dns_host = ? WHERE id = ?", (host_id, domain_id))

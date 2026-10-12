@@ -12,6 +12,7 @@ from posture_cockpit.core import engine
 from posture_cockpit.core.fixture import FixtureNetwork
 from posture_cockpit.core.registry import Registry
 from posture_cockpit.storage import Database, Scans
+from posture_cockpit.storage.schema import MIGRATIONS
 from worlds import DOMAIN, NOW, changed, healthy
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -35,6 +36,52 @@ def test_a_failed_migration_changes_nothing(tmp_path):
         db._migrate(["CREATE TABLE a (x)", "CREATE TABLE c (x); THIS IS NOT SQL"])
     assert db.schema_version == 1
     assert db.one("SELECT name FROM sqlite_master WHERE name = 'c'") is None
+
+
+def test_migrations_may_be_python_and_keep_semicolons_in_strings(tmp_path):
+    def fill(conn):
+        conn.execute("INSERT INTO a(x) VALUES ('from python')")
+
+    db = Database(tmp_path / "db.sqlite", ["CREATE TABLE a (x); INSERT INTO a VALUES ('one; two') -- a; comment", fill])
+    assert [r["x"] for r in db.all("SELECT x FROM a ORDER BY rowid")] == ["one; two", "from python"]
+
+
+def test_a_migration_that_breaks_references_is_rolled_back(tmp_path):
+    db = Database(tmp_path / "db.sqlite", [
+        "CREATE TABLE parent (id INTEGER PRIMARY KEY); "
+        "CREATE TABLE child (parent_id INTEGER NOT NULL REFERENCES parent(id) ON DELETE CASCADE); "
+        "INSERT INTO parent VALUES (1); INSERT INTO child VALUES (1)"])
+    # Foreign keys are off during migrations (to rebuild tables), so this delete would orphan the child row.
+    with pytest.raises(sqlite3.IntegrityError, match="broken references"):
+        db._migrate([*["-- 1"], "DELETE FROM parent"])
+    assert db.schema_version == 1 and db.value("SELECT COUNT(*) FROM parent") == 1
+    assert db.value("PRAGMA foreign_keys") == 1  # switched on again
+
+
+def test_upgrade_from_0_1_0_keeps_the_data_and_a_backup(tmp_path):
+    path = tmp_path / "posture_cockpit.db"
+    old = Database(path, MIGRATIONS[:1])
+    old.execute("INSERT INTO users(username, pw_hash, created_at, is_admin) VALUES('vincent', 'x', '2026-01-01', 1)")
+    old.execute("INSERT INTO domains(name, created_at) VALUES('example.org', '2026-01-01')")
+    old.execute("INSERT INTO scans(domain_id, started_at, duration_ms, score, grade, version) "
+                "VALUES(1, '2026-01-02T10:00:00+00:00', 900, 72, 'B', '0.1.0')")
+    old.execute("INSERT INTO findings VALUES(1, 'mail.dmarc', 'mail', 10, 'warn', '{\"summary\": \"x\"}')")
+    old.execute("INSERT INTO rechecks VALUES(1, 'mail.dmarc', 'ok', '{\"summary\": \"y\"}', '2026-01-03')")
+    old.close()
+
+    db = Database(path)
+    assert db.schema_version == len(MIGRATIONS)
+    assert db.value("SELECT username FROM users") == "vincent"
+    assert dict(db.one("SELECT name, perimeter_id FROM domains")) == {"name": "example.org", "perimeter_id": None}
+    assert db.value("SELECT COUNT(*) FROM findings") == 1 and db.value("SELECT COUNT(*) FROM rechecks") == 1
+    backups = list((tmp_path / "backups").glob("posture_cockpit-schema1-*.db"))
+    assert len(backups) == 1
+    copy = sqlite3.connect(backups[0])
+    assert copy.execute("SELECT value FROM meta WHERE key = 'schema_version'").fetchone() == ("1",)
+    assert copy.execute("SELECT score FROM scans").fetchone() == (72,)
+    copy.close()
+    for file in (path, backups[0]):
+        assert file.stat().st_mode & 0o777 == 0o600, file
 
 
 def test_rechecks_update_the_score_but_keep_the_scan(tmp_path):

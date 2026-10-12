@@ -78,14 +78,23 @@ async def run_check(check: Check, ctx: CheckContext, timeout: float) -> Finding:
     return Finding(check.id, check.category, check.weight, outcome)
 
 
+async def _not_applicable(check: Check) -> Finding:
+    return Finding(check.id, check.category, check.weight, Outcome(Status.NA, "check.na.internal"))
+
+
 async def scan(domain: str, checks: Iterable[Check], net: Network, timeout: float = 15.0,
-               now: datetime | None = None) -> ScanResult:
-    """Runs ``checks`` on ``domain`` concurrently. ``domain`` must already be normalized."""
+               now: datetime | None = None, internal: bool = False) -> ScanResult:
+    """Runs ``checks`` on ``domain`` concurrently. ``domain`` must already be normalized.
+
+    ``internal``: the scan runs in an internal perimeter; checks made for the
+    Internet only are reported as not applicable without running."""
     started = now or datetime.now(UTC)
-    ctx = CheckContext(domain=domain, net=net, now=started)
+    ctx = CheckContext(domain=domain, net=net, now=started, internal=internal)
     clock = time.monotonic()
     try:
-        findings = await asyncio.gather(*(run_check(check, ctx, timeout) for check in checks))
+        findings = await asyncio.gather(*(
+            _not_applicable(check) if internal and not check.internal else run_check(check, ctx, timeout)
+            for check in checks))
     finally:
         # Work started for a check that timed out may still be running: stop it with the scan.
         ctx.close()

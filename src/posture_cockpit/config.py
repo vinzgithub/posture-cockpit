@@ -36,6 +36,8 @@ class Config:
     check_timeout: float = 15.0
     # DNS resolvers to query (IP addresses). Empty: those of the system.
     nameservers: list[str] = field(default_factory=list)
+    # Internal perimeters (scans of private networks). Off unless the operator turns them on.
+    internal_scans: bool = False
 
     @property
     def db_path(self) -> Path:
@@ -53,6 +55,7 @@ class Config:
             session_max_age=int(_env("SESSION_MAX_AGE", str(7 * 24 * 3600))),
             check_timeout=float(_env("CHECK_TIMEOUT", "15")),
             nameservers=nameservers,
+            internal_scans=_env_bool("INTERNAL_SCANS", False),
         )
 
 

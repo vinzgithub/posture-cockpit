@@ -28,7 +28,7 @@
       <a class="domain-card" href="/domains/{{ d.name }}">
         {% if d.grade %}{{ grade_pill(d.grade, 'grade-big') }}{% else %}<span class="grade grade-none grade-big">–</span>{% endif %}
         <span class="domain-card-body">
-          <strong>{{ d.name }}</strong>
+          <strong>{{ d.name }}{% if d.perimeter %} <span class="tag-internal" title="{{ t('perimeter.internal') }}">{{ d.perimeter }}</span>{% endif %}</strong>
           <small class="muted">{% if d.started_at %}{{ t('domains.scanned_on', date=date(d.started_at)) }}{% else %}{{ t('domains.never') }}{% endif %}</small>
         </span>
         {% if d.score is not none %}<span class="domain-card-score"><strong>{{ d.score }}</strong>/100</span>{% endif %}

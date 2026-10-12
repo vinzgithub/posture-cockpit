@@ -167,7 +167,7 @@ async def server_banner(ctx: CheckContext) -> Outcome:
     return ok("web.server_banner.ok")
 
 
-@extension.check("security_txt", category="web", weight=1)
+@extension.check("security_txt", category="web", weight=1, internal=False)
 async def security_txt(ctx: CheckContext) -> Outcome:
     """security.txt tells whoever finds a flaw how to report it (RFC 9116)."""
     hosts = await ctx.web_hosts()

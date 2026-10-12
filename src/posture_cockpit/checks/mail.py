@@ -89,7 +89,7 @@ async def _spf_lookups(ctx: CheckContext, record: str, seen: set[str], depth: in
 
 
 # ------------------------------------------------------------------ checks
-@extension.check("mx", category="mail", weight=1)
+@extension.check("mx", category="mail", weight=1, internal=False)
 async def mx(ctx: CheckContext) -> Outcome:
     """Where the domain's mail goes. Information only: it helps read the other checks."""
     hosts = await _mx_hosts(ctx)
@@ -98,7 +98,7 @@ async def mx(ctx: CheckContext) -> Outcome:
     return info("mail.mx.list", {"mx": hosts}, hosts=", ".join(hosts))
 
 
-@extension.check("spf", category="mail", weight=8)
+@extension.check("spf", category="mail", weight=8, internal=False)
 async def spf(ctx: CheckContext) -> Outcome:
     """SPF lists the servers allowed to send mail for the domain."""
     records = [r for r in await ctx.txt(ctx.domain) if _is_spf(r)]
@@ -127,7 +127,7 @@ async def spf(ctx: CheckContext) -> Outcome:
     return ok("mail.spf.ok", evidence, policy=all_term or "redirect")
 
 
-@extension.check("dmarc", category="mail", weight=10)
+@extension.check("dmarc", category="mail", weight=10, internal=False)
 async def dmarc(ctx: CheckContext) -> Outcome:
     """DMARC tells receiving servers what to do with mail that fails SPF and DKIM."""
     name = f"_dmarc.{ctx.domain}"
@@ -162,7 +162,7 @@ async def dmarc(ctx: CheckContext) -> Outcome:
     return ok("mail.dmarc.enforced", evidence, policy=policy)
 
 
-@extension.check("dkim", category="mail", weight=4)
+@extension.check("dkim", category="mail", weight=4, internal=False)
 async def dkim(ctx: CheckContext) -> Outcome:
     """DKIM signs outgoing mail. Its keys are only found by guessing their name (the selector)."""
     answers = await asyncio.gather(*(ctx.txt(f"{s}._domainkey.{ctx.domain}") for s in DKIM_SELECTORS))
@@ -195,7 +195,7 @@ def _rsa_bits(key_base64: str) -> int:
     return key.key_size if isinstance(key, rsa.RSAPublicKey) else 0
 
 
-@extension.check("mta_sts", category="mail", weight=3)
+@extension.check("mta_sts", category="mail", weight=3, internal=False)
 async def mta_sts(ctx: CheckContext) -> Outcome:
     """MTA-STS makes the servers that deliver mail to the domain insist on encryption."""
     if not await _mx_hosts(ctx):
@@ -220,7 +220,7 @@ async def mta_sts(ctx: CheckContext) -> Outcome:
     return ok("mail.mta_sts.enforce", evidence)
 
 
-@extension.check("tls_rpt", category="mail", weight=1)
+@extension.check("tls_rpt", category="mail", weight=1, internal=False)
 async def tls_rpt(ctx: CheckContext) -> Outcome:
     """TLS reports tell the domain when mail could not be delivered over an encrypted connection."""
     if not await _mx_hosts(ctx):

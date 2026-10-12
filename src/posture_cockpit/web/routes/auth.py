@@ -20,6 +20,7 @@ from ...security import MIN_PASSWORD_LENGTH, hash_password, verify_password
 from ...storage import Row
 from ..credentials import check_second_factor, password_problem
 from ..deps import (
+    audit,
     checked_form,
     client_key,
     field,
@@ -70,9 +71,10 @@ async def setup(request: Request, form: FormData = Depends(checked_form)):
     uid = s.accounts.create(username, hash_password(password), is_admin=True, lang=lang_of(request))
     user = s.accounts.get(uid)
     assert user is not None
+    audit(request, "setup", user=user)
     sign_in(request, user)
     if form.get("demo"):
-        await scan_and_save(s, DEMO_DOMAIN, uid)
+        await scan_and_save(s, DEMO_DOMAIN, user, client=client_key(request))
         return redirect(f"/domains/{DEMO_DOMAIN}")
     flash(request, "info", "flash.welcome")
     return redirect("/domains")
@@ -90,11 +92,14 @@ async def login_page(request: Request):
 async def login(request: Request, form: FormData = Depends(checked_form)):
     s = services(request)
     key = client_key(request)
+    username = field(form, "username", 41)
     if s.throttle.locked(key):
+        audit(request, "login.locked", target=username)
         return render(request, "login.html", status=429, error=t(request, "error.locked"))
-    user = s.accounts.by_name(field(form, "username", 41))
+    user = s.accounts.by_name(username)
     if user is None or not verify_password(str(form.get("password", "")), user["pw_hash"]):
         s.throttle.failure(key)
+        audit(request, "login.failed", target=username, step="password")
         return render(request, "login.html", status=401, error=t(request, "error.login"))
     if s.accounts.totp_enabled(user["id"]):
         # The code comes next. The throttle is not reset here: wrong codes and wrong
@@ -104,6 +109,7 @@ async def login(request: Request, form: FormData = Depends(checked_form)):
         request.session.update({"mfa_uid": user["id"], "mfa_at": int(time.time()), "lang": lang})
         return redirect("/login/code")
     s.throttle.success(key)
+    audit(request, "login.ok", user=user, target=user["username"], mfa=False)
     sign_in(request, user)
     return redirect("/domains")
 
@@ -125,12 +131,15 @@ async def login_code(request: Request, form: FormData = Depends(checked_form)):
         flash(request, "error", "error.code_expired")
         return redirect("/login")
     if s.throttle.locked(key):
+        audit(request, "login.locked", target=user["username"])
         return render(request, "login_code.html", status=429, error=t(request, "error.locked"))
     used = check_second_factor(s, user["id"], field(form, "code", 40))
     if used is None:
         s.throttle.failure(key)
+        audit(request, "login.failed", user=user, target=user["username"], step="code")
         return render(request, "login_code.html", status=401, error=t(request, "error.code"))
     s.throttle.success(key)
+    audit(request, "login.ok", user=user, target=user["username"], mfa=used)
     sign_in(request, user)
     if used == "recovery":
         flash(request, "warn", "flash.recovery_used", n=s.accounts.recovery_codes_left(user["id"]))
@@ -179,5 +188,6 @@ async def must_change(request: Request, user: Row = Depends(require_user_any_pas
                       error=t(request, problem, n=MIN_PASSWORD_LENGTH))
     services(request).accounts.set_password(user["id"], hash_password(new), must_change=False)
     sign_out_other_browsers(request, user["id"])
+    audit(request, "password.changed", user=user)
     flash(request, "ok", "flash.password_set")
     return redirect("/domains")

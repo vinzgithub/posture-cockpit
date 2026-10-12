@@ -43,7 +43,7 @@ CAA_DOMAINS = {
 }
 
 
-@extension.check("nameservers", category="dns", weight=4)
+@extension.check("nameservers", category="dns", weight=4, internal=False)
 async def nameservers(ctx: CheckContext) -> Outcome:
     """At least two name servers, so the domain still answers when one is down."""
     hosts = sorted(ns.lower().rstrip(".") for ns in (await ctx.net.dns(ctx.domain, "NS")).records)
@@ -56,7 +56,7 @@ async def nameservers(ctx: CheckContext) -> Outcome:
     return ok("dns.nameservers.ok", evidence, count=len(hosts))
 
 
-@extension.check("dnssec", category="dns", weight=4)
+@extension.check("dnssec", category="dns", weight=4, internal=False)
 async def dnssec(ctx: CheckContext) -> Outcome:
     """A DS record at the parent zone means the domain is signed with DNSSEC."""
     ds = (await ctx.net.dns(ctx.domain, "DS")).records
@@ -75,7 +75,7 @@ async def _certificate_issuer(ctx: CheckContext) -> str:
     return ""
 
 
-@extension.check("caa", category="dns", weight=2)
+@extension.check("caa", category="dns", weight=2, internal=False)
 async def caa(ctx: CheckContext) -> Outcome:
     """CAA records name the only authorities allowed to issue certificates for the domain."""
     records = list((await ctx.net.dns(ctx.domain, "CAA")).records)

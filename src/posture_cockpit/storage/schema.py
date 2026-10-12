@@ -2,10 +2,19 @@
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Database schema, as a list of migrations applied in order (see database.py).
 
-Append new scripts at the end; never change one that has been released.
+Append new migrations at the end; never change one that has been released.
+A migration is an SQL script, or a function given the open connection inside
+the migration's transaction.
 """
 
-MIGRATIONS: list[str] = [
+from __future__ import annotations
+
+import sqlite3
+from collections.abc import Callable
+
+Migration = str | Callable[[sqlite3.Connection], None]
+
+MIGRATIONS: list[Migration] = [
     # 1 — version 0.1.0
     """
     CREATE TABLE users (
@@ -84,5 +93,37 @@ MIGRATIONS: list[str] = [
         checked_at TEXT NOT NULL,
         PRIMARY KEY (scan_id, check_id)
     );
+    """,
+    # 2 — version 0.2.0: internal perimeters, audit log
+    """
+    -- An internal perimeter: the private networks a scan may reach, the DNS
+    -- servers and the certificate authority to use there (see core/egress.py).
+    CREATE TABLE perimeters (
+        id INTEGER PRIMARY KEY,
+        name TEXT UNIQUE NOT NULL,
+        networks TEXT NOT NULL,                   -- CIDR, one per line, inside the private ranges
+        nameservers TEXT NOT NULL DEFAULT '',     -- IP addresses, one per line ('' = those of the system)
+        ports TEXT NOT NULL DEFAULT '443 80',     -- ports a scan may connect to
+        ca_pem TEXT NOT NULL DEFAULT '',          -- extra certificate authorities, PEM
+        created_at TEXT NOT NULL,
+        created_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+    );
+
+    -- NULL: the domain is scanned from the Internet. Otherwise only administrators
+    -- see it and scan it, inside its perimeter.
+    ALTER TABLE domains ADD COLUMN perimeter_id INTEGER REFERENCES perimeters(id) ON DELETE RESTRICT;
+
+    -- Who did what: sign-ins, account and perimeter changes, internal scans.
+    CREATE TABLE audit_log (
+        id INTEGER PRIMARY KEY,
+        at TEXT NOT NULL,
+        user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        username TEXT NOT NULL DEFAULT '',        -- kept when the account is deleted
+        action TEXT NOT NULL,                     -- e.g. "login.failed", "perimeter.created", "scan.internal"
+        target TEXT NOT NULL DEFAULT '',
+        detail TEXT NOT NULL DEFAULT '{}',        -- JSON
+        client TEXT NOT NULL DEFAULT ''           -- address of the browser or script
+    );
+    CREATE INDEX audit_log_by_time ON audit_log(at);
     """,
 ]

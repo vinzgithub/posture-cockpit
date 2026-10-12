@@ -35,7 +35,7 @@ def test_unknown_and_invalid_domains_are_refused(signed_in):
     assert r.status_code == 400 and "n&#39;existe pas" in r.text
     r = scan(signed_in, "not a domain")
     assert r.status_code == 400 and "Ce n&#39;est pas un nom de domaine" in r.text
-    assert signed_in.app.state.services.scans.domains() == []
+    assert signed_in.app.state.services.scans.domains(internal=True) == []
 
 
 def test_a_resolver_giving_empty_answers_is_not_mistaken_for_missing_records(signed_in, world):

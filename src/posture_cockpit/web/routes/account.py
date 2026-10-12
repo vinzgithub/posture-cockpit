@@ -28,7 +28,18 @@ from ...security import (
 )
 from ...storage import Row
 from ..credentials import check_password_again, check_password_and_code, password_problem, succeeded
-from ..deps import checked_form, client_key, field, flash, redirect, render, require_user, sign_out_other_browsers, t
+from ..deps import (
+    audit,
+    checked_form,
+    client_key,
+    field,
+    flash,
+    redirect,
+    render,
+    require_user,
+    sign_out_other_browsers,
+    t,
+)
 from ..services import services
 
 router = APIRouter()
@@ -57,6 +68,7 @@ async def change_password(request: Request, user: Row = Depends(require_user),
     services(request).accounts.set_password(user["id"], hash_password(new))
     sign_out_other_browsers(request, user["id"])
     succeeded(request)
+    audit(request, "password.changed", user=user)
     flash(request, "ok", "flash.password_changed")
     return redirect("/settings")
 
@@ -104,6 +116,7 @@ async def totp_enable(request: Request, user: Row = Depends(require_user), form:
     s.accounts.enable_totp(user["id"], step, [recovery_code_hash(c) for c in codes])
     sign_out_other_browsers(request, user["id"])
     succeeded(request)
+    audit(request, "totp.enabled", user=user)
     return render(request, "totp_codes.html", codes=codes, just_enabled=True)
 
 
@@ -118,6 +131,7 @@ async def totp_new_codes(request: Request, user: Row = Depends(require_user), fo
     codes = new_recovery_codes()
     s.accounts.replace_recovery_codes(user["id"], [recovery_code_hash(c) for c in codes])
     succeeded(request)
+    audit(request, "totp.codes_renewed", user=user)
     return render(request, "totp_codes.html", codes=codes, just_enabled=False)
 
 
@@ -135,6 +149,7 @@ async def totp_disable(request: Request, user: Row = Depends(require_user), form
     s.accounts.disable_totp(user["id"])
     sign_out_other_browsers(request, user["id"])
     succeeded(request)
+    audit(request, "totp.disabled", user=user)
     flash(request, "ok", "flash.totp_disabled")
     return redirect("/settings#mfa")
 
@@ -145,6 +160,7 @@ async def add_token(request: Request, user: Row = Depends(require_user), form: F
     name = field(form, "name", 60) or "Home Assistant"
     token = new_token()
     services(request).accounts.add_token(user["id"], name, token_hash(token))
+    audit(request, "token.created", user=user, target=name)
     # Shown once, in this response only: never stored in clear, never put in the cookie.
     return settings_page(request, user, new_token=token, new_token_name=name)
 
@@ -153,5 +169,6 @@ async def add_token(request: Request, user: Row = Depends(require_user), form: F
 async def revoke_token(request: Request, token_id: int, user: Row = Depends(require_user),
                        form: FormData = Depends(checked_form)):
     services(request).accounts.revoke_token(user["id"], token_id)
+    audit(request, "token.revoked", user=user, token_id=token_id)
     flash(request, "ok", "flash.token_revoked")
     return redirect("/settings#api")

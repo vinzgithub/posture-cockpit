@@ -23,17 +23,28 @@ from typing import Any, Literal
 
 
 class Status(StrEnum):
-    """Result of one check."""
+    """Result of one check.
+
+    Only OK, WARN and FAIL are part of the score. NA and INFO are left out on
+    purpose (the check has nothing to judge here). ERROR is left out too, but
+    lowers the *coverage* of the scan: a check that should have run and could
+    not is a gap in the evaluation, never a success (see :mod:`.scoring`)."""
 
     OK = "ok"        # nothing to do
     WARN = "warn"    # could be better ("à améliorer")
     FAIL = "fail"    # needs fixing ("critique")
-    INFO = "info"    # worth knowing, not part of the score
-    ERROR = "error"  # could not be checked (timeout, unreachable server): not part of the score
+    NA = "na"        # does not apply (no website, no mail, check not made for internal audits)
+    INFO = "info"    # worth knowing, nothing to judge
+    ERROR = "error"  # not evaluated: timeout, unreachable server, destination refused, bug
 
     @property
     def scored(self) -> bool:
         return self in (Status.OK, Status.WARN, Status.FAIL)
+
+    @property
+    def applicable(self) -> bool:
+        """Whether the check should have produced a verdict: scored, or failed to run."""
+        return self.scored or self is Status.ERROR
 
 
 # Share of a check's weight earned in the score, by status.
@@ -76,7 +87,7 @@ class Remedy:
 
 @dataclass(frozen=True)
 class Outcome:
-    """What a check returns. Build it with :func:`ok`, :func:`warn`, :func:`fail` or :func:`info`."""
+    """What a check returns. Build it with :func:`ok`, :func:`warn`, :func:`fail`, :func:`na` or :func:`info`."""
 
     status: Status
     summary: str                                            # translation key
@@ -101,6 +112,11 @@ def fail(summary: str, remedy: Remedy | None = None, evidence: Mapping[str, Any]
 
 def info(summary: str, evidence: Mapping[str, Any] | None = None, **params: str | int) -> Outcome:
     return Outcome(Status.INFO, summary, params, evidence or {})
+
+
+def na(summary: str, evidence: Mapping[str, Any] | None = None, **params: str | int) -> Outcome:
+    """The check does not apply to this domain; ``summary`` says why (e.g. "no website")."""
+    return Outcome(Status.NA, summary, params, evidence or {})
 
 
 @dataclass(frozen=True)
