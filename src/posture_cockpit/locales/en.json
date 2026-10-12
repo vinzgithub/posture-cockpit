@@ -34,6 +34,10 @@
   "check.error.timeout": "No answer within {seconds} seconds: this point could not be checked.",
   "check.error.network": "The server did not answer: this point could not be checked.",
   "check.error.internal": "This check ran into an error. The details are in the values found.",
+  "check.error.blocked.private": "Not checked: {host} points to {address}, an address that is not public. In Internet mode, Posture Cockpit only contacts public addresses (an internal site is audited in an internal perimeter).",
+  "check.error.blocked.outside": "Not checked: {host} points to {address}, outside the networks allowed for this internal perimeter.",
+  "check.error.blocked.forbidden": "Not checked: {host} points to {address}, a reserved address (link-local, multicast, metadata service) that Posture Cockpit never contacts.",
+  "check.error.blocked.port": "Not checked: port {port} of {host} is not allowed for this scan.",
 
   "setup.title": "Welcome",
   "setup.intro": "Create the administrator account. You can add other accounts afterwards.",

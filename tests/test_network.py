@@ -1,10 +1,14 @@
 # Copyright © 2026 Vincent Fournet
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
-"""The real network code, against servers started on this machine for the test."""
+"""The real network code, against servers started on this machine for the test.
+
+A local DNS server gives the test names, and the scan runs in a perimeter made
+of the loopback address (see test_egress.py for the policy itself)."""
 
 import asyncio
 import datetime as dt
 import ssl
+from ipaddress import ip_network
 
 import dns.exception
 import dns.rdata
@@ -17,7 +21,9 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import NameOID
 
+from local_servers import LOOPBACK, dns_server
 from posture_cockpit.core import network
+from posture_cockpit.core.egress import DestinationBlocked, EgressPolicy
 from posture_cockpit.core.network import LiveNetwork, NetworkError
 
 
@@ -47,8 +53,14 @@ def certificate(tmp_path_factory):
 
 
 async def serve(handler, context=None):
-    server = await asyncio.start_server(handler, "127.0.0.1", 0, ssl=context)
+    server = await asyncio.start_server(handler, LOOPBACK, 0, ssl=context)
     return server, server.sockets[0].getsockname()[1]
+
+
+def lab_network(dns_port, port, timeout=3):
+    """The real network, allowed to reach this machine's test server on ``port``."""
+    policy = EgressPolicy(networks=(ip_network("127.0.0.1/32"),), ports=frozenset({port}), name="lab")
+    return LiveNetwork([LOOPBACK], timeout, policy=policy, dns_port=dns_port)
 
 
 async def say_nothing(reader, writer):
@@ -64,8 +76,8 @@ def test_certificate_of_a_self_signed_server(certificate):
 
     async def main():
         server, port = await serve(say_nothing, context)
-        async with server:
-            net = LiveNetwork(timeout=3)
+        async with server, dns_server({"localhost": {"A": [LOOPBACK]}}) as (_, dns_port):
+            net = lab_network(dns_port, port)
             cert = await net.certificate("localhost", port)
             tls13 = await net.accepts_tls("localhost", "TLSv1.3", port)
             tls10 = await net.accepts_tls("localhost", "TLSv1", port)
@@ -87,10 +99,12 @@ def test_closed_port_is_a_network_error():
         server, port = await serve(say_nothing)
         server.close()
         await server.wait_closed()
-        await LiveNetwork(timeout=2).certificate("localhost", port)
+        async with dns_server({"localhost": {"A": [LOOPBACK]}}) as (_, dns_port):
+            await lab_network(dns_port, port, timeout=2).certificate("localhost", port)
 
-    with pytest.raises(NetworkError):
+    with pytest.raises(NetworkError) as caught:
         asyncio.run(main())
+    assert not isinstance(caught.value, DestinationBlocked)
 
 
 def test_http_get_reads_headers_and_a_limited_body():
@@ -104,8 +118,8 @@ def test_http_get_reads_headers_and_a_limited_body():
 
     async def main():
         server, port = await serve(handler)
-        async with server:
-            return await LiveNetwork(timeout=3).http_get(f"http://127.0.0.1:{port}/")
+        async with server, dns_server({}) as (_, dns_port):
+            return await lab_network(dns_port, port).http_get(f"http://127.0.0.1:{port}/")
 
     reply = asyncio.run(main())
     assert reply.status == 301 and reply.header("Location") == "https://example.org/"

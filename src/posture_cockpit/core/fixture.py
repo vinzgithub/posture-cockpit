@@ -23,7 +23,9 @@ Used by the tests and by the demo domain. The data is a plain dictionary
 
 A DNS question that is not listed gets an empty answer. A certificate, TLS
 version or URL that is not listed raises :class:`~.network.NetworkError`, as an
-unreachable server would. Certificate dates are given relative to ``now`` so a
+unreachable server would. ``http_get(url, verify=True)`` raises
+:class:`~.network.UntrustedCertificate` when the URL's host has a certificate
+listed with ``"trusted": false``. Certificate dates are given relative to ``now`` so a
 demo always looks the same, whatever the day.
 """
 
@@ -32,8 +34,9 @@ from __future__ import annotations
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from urllib.parse import urlsplit
 
-from .network import Certificate, DnsAnswer, HttpReply, NetworkError
+from .network import Certificate, DnsAnswer, HttpReply, NetworkError, UntrustedCertificate
 
 
 class FixtureNetwork:
@@ -82,10 +85,14 @@ class FixtureNetwork:
             raise NetworkError(f"TLS {host}:{port}: connection refused")
         return self._tls[host].get(version)
 
-    async def http_get(self, url: str) -> HttpReply:
+    async def http_get(self, url: str, *, verify: bool = False) -> HttpReply:
         self.asked.append(f"http {url}")
         if url not in self._http:
             raise NetworkError(f"HTTP {url}: ConnectError")
+        host = urlsplit(url).hostname or ""
+        certificate = self._certificates.get(host, {})
+        if verify and url.startswith("https:") and not certificate.get("trusted", True):
+            raise UntrustedCertificate(url, certificate.get("problem", "certificate not trusted"))
         r = self._http[url]
         headers = {name.lower(): value for name, value in r.get("headers", {}).items()}
         return HttpReply(url, int(r.get("status", 200)), headers, r.get("body", ""))

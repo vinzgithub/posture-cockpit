@@ -3,8 +3,9 @@
 """Runs the checks of a scan, all at once, each within its own time limit.
 
 A check that raises or takes too long does not stop the others: it is
-reported with the status ERROR ("could not be checked") and the reason in its
-evidence, so the user sees it and the score simply leaves it out.
+reported with the status ERROR ("not evaluated") and the reason in its
+evidence, so the user sees it and the score leaves it out (the coverage of the
+scan shows how much could not be evaluated, see :mod:`.scoring`).
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from .egress import DestinationBlocked
 from .extension import Check, CheckContext
 from .model import Finding, Outcome, Status
 from .network import Network, NetworkError
@@ -64,6 +66,10 @@ async def run_check(check: Check, ctx: CheckContext, timeout: float) -> Finding:
         outcome = await asyncio.wait_for(check.run(ctx), timeout)
     except TimeoutError:
         outcome = Outcome(Status.ERROR, "check.error.timeout", {"seconds": int(timeout)})
+    except DestinationBlocked as e:
+        # The egress policy refused a connection: say which one, and why.
+        outcome = Outcome(Status.ERROR, f"check.error.blocked.{e.reason}",
+                          {"host": e.host, "address": str(e.address), "port": e.port}, evidence={"error": str(e)})
     except NetworkError as e:
         outcome = Outcome(Status.ERROR, "check.error.network", evidence={"error": str(e)})
     except Exception as e:  # a bug in a check must not break the scan
@@ -78,7 +84,14 @@ async def scan(domain: str, checks: Iterable[Check], net: Network, timeout: floa
     started = now or datetime.now(UTC)
     ctx = CheckContext(domain=domain, net=net, now=started)
     clock = time.monotonic()
-    findings = await asyncio.gather(*(run_check(check, ctx, timeout) for check in checks))
+    try:
+        findings = await asyncio.gather(*(run_check(check, ctx, timeout) for check in checks))
+    finally:
+        # Work started for a check that timed out may still be running: stop it with the scan.
+        ctx.close()
+        close = getattr(net, "close", None)
+        if callable(close):
+            close()
     return ScanResult(domain, started, int((time.monotonic() - clock) * 1000), list(findings))
 
 

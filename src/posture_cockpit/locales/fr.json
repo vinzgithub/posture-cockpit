@@ -34,6 +34,10 @@
   "check.error.timeout": "Pas de réponse en {seconds} secondes : ce point n'a pas pu être vérifié.",
   "check.error.network": "Le serveur n'a pas répondu : ce point n'a pas pu être vérifié.",
   "check.error.internal": "Ce contrôle a rencontré une erreur. Le détail est dans les valeurs relevées.",
+  "check.error.blocked.private": "Non vérifié : {host} pointe vers {address}, une adresse non publique. En mode Internet, Posture Cockpit ne contacte que des adresses publiques (un site interne s'audite dans un périmètre interne).",
+  "check.error.blocked.outside": "Non vérifié : {host} pointe vers {address}, en dehors des réseaux autorisés pour ce périmètre interne.",
+  "check.error.blocked.forbidden": "Non vérifié : {host} pointe vers {address}, une adresse réservée (lien local, multidiffusion, service de métadonnées) que Posture Cockpit ne contacte jamais.",
+  "check.error.blocked.port": "Non vérifié : le port {port} de {host} n'est pas autorisé pour cette analyse.",
 
   "setup.title": "Bienvenue",
   "setup.intro": "Créez le compte administrateur. Vous pourrez ensuite ajouter d'autres comptes.",

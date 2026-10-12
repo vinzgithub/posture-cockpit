@@ -75,7 +75,7 @@ ignore = ["S101", "RUF001", "RUF002", "RUF003"]  # French text uses typographic 
 extend-immutable-calls = ["fastapi.Depends"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["S105", "S106"]
+"tests/*" = ["S104", "S105", "S106"]  # test passwords; addresses as data
 
 [tool.mypy]
 python_version = "3.11"

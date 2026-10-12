@@ -132,6 +132,11 @@ class CheckContext:
         # for the other checks waiting for it, instead of being cancelled with it.
         return await asyncio.shield(self._memo[key])
 
+    def close(self) -> None:
+        """Cancels shared work still running when the scan ends (called by the engine)."""
+        for future in self._memo.values():
+            future.cancel()
+
     async def web_hosts(self) -> list[str]:
         """Names that serve the website: the domain and ``www``, those that have an address."""
 

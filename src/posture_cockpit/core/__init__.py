@@ -9,10 +9,10 @@ Extension authors only need the names exported here::
 
 from .extension import CATEGORIES, Check, CheckContext, Extension, load_messages
 from .model import DnsChange, Effort, Finding, Outcome, Remedy, Status, fail, info, ok, warn
-from .network import Certificate, DnsAnswer, HttpReply, Network, NetworkError
+from .network import Certificate, DnsAnswer, HttpReply, Network, NetworkError, UntrustedCertificate
 
 __all__ = [
     "CATEGORIES", "Certificate", "Check", "CheckContext", "DnsAnswer", "DnsChange", "Effort", "Extension",
-    "Finding", "HttpReply", "Network", "NetworkError", "Outcome", "Remedy", "Status", "fail", "info",
-    "load_messages", "ok", "warn",
+    "Finding", "HttpReply", "Network", "NetworkError", "Outcome", "Remedy", "Status", "UntrustedCertificate",
+    "fail", "info", "load_messages", "ok", "warn",
 ]
