@@ -16,9 +16,9 @@ from starlette.datastructures import FormData
 
 from ...i18n import LOCALES
 from ...scanner import DEMO_DOMAIN
-from ...security import MIN_PASSWORD_LENGTH, hash_password, verify_password
+from ...security import MIN_PASSWORD_LENGTH, dummy_password_hash, hash_password, verify_password
 from ...storage import Row
-from ..credentials import check_second_factor, password_problem
+from ..credentials import check_second_factor, failed, password_problem, succeeded, throttled
 from ..deps import (
     audit,
     checked_form,
@@ -26,6 +26,7 @@ from ..deps import (
     field,
     flash,
     lang_of,
+    local_path,
     pending_login,
     redirect,
     render,
@@ -91,14 +92,15 @@ async def login_page(request: Request):
 @router.post("/login")
 async def login(request: Request, form: FormData = Depends(checked_form)):
     s = services(request)
-    key = client_key(request)
     username = field(form, "username", 41)
-    if s.throttle.locked(key):
+    if throttled(request, username):
         audit(request, "login.locked", target=username)
         return render(request, "login.html", status=429, error=t(request, "error.locked"))
     user = s.accounts.by_name(username)
-    if user is None or not verify_password(str(form.get("password", "")), user["pw_hash"]):
-        s.throttle.failure(key)
+    # An unknown name costs the same scrypt check as a known one: the response time tells nothing.
+    stored = user["pw_hash"] if user is not None else dummy_password_hash()
+    if not verify_password(str(form.get("password", "")), stored) or user is None:
+        failed(request, username)
         audit(request, "login.failed", target=username, step="password")
         return render(request, "login.html", status=401, error=t(request, "error.login"))
     if s.accounts.totp_enabled(user["id"]):
@@ -108,7 +110,7 @@ async def login(request: Request, form: FormData = Depends(checked_form)):
         request.session.clear()
         request.session.update({"mfa_uid": user["id"], "mfa_at": int(time.time()), "lang": lang})
         return redirect("/login/code")
-    s.throttle.success(key)
+    succeeded(request, username)
     audit(request, "login.ok", user=user, target=user["username"], mfa=False)
     sign_in(request, user)
     return redirect("/domains")
@@ -124,21 +126,20 @@ async def login_code_page(request: Request):
 @router.post("/login/code")
 async def login_code(request: Request, form: FormData = Depends(checked_form)):
     s = services(request)
-    key = client_key(request)
     user = pending_login(request)
     if user is None:
         request.session.pop("mfa_uid", None)
         flash(request, "error", "error.code_expired")
         return redirect("/login")
-    if s.throttle.locked(key):
+    if throttled(request, user["username"]):
         audit(request, "login.locked", target=user["username"])
         return render(request, "login_code.html", status=429, error=t(request, "error.locked"))
     used = check_second_factor(s, user["id"], field(form, "code", 40))
     if used is None:
-        s.throttle.failure(key)
+        failed(request, user["username"])
         audit(request, "login.failed", user=user, target=user["username"], step="code")
         return render(request, "login_code.html", status=401, error=t(request, "error.code"))
-    s.throttle.success(key)
+    succeeded(request, user["username"])
     audit(request, "login.ok", user=user, target=user["username"], mfa=used)
     sign_in(request, user)
     if used == "recovery":
@@ -162,8 +163,7 @@ async def set_lang(request: Request, form: FormData = Depends(checked_form)):
         uid = request.session.get("uid")
         if uid:
             services(request).accounts.set_lang(uid, lang)
-    back = field(form, "back", 300)
-    return redirect(back if back.startswith("/") and not back.startswith("//") else "/domains")
+    return redirect(local_path(field(form, "back", 300)))
 
 
 # ------------------------------------------------- password chosen by an admin

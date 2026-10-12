@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import time
 from typing import Any
+from urllib.parse import urlsplit
 
 from fastapi import Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -180,6 +181,18 @@ def flash(request: Request, level: str, key: str, **params: Any) -> None:
 
 def redirect(url: str) -> RedirectResponse:
     return RedirectResponse(url, status_code=303)
+
+
+def local_path(target: str, default: str = "/domains") -> str:
+    """``target`` if it is a path of this site, else ``default``: no open redirect.
+
+    Browsers read ``//host``, ``/\\host`` and ``\\host`` as other sites, and strip tabs
+    and line breaks from addresses, so all of these are refused."""
+    if (not target.startswith("/") or target.startswith("//") or "\\" in target
+            or any(ord(c) < 32 or ord(c) == 127 for c in target)):
+        return default
+    parts = urlsplit(target)
+    return target if not parts.scheme and not parts.netloc else default
 
 
 def render(request: Request, template: str, status: int = 200, **context: Any) -> HTMLResponse:

@@ -187,7 +187,7 @@ def test_an_administrator_creates_a_perimeter_and_scans_an_intranet_site(admin):
     scan = services(admin).scans.latest(services(admin).scans.domain(INTRANET)["id"])
     statuses = {f.check_id: f.status for f in scan.findings}
     assert statuses["mail.dmarc"] is Status.NA and statuses["tls.certificate"] is Status.OK
-    assert actions(admin)[:3] == ["scan.internal", "domain.added", "perimeter.created"]
+    assert actions(admin)[:3] == ["domain.added", "scan.internal", "perimeter.created"]
     entry = services(admin).audit.latest(1)[0]
     assert entry["detail"]["perimeter"] == "Siège" and entry["target"] == INTRANET
     assert scan.perimeter == "Siège"

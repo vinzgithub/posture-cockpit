@@ -24,6 +24,7 @@ from ...scanner import InternalScansDisabled
 from ...security import token_hash
 from ...storage import Row, Scan
 from ..deps import client_key
+from ..limits import TooManyScans
 from ..scanning import perimeter_of, scan_and_save
 from ..services import services
 
@@ -103,6 +104,9 @@ async def scan(request: Request, name: str):
                                       via="api")
     except InternalScansDisabled:
         return JSONResponse({"error": "internal scans are disabled on this instance"}, status_code=403)
+    except TooManyScans as e:
+        message = "too many scans running, try again shortly" if e.reason == "busy" else "hourly scan quota reached"
+        return JSONResponse({"error": message}, status_code=429, headers={"Retry-After": str(e.retry_after)})
     result = s.scans.get(scan_id)
     assert result is not None
     return _summary(result)

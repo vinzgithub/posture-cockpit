@@ -24,6 +24,7 @@ from ...core.network import NetworkError
 from ...storage import Perimeter, PerimeterError, Row
 from ...storage.perimeters import DEFAULT_PORTS, PerimeterForm, parse_form
 from ..deps import audit, checked_form, client_key, field, flash, redirect, render, require_admin, t
+from ..limits import TooManyScans
 from ..scanning import scan_and_save
 from ..services import services
 
@@ -152,6 +153,9 @@ async def add_domain(request: Request, perimeter_id: int, me: Row = Depends(requ
         key = {"unknown": "error.domain_unknown", "empty": "error.domain_empty_internal"}.get(
             problem, "error.dns_unreachable")
         return refuse(key, domain=name)
+    try:
+        await scan_and_save(s, name, me, perimeter=perimeter, client=client_key(request))
+    except TooManyScans as e:
+        return refuse(f"error.scan_{e.reason}")
     audit(request, "domain.added", user=me, target=name, perimeter=perimeter.name)
-    await scan_and_save(s, name, me, perimeter=perimeter, client=client_key(request))
     return redirect(f"/domains/{name}")

@@ -376,6 +376,8 @@
   "error.perimeter_ports": "Give at most {value} ports, numbers between 1 and 65535.",
   "error.perimeter_ca": "This is not a readable PEM certificate (-----BEGIN CERTIFICATE----- …).",
   "error.perimeter_in_use": "This perimeter still holds domains: delete them first.",
+  "error.scan_busy": "Several scans are already running on this instance. Try again in a few seconds.",
+  "error.scan_quota": "You have reached the number of scans allowed per hour (POSTURE_COCKPIT_SCANS_PER_HOUR). Try again later.",
   "flash.perimeter_created": "Perimeter {name} created.",
   "flash.perimeter_deleted": "Perimeter {name} deleted.",
   "perimeter.title": "Internal perimeters",

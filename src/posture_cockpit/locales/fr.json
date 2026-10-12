@@ -376,6 +376,8 @@
   "error.perimeter_ports": "Indiquez au plus {value} ports, des nombres entre 1 et 65535.",
   "error.perimeter_ca": "Ce n'est pas un certificat au format PEM lisible (-----BEGIN CERTIFICATE----- …).",
   "error.perimeter_in_use": "Ce périmètre contient encore des domaines : supprimez-les d'abord.",
+  "error.scan_busy": "Plusieurs analyses sont déjà en cours sur cette instance. Réessayez dans quelques secondes.",
+  "error.scan_quota": "Vous avez atteint le nombre d'analyses autorisées par heure (POSTURE_COCKPIT_SCANS_PER_HOUR). Réessayez plus tard.",
   "flash.perimeter_created": "Périmètre {name} créé.",
   "flash.perimeter_deleted": "Périmètre {name} supprimé.",
   "perimeter.title": "Périmètres internes",

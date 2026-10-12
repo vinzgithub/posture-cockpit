@@ -20,6 +20,7 @@ from ..i18n import Catalog
 from ..scanner import Scanner
 from ..security import LoginThrottle
 from ..storage import Accounts, AuditLog, Database, InstanceSettings, Perimeters, Scans
+from .limits import ScanLimiter
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 STATIC_DIR = Path(__file__).parent / "static"
@@ -37,7 +38,9 @@ class Services:
     registry: Registry
     catalog: Catalog
     scanner: Scanner
-    throttle: LoginThrottle
+    throttle: LoginThrottle          # sign-in failures by client address
+    account_throttle: LoginThrottle  # sign-in failures by account name
+    scan_limiter: ScanLimiter
     templates: Jinja2Templates
 
 

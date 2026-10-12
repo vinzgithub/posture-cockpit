@@ -36,7 +36,8 @@ from ..deps import (
     t,
     visible_domain,
 )
-from ..scanning import perimeter_of, scan_and_save
+from ..limits import TooManyScans
+from ..scanning import perimeter_of, recheck, scan_and_save
 from ..services import services
 from ..views import plan_view
 
@@ -74,7 +75,10 @@ async def add_domain(request: Request, user: Row = Depends(require_user), form: 
     if problem:
         key = {"unknown": "error.domain_unknown", "empty": "error.domain_empty"}.get(problem, "error.dns_unreachable")
         return list_page(request, user, status=400, typed=typed, error=t(request, key, domain=name))
-    await scan_and_save(s, name, user, client=client_key(request))
+    try:
+        await scan_and_save(s, name, user, client=client_key(request))
+    except TooManyScans as e:
+        return list_page(request, user, status=429, typed=typed, error=t(request, f"error.scan_{e.reason}"))
     return redirect(f"/domains/{name}")
 
 
@@ -103,6 +107,9 @@ async def rescan(request: Request, name: str, user: Row = Depends(require_user),
     except InternalScansDisabled:
         flash(request, "error", "error.internal_disabled")
         return redirect(f"/domains/{name}")
+    except TooManyScans as e:
+        flash(request, "error", f"error.scan_{e.reason}")
+        return redirect(f"/domains/{name}")
     flash(request, "ok", "flash.scanned")
     return redirect(f"/domains/{name}")
 
@@ -118,9 +125,12 @@ async def verify(request: Request, name: str, check_id: str, user: Row = Depends
         raise HTTPException(404)
     perimeter = perimeter_of(s, domain)
     try:
-        finding = await s.scanner.recheck(name, check_id, perimeter)
+        finding = await recheck(s, name, check_id, user, perimeter=perimeter, client=client_key(request))
     except InternalScansDisabled:
         flash(request, "error", "error.internal_disabled")
+        return redirect(f"/domains/{name}?task={check_id}#task")
+    except TooManyScans as e:
+        flash(request, "error", f"error.scan_{e.reason}")
         return redirect(f"/domains/{name}?task={check_id}#task")
     if finding is None:
         raise HTTPException(404)

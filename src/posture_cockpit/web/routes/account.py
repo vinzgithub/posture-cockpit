@@ -27,11 +27,10 @@ from ...security import (
     totp_uri,
 )
 from ...storage import Row
-from ..credentials import check_password_again, check_password_and_code, password_problem, succeeded
+from ..credentials import check_password_again, check_password_and_code, failed, password_problem, succeeded
 from ..deps import (
     audit,
     checked_form,
-    client_key,
     field,
     flash,
     redirect,
@@ -110,7 +109,7 @@ async def totp_enable(request: Request, user: Row = Depends(require_user), form:
     step = None if problem else totp_match(row["secret"], field(form, "code", 20), 0)
     if problem or step is None:
         if not problem:
-            s.throttle.failure(client_key(request))
+            failed(request, user["username"])
         return totp_setup_page(request, user, status=400, error=t(request, problem or "error.code_setup"))
     codes = new_recovery_codes()
     s.accounts.enable_totp(user["id"], step, [recovery_code_hash(c) for c in codes])

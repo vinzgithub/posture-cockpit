@@ -25,6 +25,7 @@ from ..scanner import Scanner
 from ..security import LoginThrottle
 from ..storage import Accounts, AuditLog, Database, InstanceSettings, Perimeters, Scans
 from . import deps
+from .limits import ScanLimiter
 from .routes import account, admin, api, auth, domains, perimeters, report
 from .services import STATIC_DIR, TEMPLATES_DIR, Services
 
@@ -45,7 +46,9 @@ def create_app(config: Config | None = None, registry: Registry | None = None,
         settings=settings, registry=registry,
         catalog=Catalog(registry.messages),
         scanner=Scanner(registry, config, disabled=settings.disabled_extensions, network_factory=network_factory),
-        throttle=LoginThrottle(), templates=Jinja2Templates(directory=TEMPLATES_DIR),
+        throttle=LoginThrottle(), account_throttle=LoginThrottle(max_failures=10, lock_seconds=900),
+        scan_limiter=ScanLimiter(config.max_concurrent_scans, config.scans_per_hour),
+        templates=Jinja2Templates(directory=TEMPLATES_DIR),
     )
 
     app = FastAPI(title="Posture Cockpit", version=__version__, docs_url=None, redoc_url=None, openapi_url=None)
@@ -59,6 +62,10 @@ def create_app(config: Config | None = None, registry: Registry | None = None,
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "same-origin"
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+        response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+        if config.cookie_secure:  # served over HTTPS: browsers must not come back over HTTP
+            response.headers["Strict-Transport-Security"] = "max-age=31536000"
         if not request.url.path.startswith("/static/"):
             response.headers["Cache-Control"] = "no-store"
         return response
