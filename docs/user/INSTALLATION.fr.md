@@ -46,6 +46,12 @@ Le serveur doit pouvoir sortir vers Internet :
 
 Un résolveur qui filtre (bloqueur de publicités, DNS d'entreprise) peut renvoyer des réponses vides : Posture Cockpit refuse alors l'analyse plutôt que de signaler à tort des enregistrements manquants. Donnez-lui des résolveurs publics, par exemple `POSTURE_COCKPIT_NAMESERVERS: "9.9.9.9,1.1.1.1"`.
 
+**Installé dans un réseau d'entreprise**, réglez aussi `POSTURE_COCKPIT_NAMESERVERS` sur des résolveurs publics : sinon le résolveur interne répond aux analyses « Internet », et un utilisateur pourrait y lire des enregistrements de vos zones internes. Les sites internes s'auditent dans un **périmètre interne** (ci-dessous), réservé aux administrateurs.
+
+Les analyses ne passent **pas** par un proxy HTTP : les variables `HTTP_PROXY` et `HTTPS_PROXY` sont ignorées, car un proxy se connecterait à la place de Posture Cockpit, hors de portée de sa règle de sortie. Le serveur doit donc joindre directement les ports 80 et 443.
+
+**Règle de sortie.** En mode Internet, Posture Cockpit ne se connecte qu'à des adresses publiques, sur les ports 80 et 443. Un domaine qui pointe vers une adresse privée (10.x, 192.168.x, ::1…) n'est pas contacté : les contrôles concernés sont « non évalués », avec la raison. Les adresses lien-local, multidiffusion, réservées et les services de métadonnées des clouds (169.254.169.254…) ne sont jamais contactés, quel que soit le mode. Détails dans [SECURITY.md](../../SECURITY.md).
+
 ## Réglages
 
 | Variable | Par défaut | Rôle |
@@ -57,7 +63,25 @@ Un résolveur qui filtre (bloqueur de publicités, DNS d'entreprise) peut renvoy
 | `POSTURE_COCKPIT_DEFAULT_LOCALE` | `fr` | Langue des pages avant la connexion |
 | `POSTURE_COCKPIT_SESSION_MAX_AGE` | `604800` | Durée de la session, en secondes (7 jours) |
 | `POSTURE_COCKPIT_FRAME_ANCESTORS` | `'self'` | Sites autorisés à afficher l'application dans un cadre (Home Assistant) |
+| `POSTURE_COCKPIT_INTERNAL_SCANS` | `false` | `true` pour permettre aux administrateurs de créer des périmètres internes |
+| `POSTURE_COCKPIT_MAX_CONCURRENT_SCANS` | `4` | Analyses simultanées sur l'instance |
+| `POSTURE_COCKPIT_SCANS_PER_HOUR` | `30` | Analyses par compte et par heure (une revérification n'en consomme pas) |
 | `FORWARDED_ALLOW_IPS` | – | Adresse du proxy inverse, pour que les essais limités comptent la vraie adresse du client |
+
+## Audits de réseaux internes
+
+Pour auditer des sites de votre réseau privé (intranet, applications internes en HTTPS) :
+
+1. installez Posture Cockpit **dans** ce réseau, ou sur une machine qui le joint ;
+2. démarrez-le avec `POSTURE_COCKPIT_INTERNAL_SCANS: "true"` ;
+3. dans **Administration → Périmètres internes**, un administrateur crée un périmètre : les réseaux autorisés (CIDR, dans 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10 ou fc00::/7), les serveurs DNS internes, les ports (443 et 80 par défaut) et, au besoin, l'autorité de certification interne au format PEM ;
+4. depuis la page du périmètre, il ajoute les domaines internes et les analyse.
+
+Seuls les administrateurs voient ces domaines, leurs analyses et leurs rapports (marqués « Diffusion restreinte »). La vérification des certificats n'est jamais désactivée : l'AC interne s'ajoute aux autorités reconnues. Chaque analyse interne est inscrite au journal d'audit. Les contrôles faits pour Internet (messagerie, DNS public, security.txt) sont « non applicables » dans un audit interne.
+
+L'adresse de boucle locale (127.0.0.0/8, ::1) n'est jamais ouverte : Posture Cockpit ne s'analyse pas lui-même.
+
+Pour auditer plusieurs réseaux depuis une seule instance, une architecture à agents est étudiée dans [REMOTE_AGENT.fr.md](../developer/REMOTE_AGENT.fr.md).
 
 ## Derrière un proxy inverse (HTTPS)
 
@@ -71,7 +95,7 @@ Servez Posture Cockpit en HTTPS (Caddy, Nginx, Traefik, HAProxy…), puis :
 
 ## Sauvegarde
 
-Tout est dans le volume `/data` : la base `posture_cockpit.db` et la clé de session `.secret_key`.
+Tout est dans le volume `/data` : la base `posture_cockpit.db`, la clé de session `.secret_key` et le dossier `backups/` (copies faites avant chaque mise à jour du schéma).
 
 ```bash
 docker run --rm -v posture-cockpit-data:/data -v "$PWD":/backup alpine \
@@ -85,7 +109,9 @@ docker compose pull
 docker compose up -d
 ```
 
-La base est mise à niveau automatiquement au démarrage (migrations). Faites une sauvegarde avant une mise à jour majeure.
+La base est mise à niveau automatiquement au démarrage (migrations) ; une copie de la base d'avant est d'abord écrite dans `/data/backups/`. Faites tout de même une sauvegarde avant une mise à jour majeure.
+
+**Passage en 0.2.0** : les notes des analyses enregistrées sont recalculées avec les règles de couverture (voir [SCORING.fr.md](SCORING.fr.md)) ; l'API peut renvoyer `"score": null` pour un domaine « non évalué » (voir [HOME_ASSISTANT.fr.md](HOME_ASSISTANT.fr.md)).
 
 ## Sans Docker
 

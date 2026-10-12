@@ -9,6 +9,7 @@
 
 <section class="panel" id="users">
   <h2>{{ t('admin.users') }}</h2>
+  <div class="table-scroll">
   <table class="table">
     <thead><tr><th>{{ t('login.username') }}</th><th>{{ t('admin.role') }}</th><th>{{ t('mfa.title') }}</th><th>{{ t('admin.created') }}</th></tr></thead>
     <tbody>
@@ -22,6 +23,7 @@
     {% endfor %}
     </tbody>
   </table>
+  </div>
 
   <details class="add-user" {% if draft %}open{% endif %}>
     <summary class="btn btn-secondary">{{ t('admin.add_user') }}</summary>

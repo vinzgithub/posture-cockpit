@@ -230,6 +230,10 @@ def plan_view(catalog: Catalog, lang: str, scan: Scan, domain_row: Row) -> PlanV
         gaps=gaps(catalog, lang, scan.domain, current),
         dns_hosts=hosts, dns_host=selected, detected_host=detected.name if detected else "", nameservers=nameservers,
     )
+    if not now.evaluated_ok:
+        # Without a score, "+11 points" would refer to nothing.
+        for task in view.tasks:
+            task.gain = 0
     _tell_the_story(catalog, lang, view)
     return view
 
@@ -268,11 +272,19 @@ def _tell_the_story(catalog: Catalog, lang: str, view: PlanView) -> None:
         view.subline = text("plan.subline.done")
 
     all_done = remaining == 0
+    if not now.evaluated_ok:
+        # The first step is not done: the scan has to run again once the servers answer.
+        scan_step = StepperStep(text("plan.step.scan"), text("plan.step.scan_incomplete", evaluated=now.evaluated,
+                                                             applicable=now.applicable), "active")
+        fix_state = check_state = "todo"
+    else:
+        scan_step = StepperStep(text("plan.step.scan"), text("plan.step.scan_detail", n=len(view.scan.findings)),
+                                "done")
+        fix_state, check_state = ("done", "active") if all_done else ("active", "todo")
     view.steps = [
-        StepperStep(text("plan.step.scan"), text("plan.step.scan_detail", n=len(view.scan.findings)), "done"),
-        StepperStep(text("plan.step.fix"), text("plan.step.fix_detail", done=done, total=total),
-                    "done" if all_done else "active"),
-        StepperStep(text("plan.step.check"), text("plan.step.check_detail"), "active" if all_done else "todo"),
+        scan_step,
+        StepperStep(text("plan.step.fix"), text("plan.step.fix_detail", done=done, total=total), fix_state),
+        StepperStep(text("plan.step.check"), text("plan.step.check_detail"), check_state),
         StepperStep(text("plan.step.share"), text("plan.step.share_detail"), "todo"),
     ]
     if not now.evaluated_ok:

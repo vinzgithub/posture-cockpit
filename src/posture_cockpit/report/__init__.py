@@ -100,7 +100,7 @@ def report_context(catalog: Catalog, lang: str, scan: Scan, author: str = "") ->
         diagnosis = t("report.diagnosis.issues", **numbers)
         conclusion = t("report.diagnosis.plan", n=len(prescriptions), minutes=minutes, grade=plan.target.grade)
     else:
-        diagnosis = t("report.diagnosis.clean", **numbers)
+        diagnosis = t("report.diagnosis.clean" if numbers["warn"] else "report.diagnosis.all_ok", **numbers)
         conclusion = ""
 
     categories = []

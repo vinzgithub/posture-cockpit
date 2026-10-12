@@ -171,7 +171,7 @@ def test_a_domain_that_could_not_be_checked_is_not_evaluated_everywhere(signed_i
     plan = signed_in.get("/domains/down.example").text
     assert "Non évalué" in plan and "Note impossible" in plan and "100</strong>" not in plan
     assert re.search(r"Couverture \d+\xa0% : \d+ contrôles évalués sur \d+", plan)
-    assert "contrôles non évalués" in plan and "Le serveur n&#39;a pas répondu" in plan
+    assert "contrôles non évalués" in plan and "Pas de réponse (serveur DNS ou serveur du site)" in plan
     listing = signed_in.get("/domains").text
     assert "Non évalué" in listing
 

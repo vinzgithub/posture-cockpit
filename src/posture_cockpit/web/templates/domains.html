@@ -28,10 +28,11 @@
       <a class="domain-card" href="/domains/{{ d.name }}">
         {% if d.grade %}{{ grade_pill(d.grade, 'grade-big') }}{% else %}<span class="grade grade-none grade-big">–</span>{% endif %}
         <span class="domain-card-body">
-          <strong>{{ d.name }}{% if d.perimeter %} <span class="tag-internal" title="{{ t('perimeter.internal') }}">{{ d.perimeter }}</span>{% endif %}</strong>
+          <strong>{{ d.name }}</strong>
+          {% if d.perimeter %}<span><span class="tag-internal" title="{{ t('perimeter.internal') }}">{{ t('perimeter.internal') }} · {{ d.perimeter }}</span></span>{% endif %}
           <small class="muted">{% if d.started_at %}{{ t('domains.scanned_on', date=date(d.started_at)) }}{% else %}{{ t('domains.never') }}{% endif %}</small>
         </span>
-        {% if d.score is not none %}<span class="domain-card-score"><strong>{{ d.score }}</strong>/100{% if d.coverage < full_coverage %}<small class="coverage-partial">{{ t('score.partial_short') }}</small>{% endif %}</span>
+        {% if d.score is not none %}<span class="domain-card-score"><strong>{{ d.score }}</strong>/100{% if d.coverage < full_coverage %}<small class="coverage-partial" title="{{ t('score.partial_short') }}">{{ t('score.partial_badge') }}</small>{% endif %}</span>
         {% elif d.scan_id %}<span class="domain-card-score">{{ t('score.not_evaluated') }}</span>{% endif %}
         <svg class="chevron" viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 6 15 12 9 18"/></svg>
       </a>

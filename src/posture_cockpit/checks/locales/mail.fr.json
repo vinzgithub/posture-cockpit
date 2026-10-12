@@ -1,6 +1,6 @@
 {
   "mail.extension.name": "Messagerie",
-  "mail.extension.description": "SPF, DKIM, DMARC, MTA-STS et rapports TLS.",
+  "mail.extension.description": "MX, SPF, DKIM, DMARC, MTA-STS et rapports TLS.",
 
   "mail.no_inbound": "Le domaine ne reçoit pas de courrier : ce contrôle ne s'applique pas.",
 

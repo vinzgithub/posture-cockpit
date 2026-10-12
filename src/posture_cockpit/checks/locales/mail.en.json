@@ -1,6 +1,6 @@
 {
   "mail.extension.name": "Mail",
-  "mail.extension.description": "SPF, DKIM, DMARC, MTA-STS and TLS reporting.",
+  "mail.extension.description": "MX, SPF, DKIM, DMARC, MTA-STS and TLS reporting.",
 
   "mail.no_inbound": "The domain receives no mail: this check does not apply.",
 

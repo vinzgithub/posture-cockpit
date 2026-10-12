@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from posture_cockpit.core import CheckContext, Effort, Extension, Outcome, Remedy, info, load_messages, ok, warn
+from posture_cockpit.core import CheckContext, Effort, Extension, Outcome, Remedy, load_messages, na, ok, warn
 
 extension = Extension(
     "example",
@@ -29,10 +29,10 @@ async def permissions_policy(ctx: CheckContext) -> Outcome:
     """The home page should send a Permissions-Policy header."""
     hosts = await ctx.web_hosts()  # the domain and www, those that have an address
     if not hosts:
-        return info("example.permissions_policy.no_website")
+        return na("example.permissions_policy.no_website")  # "not applicable": left out of the score
     # The first home page that is not a redirection. If the server does not
     # answer, ctx.net raises NetworkError and the engine shows the check as
-    # "could not be checked": nothing to handle here.
+    # "not evaluated" (it lowers the scan's coverage): nothing to handle here.
     for host in hosts:
         page = await ctx.net.http_get(f"https://{host}/")
         if not 300 <= page.status < 400:

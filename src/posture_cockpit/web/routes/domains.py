@@ -93,8 +93,7 @@ async def plan(request: Request, name: str, task: str = "", user: Row = Depends(
     # The task shown first: the one asked for, else the first priority not done yet.
     selected = next((x for x in view.tasks if x.check_id == task), None)
     selected = selected or next((x for x in view.priorities if not x.done), None) or next(iter(view.tasks), None)
-    return render(request, "plan.html", plan=view, selected=selected, history=s.scans.history(domain["id"]),
-                  domain=domain)
+    return render(request, "plan.html", plan=view, selected=selected, domain=domain)
 
 
 @router.post("/{name}/scan")
@@ -173,8 +172,9 @@ async def details(request: Request, name: str, user: Row = Depends(require_user)
     categories: dict[str, list] = {}
     for finding in current:
         categories.setdefault(finding.category, []).append(finding)
-    return render(request, "details.html", scan=scan, categories=categories,
-                  registry=s.registry, rechecks=scan.rechecks, domain=domain)
+    return render(request, "details.html", scan=scan, categories=categories, result=scan.assessment(),
+                  registry=s.registry, rechecks=scan.rechecks, domain=domain, history=s.scans.history(domain["id"]),
+                  full_coverage=scoring.FULL_COVERAGE)
 
 
 @router.post("/{name}/delete")

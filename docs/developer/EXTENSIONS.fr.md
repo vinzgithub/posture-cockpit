@@ -30,7 +30,7 @@ monext = "posture_cockpit_monext:extension"
 ```python
 from pathlib import Path
 
-from posture_cockpit.core import CheckContext, Effort, Extension, Outcome, Remedy, info, load_messages, ok, warn
+from posture_cockpit.core import CheckContext, Effort, Extension, Outcome, Remedy, load_messages, na, ok, warn
 
 extension = Extension(
     "monext",                                   # identifiant : minuscules, chiffres, _
@@ -45,7 +45,7 @@ extension = Extension(
 async def permissions_policy(ctx: CheckContext) -> Outcome:
     hosts = await ctx.web_hosts()
     if not hosts:
-        return info("monext.permissions_policy.no_website")
+        return na("monext.permissions_policy.no_website")
     page = await ctx.net.http_get(f"https://{hosts[0]}/")
     if page.header("permissions-policy"):
         return ok("monext.permissions_policy.ok")
@@ -57,6 +57,7 @@ async def permissions_policy(ctx: CheckContext) -> Outcome:
 - L'identifiant du contrôle devient `monext.permissions_policy` ; il est enregistré avec chaque résultat, **ne le changez plus** une fois publié.
 - `category` : `mail`, `web`, `tls`, `dns`, ou une catégorie à vous (ajoutez alors les textes `category.<nom>`).
 - `weight` : de 1 (détail) à 10 (essentiel).
+- `internal=False` (facultatif) : le contrôle n'a de sens que sur Internet (un enregistrement DNS ou de messagerie vu de l'extérieur) ; dans l'analyse d'un périmètre interne, il est déclaré « non applicable » sans être lancé.
 
 ## 3. Ce que reçoit un contrôle : `CheckContext`
 
@@ -64,26 +65,40 @@ async def permissions_policy(ctx: CheckContext) -> Outcome:
 |---|---|
 | `ctx.domain` | Le domaine, en minuscules, en ASCII |
 | `ctx.now` | L'heure de l'analyse (UTC) |
+| `ctx.internal` | Vrai quand l'analyse a lieu dans un périmètre interne |
 | `await ctx.net.dns(nom, "TXT")` | Une requête DNS : `.records` (textes) et `.exists` (faux si le nom n'existe pas) |
 | `await ctx.net.certificate(hôte)` | Le certificat présenté sur le port 443, et s'il est reconnu |
 | `await ctx.net.accepts_tls(hôte, "TLSv1.1")` | Vrai, faux, ou `None` si cette machine ne peut pas essayer |
-| `await ctx.net.http_get(url)` | Un GET, sans suivre les redirections : `.status`, `.header(nom)`, `.body` (64 Ko au plus) |
+| `await ctx.net.http_get(url)` | Un GET, sans suivre les redirections : `.status`, `.header(nom)`, `.body` (64 Ko au plus). Le certificat n'est pas vérifié (les contrôles TLS le jugent), sauf avec `verify=True` |
 | `await ctx.txt(nom)` | Raccourci : les enregistrements TXT d'un nom |
 | `await ctx.web_hosts()` | Le domaine et `www`, ceux qui ont une adresse |
 | `await ctx.shared(clé, fonction)` | Calcule une chose une seule fois par analyse, pour tous les contrôles qui en ont besoin |
 
-**Restez passif** : tout passe par `ctx.net`. Pas de socket ouverte à la main, pas de scan de ports, pas de formulaire envoyé.
+**Restez passif** : tout passe par `ctx.net`. Pas de socket ouverte à la main, pas de scan de ports, pas de formulaire envoyé. `ctx.net` applique à chaque connexion la **règle de sortie** de l'analyse (adresses publiques sur les ports 80 et 443 sur Internet, les réseaux du périmètre en interne) : une redirection que vous suivez est un nouveau `http_get`, vérifié comme le premier. Ouvrir une socket vous-même contournerait cette règle : une extension est du code qui tourne avec les droits de l'application, c'est pourquoi on n'installe que des extensions de confiance.
 
-**Les erreurs** : si le serveur ne répond pas, `ctx.net` lève `NetworkError`. Ne l'attrapez pas sauf si l'absence de réponse a un sens pour votre contrôle : le moteur affichera « non vérifié » et la note n'en tiendra pas compte. Un contrôle qui plante ou dépasse son délai est traité de la même façon, sans gêner les autres.
+**Les erreurs** : `ctx.net` lève `NetworkError` quand il n'obtient pas de réponse exploitable, ou l'une de ses sous-classes :
+
+| Exception | Sens |
+|---|---|
+| `NetworkError` | Pas de réponse (délai dépassé, échec DNS…) |
+| `Refused` | L'adresse répond mais rien n'écoute sur ce port : une réponse nette |
+| `DestinationBlocked` | La règle de sortie a refusé la connexion (adresse privée sur Internet, port non autorisé…) |
+| `UntrustedCertificate` | Seulement avec `http_get(url, verify=True)` : le certificat n'est pas valide (`.problem` dit pourquoi) |
+
+Ne les attrapez pas sauf si la réponse a un sens pour votre contrôle (MTA-STS lit `Refused` comme « pas de serveur de politique ») : le moteur affichera le contrôle « non évalué », avec la raison, et il fera baisser la couverture de l'analyse. Un contrôle qui plante ou dépasse son délai est traité de la même façon, sans gêner les autres.
 
 ## 4. Ce que renvoie un contrôle
 
-| Fonction | État | Compte dans la note |
+| Fonction | État | Dans la note |
 |---|---|---|
 | `ok(clé, evidence, **params)` | Conforme | Tout le poids |
 | `warn(clé, remedy, evidence, **params)` | À améliorer | La moitié |
 | `fail(clé, remedy, evidence, **params)` | Critique | Rien |
-| `info(clé, evidence, **params)` | Information | Non noté |
+| `na(clé, evidence, **params)` | Non applicable (pas de site web, pas de messagerie…) | Écarté |
+| `info(clé, evidence, **params)` | Information, rien à juger | Écarté |
+| `not_evaluated(clé, evidence, **params)` | S'applique, mais aucun verdict n'a pu être rendu | Écarté, et fait baisser la couverture |
+
+Dites « non applicable » seulement quand le contrôle ne concerne vraiment pas le domaine ; quand il le concerne mais n'a pas pu être fait, il est « non évalué ». La différence compte : sous 50 % de couverture, le domaine n'a pas de note (voir [SCORING.fr.md](../user/SCORING.fr.md)).
 
 - `clé` : la clé du texte qui décrit le constat (jamais une phrase).
 - `evidence` : un dictionnaire des valeurs brutes relevées, affiché sur la page technique.
