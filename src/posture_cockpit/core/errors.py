@@ -10,3 +10,10 @@ class NetworkError(Exception):
     """A question got no usable answer (timeout, refused, DNS server failure, destination not allowed).
 
     The engine reports the check as "not evaluated" rather than as a failure."""
+
+
+class Refused(NetworkError):
+    """The server's address answered and refused the connection: nothing listens on that port.
+
+    Unlike a timeout, this is a definite answer, and a check may treat it as
+    such (no MTA-STS policy server, for instance)."""

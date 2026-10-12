@@ -22,11 +22,13 @@ from ..core import (
     Outcome,
     Remedy,
     fail,
-    info,
     load_messages,
+    na,
+    not_evaluated,
     ok,
     warn,
 )
+from ..core.egress import DestinationBlocked
 from . import LOCALES
 
 extension = Extension("tls", name="TLS", version=__version__,
@@ -51,7 +53,9 @@ async def _certificates(ctx: CheckContext) -> dict[str, Certificate]:
         certs = {h: r for h, r in zip(hosts, results, strict=True) if isinstance(r, Certificate)}
         errors = [r for r in results if isinstance(r, BaseException)]
         if hosts and not certs:
-            raise errors[0] if isinstance(errors[0], NetworkError) else NetworkError(str(errors[0]))
+            # Say why nothing could be read; a refused destination says it best.
+            first = next((e for e in errors if isinstance(e, DestinationBlocked)), errors[0])
+            raise first if isinstance(first, NetworkError) else NetworkError(str(first))
         return certs
 
     return await ctx.shared("certificates", fetch)
@@ -66,7 +70,7 @@ async def certificate(ctx: CheckContext) -> Outcome:
     """The certificate must be trusted by browsers and must not be about to expire."""
     certs = await _certificates(ctx)
     if not certs:
-        return info("tls.no_website")
+        return na("tls.no_website")
     evidence = {host: {"issuer": c.issuer, "expires": c.not_after.date().isoformat(), "names": list(c.names),
                        "trusted": c.trusted, "problem": c.problem} for host, c in certs.items()}
     # The host whose certificate expires first decides.
@@ -94,7 +98,7 @@ async def protocols(ctx: CheckContext) -> Outcome:
     """TLS 1.0 and 1.1 are obsolete; TLS 1.3 is preferred, TLS 1.2 accepted."""
     hosts = list(await _certificates(ctx))
     if not hosts:
-        return info("tls.no_website")
+        return na("tls.no_website")
     support: dict[str, dict[str, bool | None]] = {}
     for host in hosts:
         versions = ("TLSv1", "TLSv1.1", "TLSv1.3")
@@ -106,6 +110,11 @@ async def protocols(ctx: CheckContext) -> Outcome:
     if obsolete:
         return fail("tls.protocols.obsolete", Remedy(15, Effort.DELEGATE, message="tls.protocols.message"),
                     evidence, versions=", ".join(TLS_NAMES[v] for v in obsolete))
+    untested = sorted({v for answers in support.values() for v, accepted in answers.items()
+                       if v in ("TLSv1", "TLSv1.1") and accepted is None})
+    if untested:
+        # This machine's TLS library cannot speak these versions: saying "not accepted" would be a guess.
+        return not_evaluated("tls.protocols.untestable", evidence, versions=", ".join(TLS_NAMES[v] for v in untested))
     if not all(answers.get("TLSv1.3") for answers in support.values()):
         return warn("tls.protocols.no_tls13", Remedy(15, Effort.DELEGATE, message="tls.protocols.tls13_message"),
                     evidence)
@@ -117,7 +126,7 @@ async def key(ctx: CheckContext) -> Outcome:
     """The certificate's key must be long enough: RSA 2048 bits, or an elliptic curve of 256 bits."""
     certs = await _certificates(ctx)
     if not certs:
-        return info("tls.no_website")
+        return na("tls.no_website")
     evidence = {host: f"{c.key_type} {c.key_bits}" for host, c in certs.items()}
     for host, c in certs.items():
         weak = (c.key_type == "RSA" and c.key_bits < MIN_RSA_BITS) or (c.key_type == "EC" and c.key_bits < MIN_EC_BITS)

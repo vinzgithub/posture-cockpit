@@ -22,8 +22,9 @@ Used by the tests and by the demo domain. The data is a plain dictionary
     }
 
 A DNS question that is not listed gets an empty answer. A certificate, TLS
-version or URL that is not listed raises :class:`~.network.NetworkError`, as an
-unreachable server would. ``http_get(url, verify=True)`` raises
+version or URL that is not listed raises :class:`~.network.Refused`, as a
+server with nothing listening would; the value ``"timeout"`` (for a URL, a
+certificate or a DNS question) raises a plain :class:`~.network.NetworkError`. ``http_get(url, verify=True)`` raises
 :class:`~.network.UntrustedCertificate` when the URL's host has a certificate
 listed with ``"trusted": false``. Certificate dates are given relative to ``now`` so a
 demo always looks the same, whatever the day.
@@ -36,7 +37,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from urllib.parse import urlsplit
 
-from .network import Certificate, DnsAnswer, HttpReply, NetworkError, UntrustedCertificate
+from .network import Certificate, DnsAnswer, HttpReply, NetworkError, Refused, UntrustedCertificate
 
 
 class FixtureNetwork:
@@ -68,7 +69,9 @@ class FixtureNetwork:
     async def certificate(self, host: str, port: int = 443) -> Certificate:
         self.asked.append(f"certificate {host}")
         if host not in self._certificates:
-            raise NetworkError(f"TLS {host}:{port}: connection refused")
+            raise Refused(f"TLS {host}:{port}: connection refused")
+        if self._certificates[host] == "timeout":
+            raise NetworkError(f"TLS {host}:{port}: timeout")
         c = self._certificates[host]
         expires = self.now + timedelta(days=float(c.get("expires_in_days", 90)))
         return Certificate(
@@ -82,13 +85,15 @@ class FixtureNetwork:
     async def accepts_tls(self, host: str, version: str, port: int = 443) -> bool | None:
         self.asked.append(f"tls {host} {version}")
         if host not in self._tls:
-            raise NetworkError(f"TLS {host}:{port}: connection refused")
+            raise Refused(f"TLS {host}:{port}: connection refused")
         return self._tls[host].get(version)
 
     async def http_get(self, url: str, *, verify: bool = False) -> HttpReply:
         self.asked.append(f"http {url}")
         if url not in self._http:
-            raise NetworkError(f"HTTP {url}: ConnectError")
+            raise Refused(f"HTTP {url}: connection refused")
+        if self._http[url] == "timeout":
+            raise NetworkError(f"HTTP {url}: ReadTimeout")
         host = urlsplit(url).hostname or ""
         certificate = self._certificates.get(host, {})
         if verify and url.startswith("https:") and not certificate.get("trusted", True):

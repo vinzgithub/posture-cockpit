@@ -20,6 +20,8 @@
   "web.hsts.short": "La durée HSTS de {host} est courte ({days:jour|jours}) : six mois au moins sont recommandés.",
   "web.hsts.message": "Bonjour,\n\nPourriez-vous ajouter sur {host} l'en-tête suivant, sur toutes les réponses HTTPS :\n\nStrict-Transport-Security: max-age=31536000\n\nMerci d'avance.",
   "web.hsts.ok": "HSTS est actif avec une durée suffisante.",
+  "web.hsts.invalid": "L'en-tête HSTS de {host} n'a pas de durée « max-age » lisible : les navigateurs l'ignorent.",
+  "web.hsts.disabled": "L'en-tête HSTS de {host} a une durée nulle (max-age=0) : il demande aux navigateurs d'oublier la protection.",
 
   "web.csp.title": "Politique de sécurité du contenu (CSP)",
   "web.csp.action": "Définir une politique de sécurité du contenu",
@@ -28,6 +30,9 @@
   "web.csp.missing": "{host} n'envoie pas d'en-tête Content-Security-Policy.",
   "web.csp.message": "Bonjour,\n\nLe site {host} n'envoie pas d'en-tête Content-Security-Policy. Pourriez-vous en mettre un en place, d'abord en mode « Report-Only » pour ne rien casser, puis en mode bloquant ?\n\nMerci d'avance.",
   "web.csp.ok": "Une politique de sécurité du contenu est en place.",
+  "web.csp.no_script": "La politique de sécurité du contenu de {host} ne restreint pas les scripts (ni script-src ni default-src).",
+  "web.csp.unsafe_inline": "La politique de sécurité du contenu de {host} autorise les scripts intégrés à la page ('unsafe-inline') : un script injecté s'exécuterait quand même.",
+  "web.csp.open": "La politique de sécurité du contenu de {host} autorise des scripts de n'importe quelle origine (*, https: ou data:).",
 
   "web.framing.title": "Protection contre l'intégration (clickjacking)",
   "web.framing.action": "Interdire l'intégration du site dans d'autres pages",
@@ -36,6 +41,8 @@
   "web.framing.missing": "{host} peut être affiché dans une page tierce.",
   "web.framing.message": "Bonjour,\n\nPourriez-vous ajouter sur {host} l'en-tête « X-Frame-Options: SAMEORIGIN » (ou la directive CSP « frame-ancestors 'self' ») ?\n\nMerci d'avance.",
   "web.framing.ok": "Le site ne peut pas être intégré dans une page tierce.",
+  "web.framing.permissive": "La directive frame-ancestors de {host} autorise n'importe quel site à afficher le vôtre dans une page (X-Frame-Options est alors ignoré par les navigateurs).",
+  "web.framing.obsolete": "{host} utilise « X-Frame-Options: ALLOW-FROM », que les navigateurs actuels ne comprennent plus : le site peut être affiché dans une page tierce.",
 
   "web.nosniff.title": "Types de fichiers respectés (nosniff)",
   "web.nosniff.action": "Ajouter l'en-tête nosniff",
@@ -49,9 +56,10 @@
   "web.referrer.action": "Limiter l'adresse de provenance transmise",
   "web.referrer.why": "Quand un visiteur clique sur un lien sortant, le navigateur peut transmettre l'adresse complète de la page qu'il quitte, parfois avec des informations personnelles.",
   "web.referrer.ref": "W3C, Referrer Policy",
-  "web.referrer.missing": "{host} ne fixe pas de Referrer-Policy.",
+  "web.referrer.missing": "{host} ne fixe pas de Referrer-Policy. Les navigateurs récents appliquent une valeur prudente par défaut ; les anciens transmettent l'adresse complète.",
   "web.referrer.message": "Bonjour,\n\nPourriez-vous ajouter sur {host} l'en-tête « Referrer-Policy: strict-origin-when-cross-origin » ?\n\nMerci d'avance.",
   "web.referrer.ok": "La transmission de l'adresse de provenance est encadrée.",
+  "web.referrer.unsafe": "{host} demande de transmettre l'adresse complète de ses pages à tous les sites, même sans chiffrement (Referrer-Policy: unsafe-url).",
 
   "web.server_banner.title": "Versions des logiciels affichées",
   "web.server_banner.action": "Masquer les versions des logiciels",
@@ -67,5 +75,7 @@
   "web.security_txt.ref": "RFC 9116",
   "web.security_txt.missing": "Aucun fichier {url}.",
   "web.security_txt.message": "Bonjour,\n\nPourriez-vous publier le fichier https://{domain}/.well-known/security.txt (RFC 9116) avec au moins une ligne « Contact: mailto:securite@{domain} » et une ligne « Expires: » ?\n\nMerci d'avance.",
-  "web.security_txt.ok": "Un fichier security.txt indique un contact."
+  "web.security_txt.ok": "Un fichier security.txt valide indique un contact.",
+  "web.security_txt.invalid": "Le fichier {url} est incomplet : il manque {fields} (champs obligatoires de la RFC 9116).",
+  "web.security_txt.expired": "Le fichier {url} a expiré le {expires_on} : ses informations ne sont plus réputées à jour."
 }

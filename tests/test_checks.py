@@ -115,12 +115,12 @@ def test_dkim_short_key():
 # ------------------------------------------------------- MTA-STS, TLS-RPT
 def test_mta_sts_and_tls_rpt_do_not_apply_without_mail():
     found = run(changed(healthy(), dns={f"{DOMAIN} MX": []}), "mail.mta_sts", "mail.tls_rpt")
-    assert {f.status for f in found.values()} == {Status.INFO}
+    assert {f.status for f in found.values()} == {Status.NA}
 
 
 def test_mta_sts_testing_mode():
-    data = changed(healthy(), http={f"https://mta-sts.{DOMAIN}/.well-known/mta-sts.txt":
-                                    {"status": 200, "body": "version: STSv1\nmode: testing\n"}})
+    data = changed(healthy(), http={f"https://mta-sts.{DOMAIN}/.well-known/mta-sts.txt": {
+        "status": 200, "body": "version: STSv1\nmode: testing\nmx: mx.example.net\nmax_age: 604800\n"}})
     f = one(data, "mail.mta_sts")
     assert f.status is Status.WARN and f.outcome.params["mode"] == "testing"
 
@@ -158,7 +158,7 @@ def test_untrusted_certificate():
 def test_no_website_means_nothing_to_check():
     data = changed(healthy(), dns={f"{DOMAIN} A": [], f"www.{DOMAIN} A": []})
     found = run(data, "tls.certificate", "web.hsts", "web.https_redirect")
-    assert {f.status for f in found.values()} == {Status.INFO}
+    assert {f.status for f in found.values()} == {Status.NA}
 
 
 def test_unreachable_website_is_not_a_failure():
@@ -175,11 +175,16 @@ def test_obsolete_tls_versions():
     assert f.status is Status.FAIL and f.outcome.params["versions"] == "TLS 1.0"
 
 
-def test_a_version_this_machine_cannot_test_is_not_held_against_the_server():
+def test_a_version_this_machine_cannot_test_is_not_evaluated():
+    """0.1.0 said "only recent versions accepted" without having tried TLS 1.0: a false negative."""
     data = healthy()
     for host in data["tls"]:
         data["tls"][host]["TLSv1"] = None
-    assert one(data, "tls.protocols").status is Status.OK
+    f = one(data, "tls.protocols")
+    assert f.status is Status.ERROR and f.outcome.summary == "tls.protocols.untestable"
+    assert f.outcome.params["versions"] == "TLS 1.0"
+    data["tls"][DOMAIN]["TLSv1.1"] = True  # an obsolete version that was tested and accepted still fails
+    assert one(data, "tls.protocols").status is Status.FAIL
 
 
 def test_without_tls_13():

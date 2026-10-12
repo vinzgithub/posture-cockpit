@@ -42,7 +42,7 @@ from cryptography.x509.oid import NameOID
 
 from .. import __version__
 from .egress import INTERNET, Address, DestinationBlocked, EgressPolicy, parse_address
-from .errors import NetworkError
+from .errors import NetworkError, Refused
 
 USER_AGENT = f"PostureCockpit/{__version__} (+https://github.com/vinzgithub/posture-cockpit)"
 MAX_BODY = 64 * 1024  # bytes of a web page kept for the checks
@@ -50,7 +50,7 @@ TLS_VERSIONS = ("TLSv1", "TLSv1.1", "TLSv1.2", "TLSv1.3")
 
 __all__ = [
     "MAX_BODY", "TLS_VERSIONS", "USER_AGENT", "Certificate", "DestinationBlocked", "DnsAnswer", "HttpReply",
-    "Limits", "LiveNetwork", "Network", "NetworkError", "UntrustedCertificate",
+    "Limits", "LiveNetwork", "Network", "NetworkError", "Refused", "UntrustedCertificate",
 ]
 
 
@@ -258,6 +258,8 @@ class LiveNetwork:
                 raise
             except (OSError, TimeoutError) as e:
                 failure = e
+        if isinstance(failure, ConnectionRefusedError):
+            raise Refused(f"TLS {host}:{port}: connection refused")
         raise NetworkError(f"TLS {host}:{port}: {failure or 'unreachable'}")
 
     def _verified_context(self) -> ssl.SSLContext:
@@ -359,6 +361,8 @@ class LiveNetwork:
                     failure = e  # this address cannot be reached: try the next one
                 except httpx.HTTPError as e:
                     raise NetworkError(f"HTTP {url}: {e.__class__.__name__}") from e
+        if failure is not None and _caused_by(failure, ConnectionRefusedError):
+            raise Refused(f"HTTP {url}: connection refused")
         raise NetworkError(f"HTTP {url}: {failure.__class__.__name__ if failure else 'unreachable'}")
 
 
@@ -378,6 +382,15 @@ def _host_header(host: str, port: int | None) -> str:
     """Value of the HTTP ``Host`` header: the name, and the port when it is not the scheme's default."""
     name = f"[{host}]" if ":" in host else host
     return name if port is None else f"{name}:{port}"
+
+
+def _caused_by(error: BaseException, kind: type[BaseException]) -> bool:
+    seen: BaseException | None = error
+    while seen is not None:
+        if isinstance(seen, kind):
+            return True
+        seen = seen.__cause__ or seen.__context__
+    return False
 
 
 def _certificate_problem(error: BaseException) -> str | None:

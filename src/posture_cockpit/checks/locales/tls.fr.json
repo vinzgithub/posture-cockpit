@@ -27,6 +27,7 @@
   "tls.protocols.no_tls13.action": "Activer TLS 1.3",
   "tls.protocols.tls13_message": "Bonjour,\n\nLe serveur web du domaine {domain} ne propose pas TLS 1.3. Pourriez-vous l'activer, en plus de TLS 1.2 ?\n\nMerci d'avance.",
   "tls.protocols.ok": "Seules les versions récentes de TLS sont acceptées.",
+  "tls.protocols.untestable": "Non évalué : la bibliothèque TLS de cette machine ne sait plus parler {versions}, impossible de savoir si le serveur les accepte encore.",
 
   "tls.key.title": "Clé du certificat",
   "tls.key.action": "Utiliser une clé plus longue",

@@ -119,6 +119,12 @@ def na(summary: str, evidence: Mapping[str, Any] | None = None, **params: str | 
     return Outcome(Status.NA, summary, params, evidence or {})
 
 
+def not_evaluated(summary: str, evidence: Mapping[str, Any] | None = None, **params: str | int) -> Outcome:
+    """The check applies but could not reach a verdict, for a reason it knows (e.g. this machine
+    cannot test TLS 1.0). Like a network error, it lowers the coverage of the scan."""
+    return Outcome(Status.ERROR, summary, params, evidence or {})
+
+
 @dataclass(frozen=True)
 class Finding:
     """An outcome together with the identity of the check that produced it."""

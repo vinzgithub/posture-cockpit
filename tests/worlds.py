@@ -22,7 +22,12 @@ NOW = datetime(2026, 10, 12, 12, 0, tzinfo=UTC)
 
 @cache
 def dkim_key(bits: int) -> str:
-    key = rsa.generate_private_key(public_exponent=65537, key_size=bits).public_key()
+    """A DKIM public key of ``bits`` bits, base64. Below 1024 bits, cryptography refuses to make a key
+    pair: a public key with an arbitrary modulus is enough to publish."""
+    if bits < 1024:
+        key = rsa.RSAPublicNumbers(65537, (1 << (bits - 1)) | 0x1234567 | 1).public_key()
+    else:
+        key = rsa.generate_private_key(public_exponent=65537, key_size=bits).public_key()
     der = key.public_bytes(serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo)
     return base64.b64encode(der).decode()
 
@@ -52,6 +57,9 @@ def healthy() -> dict:
             f"_mta-sts.{DOMAIN} TXT": ["v=STSv1; id=20261012"],
             f"_smtp._tls.{DOMAIN} TXT": [f"v=TLSRPTv1; rua=mailto:tls@{DOMAIN}"],
             f"{DOMAIN} DS": ["12345 13 2 ABCDEF"],
+            f"{DOMAIN} DNSKEY": ["257 3 13 mdsswUyr3DPW132mOi8V9xESWE8jTo0dxCjjnopKl+GqJxpVXckHAeF+KkxL"],
+            "mx.example.net A": ["192.0.2.25"],
+            f"mta-sts.{DOMAIN} A": ["192.0.2.10"],
             f"{DOMAIN} CAA": ['0 issue "letsencrypt.org"'],
         },
         "certificates": {DOMAIN: dict(cert), f"www.{DOMAIN}": dict(cert)},

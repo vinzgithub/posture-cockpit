@@ -20,6 +20,8 @@
   "web.hsts.short": "The HSTS duration of {host} is short ({days:day|days}): at least six months are recommended.",
   "web.hsts.message": "Hello,\n\nCould you add the following header on {host}, on every HTTPS response:\n\nStrict-Transport-Security: max-age=31536000\n\nThank you.",
   "web.hsts.ok": "HSTS is on, with a long enough duration.",
+  "web.hsts.invalid": "The HSTS header of {host} has no readable \"max-age\": browsers ignore it.",
+  "web.hsts.disabled": "The HSTS header of {host} has a zero duration (max-age=0): it tells browsers to forget the protection.",
 
   "web.csp.title": "Content Security Policy (CSP)",
   "web.csp.action": "Define a Content Security Policy",
@@ -28,6 +30,9 @@
   "web.csp.missing": "{host} sends no Content-Security-Policy header.",
   "web.csp.message": "Hello,\n\nThe website {host} sends no Content-Security-Policy header. Could you set one up, first in \"Report-Only\" mode so nothing breaks, then in blocking mode?\n\nThank you.",
   "web.csp.ok": "A Content Security Policy is in place.",
+  "web.csp.no_script": "The content security policy of {host} does not restrict scripts (neither script-src nor default-src).",
+  "web.csp.unsafe_inline": "The content security policy of {host} allows scripts written in the page ('unsafe-inline'): an injected script would still run.",
+  "web.csp.open": "The content security policy of {host} allows scripts from any origin (*, https: or data:).",
 
   "web.framing.title": "Protection against framing (clickjacking)",
   "web.framing.action": "Forbid framing the website in other pages",
@@ -36,6 +41,8 @@
   "web.framing.missing": "{host} can be shown inside a third-party page.",
   "web.framing.message": "Hello,\n\nCould you add on {host} the header \"X-Frame-Options: SAMEORIGIN\" (or the CSP directive \"frame-ancestors 'self'\")?\n\nThank you.",
   "web.framing.ok": "The website cannot be framed by a third-party page.",
+  "web.framing.permissive": "The frame-ancestors directive of {host} lets any site show yours in a page (browsers then ignore X-Frame-Options).",
+  "web.framing.obsolete": "{host} uses \"X-Frame-Options: ALLOW-FROM\", which current browsers no longer understand: the site can be shown in a third-party page.",
 
   "web.nosniff.title": "File types respected (nosniff)",
   "web.nosniff.action": "Add the nosniff header",
@@ -49,9 +56,10 @@
   "web.referrer.action": "Limit the referring address sent",
   "web.referrer.why": "When a visitor follows an outgoing link, the browser may send the full address of the page they leave, sometimes with personal information in it.",
   "web.referrer.ref": "W3C, Referrer Policy",
-  "web.referrer.missing": "{host} sets no Referrer-Policy.",
+  "web.referrer.missing": "{host} sets no Referrer-Policy. Recent browsers apply a careful default; older ones send the full address.",
   "web.referrer.message": "Hello,\n\nCould you add on {host} the header \"Referrer-Policy: strict-origin-when-cross-origin\"?\n\nThank you.",
   "web.referrer.ok": "Sending the referring address is restricted.",
+  "web.referrer.unsafe": "{host} asks browsers to send the full address of its pages to every site, even without encryption (Referrer-Policy: unsafe-url).",
 
   "web.server_banner.title": "Software versions shown",
   "web.server_banner.action": "Hide software versions",
@@ -67,5 +75,7 @@
   "web.security_txt.ref": "RFC 9116",
   "web.security_txt.missing": "No {url} file.",
   "web.security_txt.message": "Hello,\n\nCould you publish the file https://{domain}/.well-known/security.txt (RFC 9116) with at least a line \"Contact: mailto:security@{domain}\" and a line \"Expires:\"?\n\nThank you.",
-  "web.security_txt.ok": "A security.txt file gives a contact."
+  "web.security_txt.ok": "A valid security.txt file gives a contact.",
+  "web.security_txt.invalid": "The file {url} is incomplete: {fields} is missing (fields required by RFC 9116).",
+  "web.security_txt.expired": "The file {url} expired on {expires_on}: its information is no longer considered current."
 }

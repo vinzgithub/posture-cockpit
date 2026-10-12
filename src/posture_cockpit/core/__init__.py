@@ -8,11 +8,11 @@ Extension authors only need the names exported here::
 """
 
 from .extension import CATEGORIES, Check, CheckContext, Extension, load_messages
-from .model import DnsChange, Effort, Finding, Outcome, Remedy, Status, fail, info, na, ok, warn
-from .network import Certificate, DnsAnswer, HttpReply, Network, NetworkError, UntrustedCertificate
+from .model import DnsChange, Effort, Finding, Outcome, Remedy, Status, fail, info, na, not_evaluated, ok, warn
+from .network import Certificate, DnsAnswer, HttpReply, Network, NetworkError, Refused, UntrustedCertificate
 
 __all__ = [
     "CATEGORIES", "Certificate", "Check", "CheckContext", "DnsAnswer", "DnsChange", "Effort", "Extension",
-    "Finding", "HttpReply", "Network", "NetworkError", "Outcome", "Remedy", "Status", "UntrustedCertificate",
-    "fail", "info", "load_messages", "na", "ok", "warn",
+    "Finding", "HttpReply", "Network", "NetworkError", "Outcome", "Refused", "Remedy", "Status", "UntrustedCertificate",
+    "fail", "info", "load_messages", "na", "not_evaluated", "ok", "warn",
 ]
