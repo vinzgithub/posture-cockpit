@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import ssl
+import warnings
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -115,15 +116,16 @@ class LiveNetwork:
         self._resolver.lifetime = timeout
         self._cache: dict[tuple, asyncio.Task] = {}
 
-    def _cached(self, key: tuple, make: Callable[[], Awaitable[T]]) -> Awaitable[T]:
+    async def _cached(self, key: tuple, make: Callable[[], Awaitable[T]]) -> T:
         # The task is shared: a second caller waits for the first answer.
         if key not in self._cache:
             self._cache[key] = asyncio.ensure_future(make())
-        return self._cache[key]
+        # shield(): a caller that times out must not cancel the answer the others wait for.
+        return await asyncio.shield(self._cache[key])
 
     # ------------------------------------------------------------------ DNS
-    def dns(self, name: str, rtype: str) -> Awaitable[DnsAnswer]:
-        return self._cached(("dns", name.lower().rstrip("."), rtype.upper()), lambda: self._dns(name, rtype))
+    async def dns(self, name: str, rtype: str) -> DnsAnswer:
+        return await self._cached(("dns", name.lower().rstrip("."), rtype.upper()), lambda: self._dns(name, rtype))
 
     async def _dns(self, name: str, rtype: str) -> DnsAnswer:
         try:
@@ -137,8 +139,8 @@ class LiveNetwork:
         return DnsAnswer(tuple(_record_text(r) for r in answer.rrset))
 
     # ------------------------------------------------------------------ TLS
-    def certificate(self, host: str, port: int = 443) -> Awaitable[Certificate]:
-        return self._cached(("cert", host, port), lambda: self._certificate(host, port))
+    async def certificate(self, host: str, port: int = 443) -> Certificate:
+        return await self._cached(("cert", host, port), lambda: self._certificate(host, port))
 
     async def _certificate(self, host: str, port: int) -> Certificate:
         # First with full verification. If it fails, connect again without
@@ -166,15 +168,17 @@ class LiveNetwork:
         finally:
             await _close(writer)
 
-    def accepts_tls(self, host: str, version: str, port: int = 443) -> Awaitable[bool | None]:
-        return self._cached(("tls", host, version, port), lambda: self._accepts_tls(host, version, port))
+    async def accepts_tls(self, host: str, version: str, port: int = 443) -> bool | None:
+        return await self._cached(("tls", host, version, port), lambda: self._accepts_tls(host, version, port))
 
     async def _accepts_tls(self, host: str, version: str, port: int) -> bool | None:
         context = _unverified_context()
         tls_version = {"TLSv1": ssl.TLSVersion.TLSv1, "TLSv1.1": ssl.TLSVersion.TLSv1_1,
                        "TLSv1.2": ssl.TLSVersion.TLSv1_2, "TLSv1.3": ssl.TLSVersion.TLSv1_3}[version]
         try:
-            context.minimum_version = context.maximum_version = tls_version
+            with warnings.catch_warnings():  # Python warns that TLS 1.0 is deprecated: that is the point
+                warnings.simplefilter("ignore", DeprecationWarning)
+                context.minimum_version = context.maximum_version = tls_version
             if version in ("TLSv1", "TLSv1.1"):
                 context.set_ciphers("DEFAULT:@SECLEVEL=0")  # old versions need old ciphers
         except (ValueError, ssl.SSLError):
@@ -187,14 +191,16 @@ class LiveNetwork:
             if e.reason in ("NO_PROTOCOLS_AVAILABLE", "NO_CIPHERS_AVAILABLE", "UNSUPPORTED_PROTOCOL"):
                 return None
             return False  # the server refused the handshake
+        except ConnectionResetError:
+            return False  # some servers refuse an old version by dropping the connection
         except (OSError, TimeoutError) as e:
             raise NetworkError(f"TLS {host}:{port}: {e}") from e
         await _close(writer)
         return True
 
     # ----------------------------------------------------------------- HTTP
-    def http_get(self, url: str) -> Awaitable[HttpReply]:
-        return self._cached(("http", url), lambda: self._http_get(url))
+    async def http_get(self, url: str) -> HttpReply:
+        return await self._cached(("http", url), lambda: self._http_get(url))
 
     async def _http_get(self, url: str) -> HttpReply:
         # Certificates are checked by the TLS checks; here we only read headers,

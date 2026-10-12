@@ -1,4 +1,7 @@
 {
+  "dns.extension.name": "DNS",
+  "dns.extension.description": "Serveurs de noms, DNSSEC et enregistrements CAA du domaine.",
+
   "dns.nameservers.title": "Serveurs de noms",
   "dns.nameservers.action": "Ajouter un second serveur de noms",
   "dns.nameservers.why": "Les serveurs de noms répondent à tout l'Internet pour le domaine. S'il n'y en a qu'un et qu'il tombe, le site et la messagerie disparaissent en même temps.",

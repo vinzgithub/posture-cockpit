@@ -50,14 +50,14 @@
     {% for item in extensions %}
     <li class="extension {% if not item.enabled %}is-off{% endif %}">
       <div>
-        <strong>{{ item.ext.name }}</strong> <code class="muted small">{{ item.ext.id }} {{ item.ext.version }}</code>
-        <p class="muted small">{{ item.ext.description }} · {{ t('admin.n_checks', n=item.ext.checks | length) }}</p>
+        <strong>{{ item.name }}</strong> <code class="muted small">{{ item.ext.id }} {{ item.ext.version }}</code>
+        <p class="muted small">{{ item.description }} · {{ t('admin.n_checks', n=item.ext.checks | length) }}</p>
       </div>
       <form method="post" action="/admin/extensions/{{ item.ext.id }}">
         <input type="hidden" name="csrf" value="{{ csrf }}">
         <input type="hidden" name="enabled" value="{{ '0' if item.enabled else '1' }}">
         <button type="submit" class="switch" role="switch" aria-checked="{{ 'true' if item.enabled else 'false' }}"
-                aria-label="{{ item.ext.name }}"><span></span></button>
+                aria-label="{{ item.name }}"><span></span></button>
       </form>
     </li>
     {% endfor %}

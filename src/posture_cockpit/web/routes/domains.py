@@ -15,6 +15,7 @@ from starlette.exceptions import HTTPException
 
 from ...core import providers
 from ...core.engine import normalize_domain
+from ...core.model import Status
 from ...core.network import NetworkError
 from ...scanner import DEMO_DOMAIN
 from ...storage import Row
@@ -48,13 +49,13 @@ async def add_domain(request: Request, user: Row = Depends(require_user), form: 
         return render(request, "domains.html", status=400, domains=s.scans.domains(), demo_domain=DEMO_DOMAIN,
                       typed=typed, error=t(request, "error.domain_invalid"))
     try:
-        exists = await s.scanner.exists(name)
+        problem = await s.scanner.preflight(name)
     except NetworkError:
-        return render(request, "domains.html", status=502, domains=s.scans.domains(), demo_domain=DEMO_DOMAIN,
-                      typed=typed, error=t(request, "error.dns_unreachable"))
-    if not exists:
+        problem = "unreachable"
+    if problem:
+        key = {"unknown": "error.domain_unknown", "empty": "error.domain_empty"}.get(problem, "error.dns_unreachable")
         return render(request, "domains.html", status=400, domains=s.scans.domains(), demo_domain=DEMO_DOMAIN,
-                      typed=typed, error=t(request, "error.domain_unknown", domain=name))
+                      typed=typed, error=t(request, key, domain=name))
     await scan_and_save(s, name, user["id"])
     return redirect(f"/domains/{name}")
 
@@ -96,7 +97,7 @@ async def verify(request: Request, name: str, check_id: str, user: Row = Depends
         raise HTTPException(404)
     before = scan.score
     after = s.scans.save_recheck(scan.id, finding)
-    if finding.status.value == "ok":
+    if finding.status is Status.OK:
         flash(request, "ok", "flash.verified", points=max(after - before, 0), score=after)
     else:
         flash(request, "warn", "flash.not_yet")

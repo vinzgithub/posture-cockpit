@@ -27,6 +27,7 @@ import sys
 
 from .config import Config
 from .core import engine, scoring
+from .core.network import NetworkError
 from .core.registry import Registry
 from .i18n import LOCALES, Catalog
 from .scanner import Scanner
@@ -70,7 +71,17 @@ def _scan(typed: str, as_json: bool, lang: str) -> int:
     registry = Registry.discover()
     for error in registry.errors:
         print(f"Extension not loaded: {error.source}: {error.error}", file=sys.stderr)
-    result = asyncio.run(Scanner(registry, Config.from_env()).scan(domain))
+    scanner = Scanner(registry, Config.from_env())
+    try:
+        problem = asyncio.run(scanner.preflight(domain))
+    except NetworkError as e:
+        problem = f"DNS unreachable ({e})"
+    if problem:
+        print({"unknown": f"{domain} does not exist.",
+               "empty": f"The DNS gives no record at all for {domain}: check the name, or the resolver "
+                        "(POSTURE_COCKPIT_NAMESERVERS)."}.get(problem, problem), file=sys.stderr)
+        return 1
+    result = asyncio.run(scanner.scan(domain))
     if as_json:
         print(json.dumps({"domain": domain, "score": scoring.score(result.findings),
                           "findings": [{"check": f.check_id, "status": f.status.value, **f.outcome_json()}

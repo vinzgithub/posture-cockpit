@@ -1,0 +1,18 @@
+# Copyright © 2026 Vincent Fournet
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Once a month, one pull request per ecosystem instead of one per package.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /
+    schedule: { interval: monthly }
+    groups:
+      python: { patterns: ["*"] }
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: monthly }
+    groups:
+      actions: { patterns: ["*"] }
+  - package-ecosystem: docker
+    directory: /
+    schedule: { interval: monthly }

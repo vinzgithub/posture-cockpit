@@ -38,6 +38,12 @@ def test_unknown_and_invalid_domains_are_refused(signed_in):
     assert signed_in.app.state.services.scans.domains() == []
 
 
+def test_a_resolver_giving_empty_answers_is_not_mistaken_for_missing_records(signed_in, world):
+    world["quiet.example"] = {"dns": {}}
+    r = scan(signed_in, "quiet.example")
+    assert r.status_code == 400 and "Le DNS ne renvoie aucune information" in r.text
+
+
 def test_plan_of_the_demo_domain(signed_in):
     scan(signed_in, DEMO)
     page = signed_in.get(f"/domains/{DEMO}").text
@@ -125,6 +131,13 @@ def test_api_lists_scores_with_a_key(signed_in):
     data = r.json()["domains"][0]
     assert data["domain"] == DEMO and data["score"] == 57 and data["grade"] == "C"
     assert data["critical"] == 3 and data["certificate_days_left"] == 9
+    auth = {"Authorization": f"Bearer {token}"}
+    assert signed_in.post(f"/api/v1/domains/{DEMO}/scan").status_code == 401
+    assert signed_in.post("/api/v1/domains/unknown.example/scan", headers=auth).status_code == 404
+    r = signed_in.post(f"/api/v1/domains/{DEMO}/scan", headers=auth)
+    assert r.status_code == 200 and r.json()["score"] == 57
+    scans = signed_in.app.state.services.scans
+    assert len(scans.history(scans.domain(DEMO)["id"])) == 2
 
 
 def test_pages_carry_a_strict_security_policy(signed_in):

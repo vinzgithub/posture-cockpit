@@ -86,13 +86,13 @@ def changed(data: dict, **sections) -> dict:
     return result
 
 
-def run(data: dict, *check_ids: str, domain: str = DOMAIN) -> dict[str, Finding]:
+def run(data: dict, *check_ids: str, domain: str = DOMAIN, registry: Registry | None = None) -> dict[str, Finding]:
     """Runs some checks (all of them when none is given) and returns their findings by id."""
-    registry = Registry.discover()
+    registry = registry or Registry.discover()
     checks = [registry.get(c) for c in check_ids] if check_ids else registry.checks()
     result = asyncio.run(engine.scan(domain, checks, FixtureNetwork(data, NOW), timeout=5, now=NOW))
     return {f.check_id: f for f in result.findings}
 
 
-def one(data: dict, check_id: str) -> Finding:
-    return run(data, check_id)[check_id]
+def one(data: dict, check_id: str, registry: Registry | None = None) -> Finding:
+    return run(data, check_id, registry=registry)[check_id]

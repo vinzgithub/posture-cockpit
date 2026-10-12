@@ -33,7 +33,7 @@ from ..core import (
 from ..core.extension import CheckFunction
 from . import LOCALES
 
-extension = Extension("web", name="Site web", version=__version__,
+extension = Extension("web", name="Website", version=__version__,
                       description="HTTPS redirection, HSTS, CSP and the other protection headers, security.txt.",
                       messages=load_messages(LOCALES, "web"))
 

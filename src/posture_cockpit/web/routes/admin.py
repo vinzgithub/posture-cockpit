@@ -55,7 +55,15 @@ async def confirm(request: Request, user: Row = Depends(require_admin_unconfirme
 def admin_page(request: Request, me: Row, status: int = 200, **context):
     s = services(request)
     disabled = s.settings.disabled_extensions()
-    extensions = [{"ext": e, "enabled": e.id not in disabled} for e in s.registry.extensions]
+    lang = lang_of(request)
+
+    def label(extension, part: str, default: str) -> str:
+        # An extension may translate its name and description; otherwise its own wording is shown.
+        key = f"{extension.id}.extension.{part}"
+        return s.catalog.text(lang, key) if s.catalog.has(lang, key) else default
+
+    extensions = [{"ext": e, "enabled": e.id not in disabled, "name": label(e, "name", e.name),
+                   "description": label(e, "description", e.description)} for e in s.registry.extensions]
     return render(request, "admin.html", status=status, me=me, users=s.accounts.all(), extensions=extensions,
                   load_errors=s.registry.errors, report_author=s.settings.report_author(),
                   min_length=MIN_PASSWORD_LENGTH, **context)

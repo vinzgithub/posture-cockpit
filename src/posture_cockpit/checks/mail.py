@@ -10,6 +10,7 @@ pour la mise en place d'une passerelle d'interconnexion sécurisée ».
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import binascii
 import re
@@ -34,7 +35,7 @@ from ..core import (
 )
 from . import LOCALES
 
-extension = Extension("mail", name="Messagerie", version=__version__,
+extension = Extension("mail", name="Mail", version=__version__,
                       description="SPF, DKIM, DMARC, MTA-STS and TLS reporting.",
                       messages=load_messages(LOCALES, "mail"))
 
@@ -164,9 +165,10 @@ async def dmarc(ctx: CheckContext) -> Outcome:
 @extension.check("dkim", category="mail", weight=4)
 async def dkim(ctx: CheckContext) -> Outcome:
     """DKIM signs outgoing mail. Its keys are only found by guessing their name (the selector)."""
+    answers = await asyncio.gather(*(ctx.txt(f"{s}._domainkey.{ctx.domain}") for s in DKIM_SELECTORS))
     found: dict[str, int] = {}
-    for selector in DKIM_SELECTORS:
-        for record in await ctx.txt(f"{selector}._domainkey.{ctx.domain}"):
+    for selector, records in zip(DKIM_SELECTORS, answers, strict=True):
+        for record in records:
             key = _tags(record).get("p", "")
             if key:
                 found[selector] = _rsa_bits(key)

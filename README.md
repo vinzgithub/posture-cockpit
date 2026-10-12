@@ -1,0 +1,215 @@
+<div align="center">
+
+# 🛡️ Posture Cockpit
+
+### Is your domain well protected? And what should you fix first?
+
+**Mail · Certificates · Website · DNS · Guided plan of fixes · PDF report · Two-factor authentication · Extensions**
+
+🇫🇷 [Lire en français](README.fr.md)
+
+<br>
+
+<img src="docs/images/en/hero.png" alt="Posture Cockpit on a computer and on a phone" width="100%">
+
+<sub>The screenshots show a fictitious demo domain (<code>menuiserie-dupont.example</code>). Addresses come from the ranges reserved for documentation.</sub>
+
+<br><br>
+
+**Self-hosted · Passive checks · Bilingual (FR / EN) · ANSSI and RFC references · Open source for non-commercial use**
+
+</div>
+
+---
+
+## 🚀 At a glance
+
+<table>
+<tr>
+<td width="33%" valign="top"><b>🧭 A plan, not a list of alerts</b><br>Fixes are sorted by their effect on the score, with the time they take and who should make them.</td>
+<td width="33%" valign="top"><b>🪜 Step by step, at your DNS host</b><br>OVHcloud, Gandi, IONOS, Cloudflare: the DNS host is detected and the steps follow its menus. The record is ready to copy.</td>
+<td width="33%" valign="top"><b>✅ "Check" in one click</b><br>Once a fix is made, the check runs again at once and the score updates.</td>
+</tr>
+<tr>
+<td valign="top"><b>✉️ The message to your provider, already written</b><br>What you do not fix yourself goes out as a ready-to-send message to the web agency or the IT person.</td>
+<td valign="top"><b>📄 A PDF report like an expert's file</b><br>The diagnosis in plain words, the prescription, area by area, and a technical annex with references.</td>
+<td valign="top"><b>🧩 Extensible</b><br>Each family of checks is an extension. A Python package is enough to add one.</td>
+</tr>
+</table>
+
+---
+
+## ✨ Who is it for?
+
+For the small business, association, craftsman or town hall that has a domain name, a mailbox and a website, but no security team. And for whoever helps them: the family's IT person, the provider, the consultant.
+
+Online tools that "grade" a domain give a list of defects in technical English, and stop there. Posture Cockpit goes all the way: it says **what to do, in which order, where to click**, checks that it is done, and produces a report to hand over.
+
+---
+
+## 🧭 The guided plan
+
+<table>
+<tr>
+<td width="55%" valign="top">
+
+<img src="docs/images/en/plan-dns.png" alt="A DNS fix, step by step">
+
+</td>
+<td width="45%" valign="top">
+
+### Every fix, explained
+
+- **Why it matters**, in one sentence without jargon;
+- **what was found**;
+- **the steps at your DNS host**, detected from the name servers (you can pick another one);
+- **the record to add**, with a "Copy" button for the name and for the value;
+- a **precaution** when there is one (for instance: DMARC starts in monitoring mode, blocking nothing);
+- the **"I made the change — check"** button.
+
+Fixes to delegate (certificate, website headers, TLS versions) come with a **ready-to-send message**, to copy or to open in your mail app.
+
+</td>
+</tr>
+</table>
+
+---
+
+## 📄 The PDF report
+
+<table>
+<tr>
+<td width="50%"><img src="docs/images/en/report-1.png" alt="PDF report, page 1"></td>
+<td width="50%"><img src="docs/images/en/report-2.png" alt="PDF report, page 2"></td>
+</tr>
+</table>
+
+Page 1 is for the decision-maker: the grade, the diagnosis in plain words and **the prescription** (who does what, how long it takes, before which date). Page 2: area by area, and the improvements that are not urgent. In the annex, for the technician: every check, what was found and its **references (ANSSI, RFC)**. The name printed at the bottom of the file is set in the administration.
+
+---
+
+## 🔎 What is checked
+
+| Area | Checks |
+|---|---|
+| **Mail** | SPF (with the count of DNS lookups, limit 10), DMARC (policy, percentage), DKIM (usual selectors, key length), MTA-STS, TLS reports (TLS-RPT), MX servers |
+| **Certificates and TLS** | Certificate validity and expiry (domain and www), accepted TLS versions (1.0 and 1.1 obsolete, 1.3 recommended), key length |
+| **Website** | Redirect to HTTPS, HSTS, Content-Security-Policy, framing protection, nosniff, Referrer-Policy, software versions shown, security.txt |
+| **DNS** | Number of name servers, DNSSEC signature, CAA records (with the value matching the authority of the current certificate) |
+
+The score goes from 0 to 100. Each check has a weight according to its importance; a point to improve counts half, a critical point zero. **A check that could not run does not count**: a network failure never lowers the score.
+
+<img src="docs/images/en/details.png" alt="Technical details of the checks">
+
+---
+
+## 🕊️ A passive scan
+
+Posture Cockpit only does what any visitor does: public DNS queries, a TLS handshake, reading the home page (and a few public files such as `security.txt`). **No port scan, no intrusion test, nothing is changed.** Its HTTP requests carry a User-Agent that points to this repository.
+
+If the DNS resolver in use does not answer properly (some filtering resolvers return empty answers), the scan is refused rather than reporting "missing" records by mistake.
+
+---
+
+## 🔐 Application security
+
+- **Two-factor authentication**: a TOTP code (RFC 6238) after the password, single-use recovery codes, other browsers signed out on every change;
+- **several accounts**: the administrator creates accounts, each person chooses their password at first sign-in; administration pages ask for the password again every 10 minutes;
+- **scrypt** password hashes, API keys and recovery codes stored hashed, a **CSRF token** on every form, limited attempts;
+- **strict Content Security Policy**: no inline script or style, nothing loaded from elsewhere (fonts included);
+- unprivileged Docker image, read-only file system.
+
+See [SECURITY.md](SECURITY.md).
+
+---
+
+## 🐳 Installation
+
+```yaml
+# compose.yaml
+services:
+  posture-cockpit:
+    image: ghcr.io/vinzgithub/posture-cockpit:latest
+    container_name: posture-cockpit
+    restart: unless-stopped
+    ports: ["8080:8080"]
+    volumes: ["posture-cockpit-data:/data"]
+volumes:
+  posture-cockpit-data:
+```
+
+```bash
+docker compose up -d
+```
+
+Open `http://<server>:8080`, create the administrator account, and tick **"Check the demo domain"** to discover the tool. Every setting, backups and updates: [docs/user/INSTALLATION.md](docs/user/INSTALLATION.md).
+
+### From the command line
+
+```bash
+posture-cockpit scan my-domain.com          # the result in the terminal (nothing is saved)
+posture-cockpit scan my-domain.com --json
+posture-cockpit extensions                  # the extensions loaded and their checks
+posture-cockpit disable-totp <username>     # lost phone and no recovery code left
+```
+
+---
+
+## 🏠 Home Assistant and monitoring
+
+An API key (Settings → API keys) gives access to:
+
+- `GET /api/v1/domains`: score, grade, number of critical points and days left before the certificate expires, for every domain;
+- `POST /api/v1/domains/<domain>/scan`: runs the scan again, for instance every month from an automation.
+
+Sensor and automation examples: [docs/user/HOME_ASSISTANT.md](docs/user/HOME_ASSISTANT.md).
+
+---
+
+## 🧩 Extensions
+
+The built-in checks (mail, TLS, website, DNS) are themselves extensions, written exactly like the ones you can add:
+
+```python
+extension = Extension("example", name="Example", version="1.0.0", messages=...)
+
+@extension.check("permissions_policy", category="web", weight=1)
+async def permissions_policy(ctx: CheckContext) -> Outcome:
+    page = await ctx.net.http_get(f"https://{ctx.domain}/")
+    if page.header("permissions-policy"):
+        return ok("example.permissions_policy.ok")
+    return warn("example.permissions_policy.missing", Remedy(10, Effort.DELEGATE, message="..."))
+```
+
+A Python package that declares a `posture_cockpit.extensions` entry point is loaded at start-up; the administrator can turn it on or off. A complete, tested example is in [examples/posture-cockpit-example](examples/posture-cockpit-example). The guide: [docs/developer/EXTENSIONS.md](docs/developer/EXTENSIONS.md).
+
+---
+
+## 🏗️ For developers
+
+The code is split into layers that only know each other in one direction: the **engine** (`core`) knows nothing about the web, **checks** only reach the network through four passive questions, **storage** has one SQLite connection and one repository per subject, and each area of the **interface** has its own module of routes. Everything is typed, checked by `ruff` and `mypy`, and covered by more than 130 tests that run without network.
+
+The detailed map: [docs/developer/ARCHITECTURE.md](docs/developer/ARCHITECTURE.md).
+
+```bash
+pip install -e ".[dev]"
+ruff check src tests examples && mypy && pytest
+```
+
+---
+
+## ⚠️ Known limits
+
+- **DKIM**: selectors cannot be listed. Posture Cockpit tries the most common names; finding none is information, not a fault.
+- **DNS host steps**: hosts change their menus. If a step no longer matches, please report it: these are plain texts in `locales/`.
+- **Scheduled scans**: not built into the application yet; use the API from Home Assistant or cron.
+
+---
+
+## 📜 License
+
+Posture Cockpit is released under the **[PolyForm Noncommercial License 1.0.0](LICENSE)**: free for personal, non-profit, educational or research use. Any commercial use (selling, paid hosting, audits or services billed using the tool…) needs a separate written license: see [COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md).
+
+Copyright © 2026 Vincent Fournet.
+
+This project is developed with the assistance of Claude (Anthropic).

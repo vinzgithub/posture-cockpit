@@ -1,4 +1,7 @@
 {
+  "dns.extension.name": "DNS",
+  "dns.extension.description": "Name servers, DNSSEC and CAA records of the domain.",
+
   "dns.nameservers.title": "Name servers",
   "dns.nameservers.action": "Add a second name server",
   "dns.nameservers.why": "Name servers answer for the domain to the whole Internet. With only one, if it fails, the website and the mail disappear at the same time.",

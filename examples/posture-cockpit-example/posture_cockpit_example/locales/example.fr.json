@@ -1,0 +1,12 @@
+{
+  "example.extension.name": "Exemple : Permissions-Policy",
+  "example.extension.description": "Extension d'exemple : l'en-tête Permissions-Policy.",
+  "example.permissions_policy.title": "Fonctions du navigateur restreintes (Permissions-Policy)",
+  "example.permissions_policy.action": "Restreindre les fonctions du navigateur",
+  "example.permissions_policy.why": "Cet en-tête dit au navigateur que le site n'utilise ni caméra, ni micro, ni localisation : un script piégé ne peut alors pas les demander.",
+  "example.permissions_policy.ref": "W3C, Permissions Policy",
+  "example.permissions_policy.ok": "Le site restreint les fonctions du navigateur.",
+  "example.permissions_policy.missing": "{host} n'envoie pas d'en-tête Permissions-Policy.",
+  "example.permissions_policy.no_website": "Pas de site web : ce contrôle ne s'applique pas.",
+  "example.permissions_policy.message": "Bonjour,\n\nPourriez-vous ajouter sur {host} l'en-tête suivant ?\n\nPermissions-Policy: camera=(), microphone=(), geolocation=()\n\nMerci d'avance."
+}

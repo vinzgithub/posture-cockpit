@@ -82,6 +82,19 @@ async def scan(domain: str, checks: Iterable[Check], net: Network, timeout: floa
     return ScanResult(domain, started, int((time.monotonic() - clock) * 1000), list(findings))
 
 
-async def domain_exists(net: Network, domain: str) -> bool:
-    """False when the DNS says the name does not exist, so no scan is stored for a typo."""
-    return (await net.dns(domain, "SOA")).exists
+async def preflight(net: Network, domain: str) -> str | None:
+    """Why ``domain`` cannot be scanned, or None when it can.
+
+    ``"unknown"``: the DNS says the name does not exist (a typo).
+    ``"empty"``: the name exists but has no record at all, or the resolver gives
+    empty answers (a filtering resolver does that). Scanning anyway would report
+    missing SPF and DMARC records that may well exist: better to say so."""
+    soa = await net.dns(domain, "SOA")
+    if not soa.exists:
+        return "unknown"
+    if soa.records:
+        return None
+    for rtype in ("NS", "A", "AAAA", "MX"):  # a subdomain has no SOA of its own
+        if (await net.dns(domain, rtype)).records:
+            return None
+    return "empty"

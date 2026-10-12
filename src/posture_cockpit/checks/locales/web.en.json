@@ -1,4 +1,7 @@
 {
+  "web.extension.name": "Website",
+  "web.extension.description": "HTTPS redirection, HSTS, CSP and the other protection headers, security.txt.",
+
   "web.no_website": "No website on the domain or on www: this check does not apply.",
 
   "web.https_redirect.title": "Automatic switch to HTTPS",

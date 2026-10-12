@@ -84,10 +84,14 @@ def test_shared_values_are_computed_once():
     assert asyncio.run(main()) == [42] * 5 and calls == [1]
 
 
-def test_domain_exists():
-    net = FixtureNetwork({"dns": {"nope.example SOA": None}})
-    assert asyncio.run(engine.domain_exists(net, "nope.example")) is False
-    assert asyncio.run(engine.domain_exists(net, "example.org")) is True
+def test_preflight():
+    net = FixtureNetwork({"dns": {"nope.example SOA": None, "example.org SOA": ["ns1.example.net. h. 1 2 3 4 5"],
+                                  "mail.example.org A": ["192.0.2.1"]}})
+    assert asyncio.run(engine.preflight(net, "nope.example")) == "unknown"
+    assert asyncio.run(engine.preflight(net, "example.org")) is None
+    assert asyncio.run(engine.preflight(net, "mail.example.org")) is None  # a subdomain has no SOA of its own
+    # A resolver that answers everything with nothing: refuse rather than report false failures.
+    assert asyncio.run(engine.preflight(net, "sinkholed.example.org")) == "empty"
 
 
 # --------------------------------------------------------------- extensions
@@ -172,3 +176,30 @@ def test_findings_round_trip_through_json():
     assert copy == original
     stored = Finding("x", "dns", 1, warn("w")).outcome_json()
     assert Finding.from_stored("x", "dns", 1, "warn", stored).outcome.remedy is None
+
+
+def test_a_check_that_times_out_does_not_cancel_shared_work_for_the_others():
+    ext = Extension("share", name="Share", version="1")
+
+    async def slow_answer():
+        await asyncio.sleep(0.3)
+        return 7
+
+    @ext.check("impatient", category="dns", weight=1)
+    async def impatient(ctx):
+        return ok("x", value=await ctx.shared("answer", slow_answer))
+
+    @ext.check("patient", category="dns", weight=1)
+    async def patient(ctx):
+        await asyncio.sleep(0.05)  # starts waiting after "impatient" started the work
+        return ok("x", value=await ctx.shared("answer", slow_answer))
+
+    async def main():
+        ctx = CheckContext("example.org", FixtureNetwork({}), NOW)
+        first, second = ext.checks
+        # "impatient" gives up after 0.1 s, while the shared work is still running
+        return await asyncio.gather(engine.run_check(first, ctx, 0.1), engine.run_check(second, ctx, 2))
+
+    impatient_result, patient_result = asyncio.run(main())
+    assert impatient_result.status is Status.ERROR
+    assert patient_result.outcome.params == {"value": 7}

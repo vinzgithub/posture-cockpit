@@ -1,0 +1,23 @@
+# Copyright © 2026 Vincent Fournet
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# A complete example of a Posture Cockpit extension, to copy and adapt.
+# Install it next to Posture Cockpit (pip install ./examples/posture-cockpit-example)
+# and restart: its check appears on the administration page.
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "posture-cockpit-example"
+version = "1.0.0"
+description = "Example extension for Posture Cockpit: the Permissions-Policy header."
+requires-python = ">=3.11"
+dependencies = ["posture-cockpit>=0.1"]
+
+# This is what makes Posture Cockpit find the extension.
+[project.entry-points."posture_cockpit.extensions"]
+example = "posture_cockpit_example:extension"
+
+[tool.setuptools.package-data]
+posture_cockpit_example = ["locales/*.json"]

@@ -1,0 +1,12 @@
+{
+  "example.extension.name": "Example: Permissions-Policy",
+  "example.extension.description": "Example extension: the Permissions-Policy header.",
+  "example.permissions_policy.title": "Browser features restricted (Permissions-Policy)",
+  "example.permissions_policy.action": "Restrict browser features",
+  "example.permissions_policy.why": "This header tells the browser that the website uses no camera, microphone or location: a rigged script then cannot ask for them.",
+  "example.permissions_policy.ref": "W3C, Permissions Policy",
+  "example.permissions_policy.ok": "The website restricts browser features.",
+  "example.permissions_policy.missing": "{host} sends no Permissions-Policy header.",
+  "example.permissions_policy.no_website": "No website: this check does not apply.",
+  "example.permissions_policy.message": "Hello,\n\nCould you add the following header on {host}?\n\nPermissions-Policy: camera=(), microphone=(), geolocation=()\n\nThank you."
+}

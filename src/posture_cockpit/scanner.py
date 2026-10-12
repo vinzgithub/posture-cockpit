@@ -54,8 +54,9 @@ class Scanner:
             return FixtureNetwork(data)
         return LiveNetwork(self.config.nameservers)
 
-    async def exists(self, domain: str) -> bool:
-        return await engine.domain_exists(self.network_for(domain), domain)
+    async def preflight(self, domain: str) -> str | None:
+        """Why the domain cannot be scanned ("unknown", "empty"), or None (see engine.preflight)."""
+        return await engine.preflight(self.network_for(domain), domain)
 
     async def scan(self, domain: str) -> engine.ScanResult:
         checks = self.registry.checks(disabled=self.disabled())

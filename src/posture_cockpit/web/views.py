@@ -1,10 +1,10 @@
 # Copyright © 2026 Vincent Fournet
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
-"""What the plan page and the report show, computed from a scan.
+"""What the plan page shows, computed from a scan.
 
 These functions turn findings into ready-to-display texts and numbers, so the
-templates stay simple (no logic beyond loops and conditions) and this logic
-can be tested without a browser (tests/test_views.py).
+template (plan.html) stays simple, with no logic beyond loops and conditions.
+The page is tested in tests/test_domains.py.
 """
 
 from __future__ import annotations
@@ -111,7 +111,10 @@ def _nameservers(findings: list[Finding]) -> list[str]:
 def dns_host_steps(catalog: Catalog, lang: str, host_id: str, change: DnsChange, domain: str) -> list[Step]:
     """Instructions to add or delete ``change`` at this DNS host."""
     params = {"domain": domain, "rtype": change.rtype, "name": change.name}
-    text = lambda key: catalog.text(lang, f"dnshost.{host_id}.{key}", params)  # noqa: E731
+
+    def text(part: str) -> str:
+        return catalog.text(lang, f"dnshost.{host_id}.{part}", params)
+
     steps = [Step(text("open"), text("path"))]
     if change.action == "add":
         steps.append(Step(text("add")))
@@ -129,7 +132,11 @@ def task_view(catalog: Catalog, lang: str, scan: Scan, finding: Finding, number:
     remedy = finding.outcome.remedy
     assert remedy is not None
     params = {"domain": scan.domain, **finding.outcome.params}
-    text = lambda key: catalog.text(lang, key, params)  # noqa: E731
+
+    def text(key: str) -> str:
+        return catalog.text(lang, key, params)
+
+    # After "Vérifier", the latest result describes the domain as it is now.
     recheck = scan.rechecks.get(finding.check_id)
     current = recheck.finding if recheck else finding
     summary_key = current.outcome.summary

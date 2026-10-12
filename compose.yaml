@@ -1,0 +1,27 @@
+# Copyright © 2026 Vincent Fournet
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+services:
+  posture-cockpit:
+    image: ghcr.io/vinzgithub/posture-cockpit:latest
+    container_name: posture-cockpit
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - posture-cockpit-data:/data
+    environment:
+      TZ: Europe/Paris
+      # POSTURE_COCKPIT_COOKIE_SECURE: "true"           # when served over HTTPS (reverse proxy)
+      # POSTURE_COCKPIT_NAMESERVERS: "9.9.9.9,1.1.1.1"  # DNS resolvers to use instead of the system's
+      # POSTURE_COCKPIT_FRAME_ANCESTORS: "https://ha.example.org"  # to show it inside Home Assistant
+      # FORWARDED_ALLOW_IPS: "10.0.0.2"                 # IP of your reverse proxy, if any
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+volumes:
+  posture-cockpit-data:

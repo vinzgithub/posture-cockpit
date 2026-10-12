@@ -1,4 +1,7 @@
 {
+  "tls.extension.name": "Certificates and TLS",
+  "tls.extension.description": "Certificate validity and expiry, TLS versions, key strength.",
+
   "tls.no_website": "No website on the domain or on www: this check does not apply.",
 
   "tls.certificate.title": "Website certificate",

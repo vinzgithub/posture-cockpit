@@ -58,7 +58,7 @@ def source_files():
     for name in ("Dockerfile", "compose.yaml"):
         if (ROOT / name).exists():
             yield ROOT / name
-    for folder in ("src/posture_cockpit", "tests", ".github"):
+    for folder in ("src/posture_cockpit", "tests", "examples", ".github"):
         for path in (ROOT / folder).rglob("*"):
             if path.suffix in {".py", ".js", ".css", ".html", ".yml", ".yaml"} and "__pycache__" not in path.parts:
                 yield path
