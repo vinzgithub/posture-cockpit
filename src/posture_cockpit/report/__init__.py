@@ -1,0 +1,139 @@
+# Copyright © 2026 Vincent Fournet
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+"""The PDF report, laid out like an expert's file ("dossier").
+
+Page 1 is for the decision-maker: grade, diagnosis in plain words and the
+"prescription" (the priority fixes, who does them, how long they take).
+Page 2 sums up each area and lists the improvements. The annex is for the
+technician: every check, what was found and the references.
+
+The HTML is rendered with Jinja (report.html, report.css) and turned into PDF
+by WeasyPrint. WeasyPrint needs the Pango library; when it is missing the rest
+of the application keeps working and only this report is unavailable.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+from jinja2 import Environment, FileSystemLoader, select_autoescape
+
+from ..core import scoring
+from ..core.model import Effort, Finding, Status
+from ..i18n import Catalog, fmt_date
+from ..storage import Scan
+
+REPORT_DIR = Path(__file__).parent
+_env = Environment(loader=FileSystemLoader(REPORT_DIR), autoescape=select_autoescape(["html"]))
+
+
+class ReportUnavailable(Exception):
+    """WeasyPrint or one of its system libraries is missing."""
+
+
+@dataclass(frozen=True)
+class Prescription:
+    number: int
+    title: str
+    summary: str
+    who: str
+    minutes: int
+    gain: int
+    deadline: str   # "Avant le 21 octobre 2026", or ""
+
+
+def _who(catalog: Catalog, lang: str, finding: Finding) -> str:
+    remedy = finding.outcome.remedy
+    if remedy is None or remedy.effort is Effort.DELEGATE:
+        return catalog.text(lang, "report.who.provider")
+    return catalog.text(lang, "report.who.you_dns" if remedy.dns else "report.who.you")
+
+
+def _text(catalog: Catalog, lang: str, key: str, finding: Finding, domain: str) -> str:
+    return catalog.text(lang, key, {"domain": domain, **finding.outcome.params})
+
+
+def report_context(catalog: Catalog, lang: str, scan: Scan, author: str = "") -> dict[str, Any]:
+    """Everything the report template shows, already worded."""
+    findings = scan.current()
+    plan = scoring.plan(findings)
+    value = scoring.score(findings)
+    counts = scoring.counts(findings)
+
+    def t(key: str, /, **params: Any) -> str:
+        return catalog.text(lang, key, params)
+
+    prescriptions = []
+    for i, item in enumerate(plan.priorities, start=1):
+        f = item.finding
+        expires = f.outcome.params.get("expires_on")
+        prescriptions.append(Prescription(
+            number=i,
+            title=catalog.first(lang, [f"{f.outcome.summary}.action", f"{f.check_id}.action"],
+                                {"domain": scan.domain, **f.outcome.params}),
+            summary=_text(catalog, lang, f.outcome.summary, f, scan.domain),
+            who=_who(catalog, lang, f), minutes=f.outcome.remedy.minutes if f.outcome.remedy else 0,
+            gain=item.gain, deadline=t("report.deadline", date=fmt_date(str(expires), lang)) if expires else "",
+        ))
+    improvements = [
+        {"title": catalog.first(lang, [f"{i.finding.outcome.summary}.action", f"{i.finding.check_id}.action"],
+                                {"domain": scan.domain, **i.finding.outcome.params}),
+         "summary": _text(catalog, lang, i.finding.outcome.summary, i.finding, scan.domain), "gain": i.gain}
+        for i in plan.improvements
+    ]
+
+    # The diagnosis: the numbers, then the critical findings in plain words.
+    minutes = sum(p.minutes for p in prescriptions)
+    if prescriptions:
+        diagnosis = t("report.diagnosis.issues", total=len(findings), ok=counts.get(Status.OK, 0),
+                      fail=counts.get(Status.FAIL, 0), warn=counts.get(Status.WARN, 0))
+        conclusion = t("report.diagnosis.plan", n=len(prescriptions), minutes=minutes,
+                       grade=scoring.grade(plan.target))
+    else:
+        diagnosis = t("report.diagnosis.clean", total=len(findings), ok=counts.get(Status.OK, 0),
+                      warn=counts.get(Status.WARN, 0))
+        conclusion = ""
+
+    categories = []
+    for category, cat_score in scoring.by_category(findings).items():
+        items = [f for f in findings if f.category == category and f.status.scored]
+        worst = next((f for status in (Status.FAIL, Status.WARN) for f in items if f.status is status), None)
+        categories.append({
+            "label": t(f"category.{category}"), "score": cat_score,
+            "comment": _text(catalog, lang, worst.outcome.summary, worst, scan.domain) if worst else t("report.all_ok"),
+        })
+
+    annex = []
+    for f in findings:
+        annex.append({
+            "id": f.check_id, "status": f.status.value, "status_label": t(f"status.{f.status.value}"),
+            "title": t(f"{f.check_id}.title"),
+            "summary": _text(catalog, lang, f.outcome.summary, f, scan.domain),
+            "ref": catalog.text(lang, f"{f.check_id}.ref") if catalog.has(lang, f"{f.check_id}.ref") else "",
+        })
+
+    return {
+        "lang": lang, "t": t, "domain": scan.domain, "scan": scan, "author": author,
+        "file_number": f"{scan.started_at[:10].replace('-', '')}-{scan.id:04d}",
+        "date": fmt_date(scan.started_at[:10], lang), "score": value, "grade": scoring.grade(value),
+        "grade_label": t(scoring.grade_label(value)), "target": plan.target, "target_grade": scoring.grade(plan.target),
+        "diagnosis": diagnosis, "conclusion": conclusion, "prescriptions": prescriptions,
+        "improvements": improvements, "categories": categories, "annex": annex,
+        "checks_count": len(findings),
+    }
+
+
+def render_html(catalog: Catalog, lang: str, scan: Scan, author: str = "") -> str:
+    return _env.get_template("report.html").render(**report_context(catalog, lang, scan, author))
+
+
+def build_pdf(catalog: Catalog, lang: str, scan: Scan, author: str = "") -> bytes:
+    """The report as PDF bytes. Raises ReportUnavailable when WeasyPrint cannot run here."""
+    try:
+        from weasyprint import HTML  # imported here: it loads system libraries
+    except (ImportError, OSError) as e:
+        raise ReportUnavailable(str(e)) from e
+    html = render_html(catalog, lang, scan, author)
+    return HTML(string=html, base_url=str(REPORT_DIR)).write_pdf()

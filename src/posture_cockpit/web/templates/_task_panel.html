@@ -1,0 +1,121 @@
+{# Copyright © 2026 Vincent Fournet · SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 -#}
+{# The detail of one task: why, how (DNS records with steps for the DNS host, or a message
+   to send), and the "verify" button. Expects `task`, `selected`, `plan`, `csrf`. #}
+{% from "_macros.html" import check_icon %}
+{% set is_priority = task in plan.priorities %}
+<article class="panel task-panel" data-panel="{{ task.check_id }}" aria-labelledby="title-{{ task.check_id }}"
+         {% if not selected or selected.check_id != task.check_id %}hidden{% endif %}>
+  <header class="panel-head">
+    <p class="eyebrow">
+      {% if is_priority %}{{ t('plan.fix_n_of', n=task.number, total=plan.priorities | length) }}{% else %}{{ t('plan.improvement') }}{% endif %}
+      · {{ task.category }}
+    </p>
+    <h2 id="title-{{ task.check_id }}">{{ task.title }}</h2>
+    <p class="chips">
+      <span class="chip">{{ t('plan.minutes', n=task.minutes) }}</span>
+      <span class="chip chip-{{ task.effort }}">{{ task.effort_label }}</span>
+      {% if task.gain > 0 %}<span class="chip chip-gain">{{ t('plan.gain', n=task.gain) }}</span>{% endif %}
+    </p>
+  </header>
+
+  <div class="why">
+    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9.5"/><line x1="12" y1="11" x2="12" y2="16.5"/><line x1="12" y1="7.6" x2="12" y2="7.7"/></svg>
+    <p><strong>{{ t('plan.why') }}</strong> {{ task.why }}</p>
+  </div>
+
+  {% if task.done %}
+  <div class="success" role="status">
+    <span class="success-mark">{{ check_icon() }}</span>
+    <div>
+      <p class="eyebrow-ok">{{ t('plan.verified_at', date=date(task.checked_at), time=task.checked_at[11:16]) }}</p>
+      <p class="success-text">{{ task.summary }}</p>
+    </div>
+    {% if task.gain > 0 %}<strong class="success-gain">+{{ task.gain }}</strong>{% endif %}
+  </div>
+  {% set next = plan.priorities | rejectattr('done') | first %}
+  {% if next %}
+  <a class="btn btn-dark" href="?task={{ next.check_id }}#task" data-task="{{ next.check_id }}">{{ t('plan.next', title=next.title) }}</a>
+  {% elif is_priority %}
+  <p>{{ t('plan.all_done') }}</p>
+  {% endif %}
+
+  {% else %}
+  <p class="found"><strong>{{ t('plan.found') }}</strong> {{ task.summary }}</p>
+
+  {% if task.records %}
+  <div class="dns-host">
+    <div class="dns-host-head">
+      <span class="label" id="host-label-{{ task.check_id }}">{{ t('plan.dns_host_question') }}</span>
+      {% if plan.detected_host %}<span class="muted small">{{ t('plan.dns_host_detected', host=plan.detected_host) }}</span>{% endif %}
+    </div>
+    <form method="post" action="/domains/{{ plan.domain }}/dns-host" class="segmented" role="group"
+          aria-labelledby="host-label-{{ task.check_id }}" data-dns-host>
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <input type="hidden" name="task" value="{{ task.check_id }}">
+      {% for host in plan.dns_hosts %}
+      <button type="submit" name="dns_host" value="{{ host.id }}" aria-pressed="{{ 'true' if host.selected else 'false' }}">
+        {{ host.name }}{% if host.detected %}<span class="dot" title="{{ t('plan.detected') }}"></span>{% endif %}
+      </button>
+      {% endfor %}
+    </form>
+  </div>
+
+  {% for host in plan.dns_hosts %}
+  <ol class="steps" data-host="{{ host.id }}" {% if not host.selected %}hidden{% endif %}>
+    {% for step in task.steps[host.id] %}
+    <li><span>{{ step.text }}</span>{% if step.path %}<span class="path">{{ step.path }}</span>{% endif %}</li>
+    {% endfor %}
+    <li><span>{{ t('plan.step_verify') }}</span></li>
+  </ol>
+  {% endfor %}
+
+  {% for record in task.records %}
+  <div class="record">
+    <p class="record-title">{{ t('plan.record_' ~ record.change.action) }}</p>
+    <dl>
+      <div><dt>{{ t('plan.record_type') }}</dt><dd><code>{{ record.change.rtype }}</code></dd></div>
+      <div>
+        <dt>{{ t('plan.record_name') }}</dt>
+        <dd><code>{{ record.change.name }}</code> <span class="muted small">({{ record.fqdn }})</span></dd>
+        {% if record.change.action == 'add' %}<button type="button" class="btn-copy" data-copy="{{ record.change.name }}">{{ t('plan.copy') }}</button>{% endif %}
+      </div>
+      <div>
+        <dt>{{ t('plan.record_value') }}</dt>
+        <dd><code>{{ record.change.value }}</code></dd>
+        {% if record.change.action == 'add' %}<button type="button" class="btn-copy" data-copy="{{ record.change.value }}">{{ t('plan.copy') }}</button>{% endif %}
+      </div>
+    </dl>
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  {% if task.message %}
+  <div class="message">
+    <div class="message-head">
+      <span class="label">{{ t('plan.message_title') }}</span>
+      <button type="button" class="btn-copy btn-copy-strong" data-copy-from="msg-{{ task.check_id }}">{{ t('plan.copy_message') }}</button>
+      <a class="btn-copy" href="{{ task.mailto }}">{{ t('plan.open_mail') }}</a>
+    </div>
+    <pre class="message-body" id="msg-{{ task.check_id }}">{{ task.message }}</pre>
+  </div>
+  {% endif %}
+
+  {% if task.how %}
+  <div class="note">
+    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 6v5c0 5 3.4 8.6 8 10 4.6-1.4 8-5 8-10V6z"/><polyline points="8.5 12 11 14.5 15.5 10"/></svg>
+    <p>{{ task.how }}</p>
+  </div>
+  {% endif %}
+
+  {% if task.still_failing %}
+  <p class="flash flash-warn">{{ t('plan.still_failing', date=date(task.checked_at), time=task.checked_at[11:16]) }}</p>
+  {% endif %}
+
+  <form method="post" action="/domains/{{ plan.domain }}/verify/{{ task.check_id }}" class="verify" data-busy>
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <button type="submit" class="btn btn-primary btn-big" data-busy-label="{{ t('plan.verifying') }}">
+      {{ t('plan.verify_dns') if task.records else (t('plan.verify_delegate') if task.message else t('plan.verify')) }}
+    </button>
+  </form>
+  {% endif %}
+</article>

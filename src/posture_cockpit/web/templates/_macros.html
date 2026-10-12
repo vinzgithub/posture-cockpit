@@ -1,0 +1,41 @@
+{# Copyright © 2026 Vincent Fournet · SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 -#}
+{# Small pieces used by several pages. #}
+
+{% macro grade_pill(grade, size='') -%}
+<span class="grade grade-{{ grade }} {{ size }}">{{ grade }}</span>
+{%- endmacro %}
+
+{# Horizontal score bar: the score in solid blue, what the plan would add hatched.
+   Drawn in SVG because the security policy forbids inline styles. #}
+{% macro scorebar(score, target, label) -%}
+<svg class="scorebar" viewBox="0 0 100 10" preserveAspectRatio="none" role="img" aria-label="{{ label }}">
+  <defs>
+    <pattern id="hatch" width="3" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(35)">
+      <rect width="3" height="10" class="hatch-bg"/><rect width="1.4" height="10" class="hatch-line"/>
+    </pattern>
+  </defs>
+  <rect class="track" width="100" height="10" rx="5"/>
+  {% if target > score %}<rect class="ghost" x="{{ score }}" width="{{ target - score }}" height="10" fill="url(#hatch)"/>{% endif %}
+  <rect class="fill" width="{{ score }}" height="10" rx="5"/>
+</svg>
+<div class="scorebar-letters" aria-hidden="true">
+  <span class="l-F">F</span><span class="l-E">E</span><span class="l-D">D</span><span class="l-C">C</span><span class="l-B">B</span><span class="l-A">A</span>
+</div>
+{%- endmacro %}
+
+{% macro status_icon(status) -%}
+{% if status == 'ok' %}<svg class="icon icon-ok" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9.5"/><polyline points="7.5 12.5 10.5 15.5 16.5 9"/></svg>
+{% elif status == 'fail' %}<svg class="icon icon-fail" viewBox="0 0 24 24" aria-hidden="true"><polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86"/><line x1="12" y1="7.5" x2="12" y2="13"/><line x1="12" y1="16.5" x2="12" y2="16.6"/></svg>
+{% elif status == 'warn' %}<svg class="icon icon-warn" viewBox="0 0 24 24" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9.5" x2="12" y2="13.5"/><line x1="12" y1="17" x2="12" y2="17.1"/></svg>
+{% elif status == 'error' %}<svg class="icon icon-error" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9.5"/><path d="M9.5 9.5a2.6 2.6 0 1 1 3.4 2.5c-.6.3-.9.8-.9 1.4V14"/><line x1="12" y1="17" x2="12" y2="17.1"/></svg>
+{% else %}<svg class="icon icon-info" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9.5"/><line x1="12" y1="11" x2="12" y2="16.5"/><line x1="12" y1="7.6" x2="12" y2="7.7"/></svg>
+{% endif %}
+{%- endmacro %}
+
+{% macro check_icon() -%}
+<svg class="icon-check" viewBox="0 0 24 24" aria-hidden="true"><polyline points="5 12.5 10 17.5 19 7"/></svg>
+{%- endmacro %}
+
+{% macro hidden_csrf() -%}
+<input type="hidden" name="csrf" value="{{ csrf }}">
+{%- endmacro %}

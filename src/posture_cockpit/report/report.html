@@ -1,0 +1,105 @@
+{# Copyright © 2026 Vincent Fournet · SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 -#}
+{# The PDF report, rendered by WeasyPrint. Fonts and styles are in this folder (report.css). #}
+<!doctype html>
+<html lang="{{ lang }}">
+<head>
+  <meta charset="utf-8">
+  <title>{{ t('report.title', domain=domain) }}</title>
+  <meta name="author" content="{{ author or 'Posture Cockpit' }}">
+  <meta name="generator" content="Posture Cockpit {{ scan.version }}">
+  <link rel="stylesheet" href="report.css">
+</head>
+<body>
+  <div class="running-footer">Posture Cockpit · {{ domain }} · {{ date }}</div>
+
+  <!-- Page 1: for the decision-maker -->
+  <section class="sheet">
+    <header class="masthead">
+      <div>
+        <p class="kicker">{{ t('report.file_number', number=file_number) }} · {{ t('report.passive_scan', date=date) }}</p>
+        <h1>{{ domain }}</h1>
+        <p class="scope">{{ t('report.scope', n=checks_count) }}</p>
+      </div>
+      <div class="seal">
+        <svg viewBox="0 0 120 120" width="118" height="118" aria-hidden="true">
+          <circle cx="60" cy="60" r="56" fill="none" stroke="#8A2C1D" stroke-width="2.2"/>
+          <circle cx="60" cy="60" r="49" fill="none" stroke="#8A2C1D" stroke-width="1" stroke-dasharray="1.5 3.5"/>
+          <text x="60" y="72" text-anchor="middle" font-family="Newsreader" font-weight="600" font-size="50" fill="#8A2C1D">{{ grade }}</text>
+          <text x="60" y="93" text-anchor="middle" font-family="IBM Plex Mono" font-size="10" fill="#8A2C1D">{{ score }} / 100</text>
+        </svg>
+        <p class="seal-label">{{ grade_label }}</p>
+      </div>
+    </header>
+
+    <p class="section-label">{{ t('report.diagnosis') }}</p>
+    <p class="diagnosis">{{ diagnosis }}{% if conclusion %} <em>{{ conclusion }}</em>{% endif %}</p>
+
+    {% if prescriptions %}
+    <p class="section-label">{{ t('report.prescription') }}</p>
+    <ol class="prescriptions">
+      {% for p in prescriptions %}
+      <li>
+        <span class="p-number">{{ p.number }}</span>
+        <div class="p-body">
+          <h2>{{ p.title }}</h2>
+          <p>{{ p.summary }}</p>
+          <p class="p-meta">{{ t('report.who', who=p.who) }} · {{ t('report.minutes', n=p.minutes) }}</p>
+        </div>
+        <div class="p-side">
+          <span class="p-gain">{{ t('report.points', n=p.gain) }}</span>
+          {% if p.deadline %}<span class="badge badge-urgent">{{ p.deadline }}</span>{% else %}<span class="badge">{{ t('status.fail') }}</span>{% endif %}
+        </div>
+      </li>
+      {% endfor %}
+    </ol>
+    {% endif %}
+
+    <p class="signature">{{ t('report.signed_by', author=author) if author else t('report.signed_tool') }}</p>
+  </section>
+
+  <!-- Page 2: area by area, and what comes next -->
+  <section class="sheet">
+    <p class="section-label">{{ t('report.areas') }}</p>
+    <table class="areas">
+      {% for c in categories %}
+      <tr>
+        <th>{{ c.label }}</th>
+        <td class="num">{{ c.score }}</td>
+        <td class="bar"><svg viewBox="0 0 100 4" width="150" height="6" preserveAspectRatio="none"><rect width="100" height="4" fill="#E2DACB"/><rect width="{{ c.score }}" height="4" fill="#1C1B18"/></svg></td>
+        <td>{{ c.comment }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+
+    {% if improvements %}
+    <p class="section-label">{{ t('report.improvements') }}</p>
+    <ul class="improvements">
+      {% for i in improvements %}
+      <li><strong>{{ i.title }}</strong> — {{ i.summary }}{% if i.gain > 0 %} <span class="gain">({{ t('report.points', n=i.gain) }})</span>{% endif %}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+
+    <p class="section-label">{{ t('report.method') }}</p>
+    <p class="method">{{ t('report.method_text') }}</p>
+  </section>
+
+  <!-- Annex: for the technician -->
+  <section class="sheet annex">
+    <p class="section-label">{{ t('report.annex') }}</p>
+    <h2 class="annex-title">{{ t('report.annex_title', n=checks_count) }}</h2>
+    <table class="checks">
+      <thead><tr><th>{{ t('report.col_check') }}</th><th>{{ t('report.col_result') }}</th><th>{{ t('report.col_found') }}</th></tr></thead>
+      <tbody>
+      {% for row in annex %}
+      <tr class="status-{{ row.status }}">
+        <td><strong>{{ row.title }}</strong><br><code>{{ row.id }}</code></td>
+        <td><span class="pill pill-{{ row.status }}">{{ row.status_label }}</span></td>
+        <td>{{ row.summary }}{% if row.ref %}<br><span class="ref">{{ row.ref }}</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </section>
+</body>
+</html>

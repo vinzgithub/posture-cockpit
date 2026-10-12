@@ -1,0 +1,18 @@
+{# Copyright © 2026 Vincent Fournet · SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 -#}
+{% extends "base.html" %}
+{% block title %}{{ t('admin.title') }}{% endblock %}
+{% block content %}
+<div class="page-head"><h1>{{ t('admin.title') }}</h1></div>
+<section class="panel narrow">
+  <h2>{{ t('admin.confirm_title') }}</h2>
+  <p class="muted">{{ t('admin.confirm_intro', minutes=10) }}</p>
+  {% if error %}<p class="flash flash-error" role="alert">{{ error }}</p>{% endif %}
+  <form method="post" action="/admin/confirm" class="stack">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="username" value="{{ user.username }}" autocomplete="username">
+    <label class="field">{{ t('mfa.password') }}
+      <input type="password" name="password" autocomplete="current-password" required autofocus></label>
+    <div><button class="btn btn-primary" type="submit">{{ t('admin.confirm_submit') }}</button></div>
+  </form>
+</section>
+{% endblock %}

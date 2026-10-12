@@ -1,0 +1,17 @@
+{# Copyright © 2026 Vincent Fournet · SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 -#}
+{% extends "base.html" %}
+{% block title %}{{ t('login.title') }}{% endblock %}
+{% block page_class %}auth-page{% endblock %}
+{% block content %}
+<div class="auth-card">
+  {% include "_auth_brand.html" %}
+  <p class="muted">{{ t('app.tagline') }}</p>
+  {% if error %}<p class="flash flash-error" role="alert">{{ error }}</p>{% endif %}
+  <form method="post" action="/login" class="stack">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label class="field">{{ t('login.username') }}<input name="username" autocomplete="username" required autofocus></label>
+    <label class="field">{{ t('login.password') }}<input name="password" type="password" autocomplete="current-password" required></label>
+    <button class="btn btn-primary btn-big" type="submit">{{ t('login.submit') }}</button>
+  </form>
+</div>
+{% endblock %}

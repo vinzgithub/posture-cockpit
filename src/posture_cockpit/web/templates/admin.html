@@ -1,0 +1,79 @@
+{# Copyright © 2026 Vincent Fournet · SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 -#}
+{# Administration: accounts, extensions, report signature. #}
+{% extends "base.html" %}
+{% block title %}{{ t('admin.title') }}{% endblock %}
+{% block content %}
+<div class="page-head"><h1>{{ t('admin.title') }}</h1><p class="lead">{{ t('admin.intro') }}</p></div>
+{% if error %}<p class="flash flash-error" role="alert">{{ error }}</p>{% endif %}
+
+<section class="panel" id="users">
+  <h2>{{ t('admin.users') }}</h2>
+  <table class="table">
+    <thead><tr><th>{{ t('login.username') }}</th><th>{{ t('admin.role') }}</th><th>{{ t('mfa.title') }}</th><th>{{ t('admin.created') }}</th></tr></thead>
+    <tbody>
+    {% for u in users %}
+    <tr>
+      <td><a href="/admin/users/{{ u.id }}">{{ u.username }}</a>{% if u.id == me.id %} <span class="muted small">({{ t('admin.you') }})</span>{% endif %}</td>
+      <td>{{ t('admin.role_admin') if u.is_admin else t('admin.role_user') }}{% if u.must_change_password %} · <span class="muted small">{{ t('admin.pending_password') }}</span>{% endif %}</td>
+      <td>{% if u.totp_on %}<span class="badge badge-ok">{{ t('mfa.status_on') }}</span>{% else %}<span class="badge badge-warn">{{ t('admin.off') }}</span>{% endif %}</td>
+      <td>{{ date(u.created_at) }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  <details class="add-user" {% if draft %}open{% endif %}>
+    <summary class="btn btn-secondary">{{ t('admin.add_user') }}</summary>
+    <p class="muted">{{ t('admin.add_user_help') }}</p>
+    <form method="post" action="/admin/users" class="form-grid">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <label class="field">{{ t('login.username') }}<input name="username" value="{{ draft.username if draft else '' }}" maxlength="40" autocomplete="off" required></label>
+      <label class="field">{{ t('settings.language') }}
+        <select name="lang">
+          {% set chosen = draft.lang if draft else lang %}
+          <option value="fr" {{ 'selected' if chosen == 'fr' }}>Français</option>
+          <option value="en" {{ 'selected' if chosen == 'en' }}>English</option>
+        </select></label>
+      <label class="field">{{ t('admin.temp_password') }} <small class="muted">{{ t('setup.min_length', n=min_length) }}</small>
+        <input type="password" name="password" autocomplete="new-password" minlength="{{ min_length }}" required></label>
+      <label class="field">{{ t('setup.password2') }}<input type="password" name="password2" autocomplete="new-password" minlength="{{ min_length }}" required></label>
+      <label class="check span2"><input type="checkbox" name="is_admin" {{ 'checked' if draft and draft.is_admin }}> {{ t('admin.make_admin') }}</label>
+      <div class="span2"><button class="btn btn-primary" type="submit">{{ t('admin.create') }}</button></div>
+    </form>
+  </details>
+</section>
+
+<section class="panel" id="extensions">
+  <h2>{{ t('admin.extensions') }}</h2>
+  <p class="muted">{{ t('admin.extensions_help') }}</p>
+  <ul class="extensions">
+    {% for item in extensions %}
+    <li class="extension {% if not item.enabled %}is-off{% endif %}">
+      <div>
+        <strong>{{ item.ext.name }}</strong> <code class="muted small">{{ item.ext.id }} {{ item.ext.version }}</code>
+        <p class="muted small">{{ item.ext.description }} · {{ t('admin.n_checks', n=item.ext.checks | length) }}</p>
+      </div>
+      <form method="post" action="/admin/extensions/{{ item.ext.id }}">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <input type="hidden" name="enabled" value="{{ '0' if item.enabled else '1' }}">
+        <button type="submit" class="switch" role="switch" aria-checked="{{ 'true' if item.enabled else 'false' }}"
+                aria-label="{{ item.ext.name }}"><span></span></button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+  {% for error in load_errors %}
+  <p class="flash flash-error">{{ t('admin.extension_error', source=error.source) }} <code>{{ error.error }}</code></p>
+  {% endfor %}
+</section>
+
+<section class="panel" id="report">
+  <h2>{{ t('admin.report') }}</h2>
+  <p class="muted">{{ t('admin.report_help') }}</p>
+  <form method="post" action="/admin/report" class="inline-form">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input name="author" value="{{ report_author }}" maxlength="80" placeholder="{{ t('admin.report_placeholder') }}" aria-label="{{ t('admin.report') }}">
+    <button class="btn btn-secondary" type="submit">{{ t('admin.save') }}</button>
+  </form>
+</section>
+{% endblock %}

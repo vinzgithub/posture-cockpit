@@ -1,0 +1,35 @@
+{
+  "tls.no_website": "Pas de site web sur le domaine ni sur www : ce contrôle ne s'applique pas.",
+
+  "tls.certificate.title": "Certificat du site",
+  "tls.certificate.action": "Renouveler le certificat du site",
+  "tls.certificate.why": "Le certificat prouve aux navigateurs que le site est bien le vôtre. Expiré ou invalide, il déclenche l'alerte « Votre connexion n'est pas privée » et la plupart des visiteurs repartent.",
+  "tls.certificate.ref": "ANSSI, « Recommandations de sécurité relatives à TLS »",
+  "tls.certificate.expired": "Le certificat de {host} a expiré le {expires_on}.",
+  "tls.certificate.expires_soon": "Le certificat de {host} expire dans {days:jour|jours} ({expires_on}) et n'a pas été renouvelé.",
+  "tls.certificate.expires": "Le certificat de {host} expire dans {days:jour|jours} ({expires_on}).",
+  "tls.certificate.renew_message": "Bonjour,\n\nLe certificat HTTPS de {host} expire le {expires_on}. Pourriez-vous le renouveler avant cette date, de préférence avec un renouvellement automatique (Let's Encrypt, par exemple) ?\n\nMerci d'avance.",
+  "tls.certificate.untrusted": "Le certificat de {host} n'est pas reconnu par les navigateurs : {problem}.",
+  "tls.certificate.untrusted.action": "Remplacer le certificat du site",
+  "tls.certificate.fix_message": "Bonjour,\n\nLe certificat HTTPS de {host} n'est pas reconnu par les navigateurs (« {problem} »). Les visiteurs voient une alerte de sécurité.\n\nPourriez-vous installer un certificat valide, avec sa chaîne complète ?\n\nMerci d'avance.",
+  "tls.certificate.ok": "Certificat reconnu, délivré par {issuer}, valable encore {days:jour|jours}.",
+
+  "tls.protocols.title": "Versions de TLS",
+  "tls.protocols.action": "Désactiver les anciennes versions de TLS",
+  "tls.protocols.why": "TLS chiffre la connexion. Ses versions 1.0 et 1.1 ont des faiblesses connues et ne sont plus utilisées par les navigateurs : les garder n'ouvre la porte qu'aux attaques.",
+  "tls.protocols.ref": "ANSSI, « Recommandations de sécurité relatives à TLS » · RFC 8996 (abandon de TLS 1.0 et 1.1)",
+  "tls.protocols.obsolete": "Le serveur accepte encore {versions}.",
+  "tls.protocols.message": "Bonjour,\n\nLe serveur web du domaine {domain} accepte encore {versions}, versions obsolètes de TLS. Pourriez-vous les désactiver pour ne garder que TLS 1.2 et TLS 1.3 ?\n\nMerci d'avance.",
+  "tls.protocols.no_tls13": "TLS 1.3, la version la plus sûre et la plus rapide, n'est pas proposée.",
+  "tls.protocols.no_tls13.action": "Activer TLS 1.3",
+  "tls.protocols.tls13_message": "Bonjour,\n\nLe serveur web du domaine {domain} ne propose pas TLS 1.3. Pourriez-vous l'activer, en plus de TLS 1.2 ?\n\nMerci d'avance.",
+  "tls.protocols.ok": "Seules les versions récentes de TLS sont acceptées.",
+
+  "tls.key.title": "Clé du certificat",
+  "tls.key.action": "Utiliser une clé plus longue",
+  "tls.key.why": "Une clé trop courte peut être cassée : qui la casse peut se faire passer pour le site.",
+  "tls.key.ref": "ANSSI, « Guide de sélection d'algorithmes cryptographiques »",
+  "tls.key.weak": "La clé du certificat de {host} est trop courte ({key}).",
+  "tls.key.message": "Bonjour,\n\nLe certificat de {host} utilise une clé {key}, trop courte. Pourriez-vous en générer un nouveau avec une clé RSA d'au moins 2048 bits ou une clé ECDSA P-256 ?\n\nMerci d'avance.",
+  "tls.key.ok": "Clé {key} : solide."
+}

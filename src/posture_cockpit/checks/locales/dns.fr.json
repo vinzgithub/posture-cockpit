@@ -1,0 +1,26 @@
+{
+  "dns.nameservers.title": "Serveurs de noms",
+  "dns.nameservers.action": "Ajouter un second serveur de noms",
+  "dns.nameservers.why": "Les serveurs de noms répondent à tout l'Internet pour le domaine. S'il n'y en a qu'un et qu'il tombe, le site et la messagerie disparaissent en même temps.",
+  "dns.nameservers.ref": "RFC 2182 (au moins deux serveurs, sur des réseaux distincts)",
+  "dns.nameservers.ok": "{count} serveurs de noms répondent pour le domaine.",
+  "dns.nameservers.single": "Un seul serveur de noms : {host}.",
+  "dns.nameservers.none": "Aucun serveur de noms propre à ce nom : c'est sans doute un sous-domaine. Analysez plutôt le domaine principal.",
+  "dns.nameservers.message": "Bonjour,\n\nLe domaine {domain} n'est servi que par un seul serveur de noms ({host}). S'il tombe en panne, le site et la messagerie deviennent injoignables.\n\nPourriez-vous ajouter au moins un second serveur de noms, hébergé sur un autre réseau ?\n\nMerci d'avance.",
+
+  "dns.dnssec.title": "Signature DNSSEC",
+  "dns.dnssec.action": "Activer DNSSEC",
+  "dns.dnssec.why": "DNSSEC signe les réponses du DNS : personne ne peut alors envoyer les visiteurs ou les e-mails vers un faux serveur en falsifiant ces réponses.",
+  "dns.dnssec.ref": "RFC 4033 · ANSSI, « Bonnes pratiques pour l'acquisition et l'exploitation de noms de domaine »",
+  "dns.dnssec.on": "Le domaine est signé avec DNSSEC.",
+  "dns.dnssec.off": "Le domaine n'est pas signé avec DNSSEC.",
+  "dns.dnssec.how": "Chez la plupart des hébergeurs DNS, DNSSEC s'active d'un clic dans les réglages du domaine, sans rien saisir. L'hébergeur publie lui-même les clés et les tient à jour.",
+
+  "dns.caa.title": "Autorités de certification autorisées (CAA)",
+  "dns.caa.action": "Restreindre les autorités de certification",
+  "dns.caa.why": "Un enregistrement CAA désigne les seules autorités qui ont le droit de délivrer un certificat pour le domaine. Les autres refusent, ce qui complique la fabrication d'un faux certificat.",
+  "dns.caa.ref": "RFC 8659",
+  "dns.caa.present": "Des enregistrements CAA désignent les autorités autorisées.",
+  "dns.caa.missing": "Aucun enregistrement CAA : n'importe quelle autorité peut délivrer un certificat pour le domaine.",
+  "dns.caa.how": "La valeur proposée autorise {ca}, l'autorité qui a délivré le certificat actuel du site. Si un autre service délivre aussi des certificats pour le domaine (messagerie, boutique en ligne), ajoutez un enregistrement pour lui."
+}

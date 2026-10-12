@@ -1,0 +1,20 @@
+{# Copyright © 2026 Vincent Fournet · SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 -#}
+{# One task in the list on the left of the plan. Expects `task`, `selected`, `plan`. #}
+{% from "_macros.html" import check_icon %}
+<a class="task-card {% if task.done %}is-done{% endif %}" href="?task={{ task.check_id }}#task" data-task="{{ task.check_id }}"
+   {% if selected and selected.check_id == task.check_id %}aria-current="true"{% endif %}>
+  <span class="task-num">{% if task.done %}{{ check_icon() }}{% else %}{{ task.number }}{% endif %}</span>
+  <span class="task-body">
+    <span class="task-title">{{ task.title }}</span>
+    <span class="task-summary">{{ task.summary }}</span>
+    <span class="chips">
+      <span class="chip">{{ t('plan.minutes', n=task.minutes) }}</span>
+      <span class="chip chip-{{ task.effort }}">{{ task.effort_label }}</span>
+      <span class="chip">{{ task.category }}</span>
+    </span>
+  </span>
+  <span class="task-gain">
+    {% if task.gain > 0 %}<strong>+{{ task.gain }}</strong>{% else %}<strong>+</strong>{% endif %}
+    <small>{{ t('plan.gained') if task.done else t('plan.points') }}</small>
+  </span>
+</a>

@@ -1,0 +1,52 @@
+{# Copyright © 2026 Vincent Fournet · SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 -#}
+{# Home page: check a new domain, and the domains already checked. #}
+{% extends "base.html" %}
+{% from "_macros.html" import grade_pill %}
+{% block title %}{{ t('domains.title') }} · Posture Cockpit{% endblock %}
+{% block content %}
+<section class="hero-search">
+  <h1>{{ t('domains.headline') }}</h1>
+  <p class="lead">{{ t('domains.lead') }}</p>
+  <form method="post" action="/domains" class="search" data-busy>
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label class="visually-hidden" for="domain">{{ t('domains.field') }}</label>
+    <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg>
+    <input id="domain" name="domain" value="{{ typed or '' }}" placeholder="{{ t('domains.placeholder') }}"
+           autocomplete="off" autocapitalize="off" spellcheck="false" required {% if not domains %}autofocus{% endif %}>
+    <button class="btn btn-primary" type="submit" data-busy-label="{{ t('domains.scanning') }}">{{ t('domains.submit') }}</button>
+  </form>
+  {% if error %}<p class="flash flash-error" role="alert">{{ error }}</p>{% endif %}
+  <p class="small muted">{{ t('domains.passive_note') }}</p>
+</section>
+
+{% if domains %}
+<section class="domain-list" aria-labelledby="list-title">
+  <h2 id="list-title" class="list-title">{{ t('domains.list') }}</h2>
+  <ul>
+    {% for d in domains %}
+    <li>
+      <a class="domain-card" href="/domains/{{ d.name }}">
+        {% if d.grade %}{{ grade_pill(d.grade, 'grade-big') }}{% else %}<span class="grade grade-none grade-big">–</span>{% endif %}
+        <span class="domain-card-body">
+          <strong>{{ d.name }}</strong>
+          <small class="muted">{% if d.started_at %}{{ t('domains.scanned_on', date=date(d.started_at)) }}{% else %}{{ t('domains.never') }}{% endif %}</small>
+        </span>
+        {% if d.score is not none %}<span class="domain-card-score"><strong>{{ d.score }}</strong>/100</span>{% endif %}
+        <svg class="chevron" viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 6 15 12 9 18"/></svg>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% else %}
+<section class="panel empty-state">
+  <h2>{{ t('domains.empty_title') }}</h2>
+  <p class="muted">{{ t('domains.empty_text') }}</p>
+  <form method="post" action="/domains" data-busy>
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="domain" value="{{ demo_domain }}">
+    <button class="btn btn-secondary" type="submit" data-busy-label="{{ t('domains.scanning') }}">{{ t('domains.try_demo') }}</button>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

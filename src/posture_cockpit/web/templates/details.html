@@ -1,0 +1,49 @@
+{# Copyright © 2026 Vincent Fournet · SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 -#}
+{# Every check of the latest scan, with the raw values it saw: the page for the technician. #}
+{% extends "base.html" %}
+{% from "_macros.html" import status_icon %}
+{% block title %}{{ t('details.title') }} · {{ scan.domain }}{% endblock %}
+{% block content %}
+<p class="small"><a href="/domains/{{ scan.domain }}">← {{ t('details.back') }}</a></p>
+<div class="page-head">
+  <h1>{{ t('details.title') }} <span class="muted">· {{ scan.domain }}</span></h1>
+  <p class="lead">{{ t('details.lead', date=date(scan.started_at), time=scan.started_at[11:16], seconds=(scan.duration_ms / 1000) | round(1), version=scan.version) }}</p>
+</div>
+
+{% for category, findings in categories.items() %}
+<section class="panel details" aria-labelledby="cat-{{ category }}">
+  <h2 id="cat-{{ category }}">{{ t('category.' ~ category) }}</h2>
+  <ul class="checks">
+    {% for f in findings %}
+    {% set check = registry.get(f.check_id) %}
+    <li class="check status-{{ f.status.value }}">
+      {{ status_icon(f.status.value) }}
+      <div class="check-body">
+        <p class="check-title"><strong>{{ t(f.check_id ~ '.title') }}</strong>
+          <span class="badge badge-{{ f.status.value }}">{{ t('status.' ~ f.status.value) }}</span>
+          {% if f.check_id in rechecks %}<span class="muted small">{{ t('details.rechecked', date=date(rechecks[f.check_id].checked_at)) }}</span>{% endif %}
+        </p>
+        <p>{{ t(f.outcome.summary, domain=scan.domain, **f.outcome.params) }}</p>
+        {% if f.outcome.evidence %}
+        <details>
+          <summary>{{ t('details.evidence') }}</summary>
+          <pre class="evidence">{{ f.outcome.evidence | tojson(indent=2) }}</pre>
+        </details>
+        {% endif %}
+      </div>
+      <code class="check-id muted small">{{ f.check_id }}{% if f.status.scored %} · {{ t('details.weight', n=f.weight) }}{% endif %}</code>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endfor %}
+
+<section class="panel danger-zone">
+  <h2>{{ t('details.delete_title') }}</h2>
+  <p class="muted">{{ t('details.delete_help') }}</p>
+  <form method="post" action="/domains/{{ scan.domain }}/delete">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <button class="btn btn-danger" type="submit" data-confirm="{{ t('details.delete_confirm', name=scan.domain) }}">{{ t('details.delete_submit') }}</button>
+  </form>
+</section>
+{% endblock %}

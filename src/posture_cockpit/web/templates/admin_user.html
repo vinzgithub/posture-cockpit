@@ -1,0 +1,60 @@
+{# Copyright © 2026 Vincent Fournet · SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 -#}
+{% extends "base.html" %}
+{% block title %}{{ target.username }} · {{ t('admin.title') }}{% endblock %}
+{% block content %}
+<p class="small"><a href="/admin">← {{ t('admin.back') }}</a></p>
+<div class="page-head">
+  <h1>{{ target.username }}</h1>
+  <p class="lead">{{ t('admin.role_admin') if target.is_admin else t('admin.role_user') }}
+    · {{ t('mfa.title') }} : {{ t('mfa.status_on') if totp_on else t('admin.off') }}
+    · {{ t('admin.created') }} {{ date(target.created_at) }}</p>
+</div>
+{% if error %}<p class="flash flash-error" role="alert">{{ error }}</p>{% endif %}
+
+{% if target.id == me.id %}
+<section class="panel narrow"><p>{{ t('admin.self_note') }} <a href="/settings">{{ t('nav.settings') }}</a></p></section>
+{% else %}
+<div class="settings-grid">
+  <section class="panel" id="password">
+    <h2>{{ t('admin.reset_title') }}</h2>
+    <p class="muted">{{ t('admin.reset_help') }}</p>
+    <form method="post" action="/admin/users/{{ target.id }}/password" class="stack">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <label class="field">{{ t('admin.temp_password') }} <small class="muted">{{ t('setup.min_length', n=min_length) }}</small>
+        <input type="password" name="password" autocomplete="new-password" minlength="{{ min_length }}" required></label>
+      <label class="field">{{ t('setup.password2') }}<input type="password" name="password2" autocomplete="new-password" minlength="{{ min_length }}" required></label>
+      <div><button class="btn btn-secondary" type="submit">{{ t('admin.reset_submit') }}</button></div>
+    </form>
+  </section>
+
+  <section class="panel" id="role">
+    <h2>{{ t('admin.role') }}</h2>
+    <p class="muted">{{ t('admin.role_help') }}</p>
+    <form method="post" action="/admin/users/{{ target.id }}/role">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <button class="btn btn-secondary" type="submit">{{ t('admin.remove_admin') if target.is_admin else t('admin.make_admin_button') }}</button>
+    </form>
+    {% if totp_on %}
+    <h2 class="mt">{{ t('mfa.title') }}</h2>
+    <p class="muted">{{ t('admin.totp_help') }}</p>
+    <form method="post" action="/admin/users/{{ target.id }}/totp-off">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <button class="btn btn-secondary" type="submit" data-confirm="{{ t('admin.totp_confirm', name=target.username) }}">{{ t('admin.totp_off') }}</button>
+    </form>
+    {% endif %}
+  </section>
+
+  <section class="panel danger-zone span-all" id="delete">
+    <h2>{{ t('admin.delete_title') }}</h2>
+    <p class="muted">{{ t('admin.delete_help') }}</p>
+    <form method="post" action="/admin/users/{{ target.id }}/delete" class="inline-form">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <input name="confirm" autocomplete="off" placeholder="{{ target.username }}"
+             aria-label="{{ t('admin.delete_type', name=target.username) }}" required>
+      <button class="btn btn-danger" type="submit" data-confirm="{{ t('admin.delete_confirm', name=target.username) }}">{{ t('admin.delete_submit') }}</button>
+    </form>
+    <p class="small muted">{{ t('admin.delete_type', name=target.username) }}</p>
+  </section>
+</div>
+{% endif %}
+{% endblock %}

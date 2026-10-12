@@ -1,0 +1,82 @@
+{# Copyright © 2026 Vincent Fournet · SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 -#}
+{# The plan of fixes for one domain: score, steps, tasks on the left, the selected task on the right.
+   Without JavaScript, each task is a link (?task=…); app.js switches them in place. #}
+{% extends "base.html" %}
+{% from "_macros.html" import grade_pill, scorebar, check_icon with context %}
+{% block title %}{{ plan.domain }} · Posture Cockpit{% endblock %}
+{% block content %}
+{% set n_prio = plan.priorities | length %}
+
+<section class="plan-hero">
+  <div class="plan-hero-text">
+    <p class="eyebrow-muted">{{ t('plan.scanned', domain=plan.domain, date=date(plan.scan.started_at), time=plan.scan.started_at[11:16]) }}</p>
+    <h1>{{ plan.headline }}</h1>
+    <p class="lead">{{ plan.subline }}</p>
+    <ol class="stepper" aria-label="{{ t('plan.steps') }}">
+      {% for step in plan.steps %}
+      <li class="step step-{{ step.state }}" {% if step.state == 'active' %}aria-current="step"{% endif %}>
+        <span class="step-dot">{% if step.state == 'done' %}{{ check_icon() }}{% else %}{{ loop.index }}{% endif %}</span>
+        <span class="step-text"><strong>{{ step.label }}</strong><small>{{ step.detail }}</small></span>
+      </li>
+      {% endfor %}
+    </ol>
+  </div>
+
+  <div class="scorecard">
+    <div class="scorecard-top">
+      <div>
+        <span class="scorecard-label">{{ t('plan.your_score') }}</span>
+        <span class="scorecard-score"><strong>{{ plan.score }}</strong><span>/100</span></span>
+      </div>
+      {{ grade_pill(plan.grade) }}
+      <span class="scorecard-target">{{ t('plan.target') }}<br><strong>{{ plan.target }} · {{ plan.target_grade }}</strong></span>
+    </div>
+    {{ scorebar(plan.score, plan.target, t('plan.scorebar_label', score=plan.score, target=plan.target)) }}
+    <p class="scorecard-note">{{ plan.score_note }}</p>
+  </div>
+</section>
+
+<div class="plan-grid">
+  <aside class="task-list" aria-label="{{ t('plan.tasks') }}">
+    {% if plan.priorities %}
+    <h2 class="list-title">{{ t('plan.priorities') }}</h2>
+    {% for task in plan.priorities %}{% include "_task_card.html" %}{% endfor %}
+    {% endif %}
+
+    {% if plan.improvements %}
+    <details class="improvements" {% if not plan.priorities or (selected and selected in plan.improvements) %}open{% endif %}>
+      <summary class="list-title">{{ t('plan.improvements', n=plan.improvements | length) }}</summary>
+      {% for task in plan.improvements %}{% include "_task_card.html" %}{% endfor %}
+    </details>
+    {% endif %}
+
+    <div class="side-links">
+      <a href="/domains/{{ plan.domain }}/details" class="side-link">
+        <span class="side-link-icon ok">{{ check_icon() }}</span>
+        <span><strong>{{ t('plan.ok_count', n=plan.counts.ok) }}</strong><small>{{ t('plan.details_hint') }}</small></span>
+      </a>
+      <a href="/domains/{{ plan.domain }}/report.pdf" class="side-link">
+        <svg class="side-link-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>
+        <span><strong>{{ t('plan.report') }}</strong><small>{{ t('plan.report_hint') }}</small></span>
+      </a>
+      <form method="post" action="/domains/{{ plan.domain }}/scan" data-busy>
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button type="submit" class="side-link" data-busy-label="{{ t('plan.scanning') }}">
+          <svg class="side-link-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          <span><strong>{{ t('plan.rescan') }}</strong><small>{{ t('plan.rescan_hint') }}</small></span>
+        </button>
+      </form>
+    </div>
+  </aside>
+
+  <section class="task-panels" id="task" aria-live="polite">
+    {% if not plan.tasks %}
+    <div class="panel panel-empty">
+      <h2>{{ t('plan.nothing_title') }}</h2>
+      <p>{{ t('plan.nothing_text') }}</p>
+    </div>
+    {% endif %}
+    {% for task in plan.tasks %}{% include "_task_panel.html" %}{% endfor %}
+  </section>
+</div>
+{% endblock %}

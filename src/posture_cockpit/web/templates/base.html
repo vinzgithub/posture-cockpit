@@ -1,0 +1,54 @@
+{# Copyright © 2026 Vincent Fournet · SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 -#}
+<!doctype html>
+<html lang="{{ lang }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf" content="{{ csrf }}">
+  <title>{% block title %}Posture Cockpit{% endblock %}</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/app.css?v={{ version }}">
+  <script src="/static/app.js?v={{ version }}" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="/domains">
+        {% include "_logo.html" %}
+        <span>Posture Cockpit</span>
+      </a>
+      {% if user %}
+      <nav class="nav" aria-label="{{ t('nav.label') }}">
+        <a href="/domains" {% if path.startswith('/domains') %}aria-current="page"{% endif %}>{{ t('nav.domains') }}</a>
+        <a href="/settings" {% if path.startswith('/settings') %}aria-current="page"{% endif %}>{{ t('nav.settings') }}</a>
+        {% if user.is_admin %}<a href="/admin" {% if path.startswith('/admin') %}aria-current="page"{% endif %}>{{ t('nav.admin') }}</a>{% endif %}
+      </nav>
+      <div class="topbar-user">
+        <span class="muted">{{ user.username }}</span>
+        <form method="post" action="/logout">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <button class="btn-link" type="submit">{{ t('nav.logout') }}</button>
+        </form>
+      </div>
+      {% endif %}
+    </div>
+  </header>
+
+  <main class="page {% block page_class %}{% endblock %}" id="main">
+    {% for level, key, params in flashes %}
+    <p class="flash flash-{{ level }}" role="status">{{ t(key, **params) }}</p>
+    {% endfor %}
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="footer">
+    <span>{{ t('footer.passive') }}</span>
+    <span>Posture Cockpit {{ version }} · © 2026 Vincent Fournet</span>
+    <form method="post" action="/lang" class="lang-switch">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <input type="hidden" name="back" value="{{ path }}">
+      <button class="btn-link" type="submit" name="lang" value="{{ 'en' if lang == 'fr' else 'fr' }}">{{ 'English' if lang == 'fr' else 'Français' }}</button>
+    </form>
+  </footer>
+</body>
+</html>

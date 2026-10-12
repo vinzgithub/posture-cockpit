@@ -1,0 +1,46 @@
+{
+  "_comment": "Recorded answers for the demo domain. The .example top-level domain is reserved (RFC 2606) and never exists on the Internet, so this data cannot be confused with a real domain. Addresses come from the documentation ranges (RFC 5737).",
+  "dns": {
+    "menuiserie-dupont.example SOA": ["dns11.ovh.net. tech.ovh.net. 2026101201 86400 3600 3600000 300"],
+    "menuiserie-dupont.example NS": ["dns11.ovh.net.", "ns11.ovh.net."],
+    "menuiserie-dupont.example A": ["203.0.113.10"],
+    "www.menuiserie-dupont.example A": ["203.0.113.10"],
+    "menuiserie-dupont.example MX": ["1 mx1.mail.ovh.net.", "5 mx2.mail.ovh.net."],
+    "menuiserie-dupont.example TXT": ["v=spf1 include:mx.ovh.com ~all"],
+    "mx.ovh.com TXT": ["v=spf1 ip4:198.51.100.0/24 ip4:192.0.2.0/24 ~all"],
+    "_dmarc.menuiserie-dupont.example TXT": null,
+    "menuiserie-dupont.example DS": [],
+    "menuiserie-dupont.example CAA": [],
+    "default._domainkey.menuiserie-dupont.example TXT": ["v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAoey/o5ilIMnuNCXhVqCVxmk1NF1sq0cHTT6bO5W+zJ83m0o5q0TT7x/sNXsDfDoCxzLZDg4imiJbgovIMm1ihor/di+jfKFob9asXTyJSNBJ6pc7qoiVzOQr9x/yhaa4JN3JgRbT/p7ptQzPcRrCxaNACBT880/HKsE+WyXMCCrU3elhAc2nyHh7ace2/P8RAktVybDNbbkT92Cv3/9UJ72jePwCV+i8kV2Krhx1NXIEhbI5u6ktfgQvkTOGr96FGCw8S2U+eC9DrM4Bnjjj462z/lbG1ELHtjrDMCJ4ydjW5bEhj6n6lA/sTLscUTdekw+eRygWQVkmNtQsdzvuuwIDAQAB"]
+  },
+  "certificates": {
+    "menuiserie-dupont.example": {"issuer": "Sectigo Limited", "expires_in_days": 9.5, "lifetime_days": 365,
+                                  "names": ["menuiserie-dupont.example", "www.menuiserie-dupont.example"],
+                                  "key_type": "RSA", "key_bits": 2048, "protocol": "TLSv1.3"},
+    "www.menuiserie-dupont.example": {"issuer": "Sectigo Limited", "expires_in_days": 9.5, "lifetime_days": 365,
+                                      "names": ["menuiserie-dupont.example", "www.menuiserie-dupont.example"],
+                                      "key_type": "RSA", "key_bits": 2048, "protocol": "TLSv1.3"}
+  },
+  "tls": {
+    "menuiserie-dupont.example": {"TLSv1": true, "TLSv1.1": true, "TLSv1.2": true, "TLSv1.3": true},
+    "www.menuiserie-dupont.example": {"TLSv1": true, "TLSv1.1": true, "TLSv1.2": true, "TLSv1.3": true}
+  },
+  "http": {
+    "http://menuiserie-dupont.example/": {"status": 301, "headers": {"Location": "https://www.menuiserie-dupont.example/"}},
+    "http://www.menuiserie-dupont.example/": {"status": 301, "headers": {"Location": "https://www.menuiserie-dupont.example/"}},
+    "https://menuiserie-dupont.example/": {"status": 301, "headers": {"Location": "https://www.menuiserie-dupont.example/"}},
+    "https://www.menuiserie-dupont.example/": {
+      "status": 200,
+      "headers": {
+        "Server": "Apache/2.4.41 (Ubuntu)",
+        "Strict-Transport-Security": "max-age=86400",
+        "Content-Security-Policy": "default-src 'self'; img-src 'self' data:; frame-ancestors 'self'",
+        "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Content-Type": "text/html; charset=utf-8"
+      },
+      "body": "<!doctype html><title>Menuiserie Dupont</title>"
+    },
+    "https://menuiserie-dupont.example/.well-known/security.txt": {"status": 404}
+  }
+}

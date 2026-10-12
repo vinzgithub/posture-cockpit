@@ -1,0 +1,22 @@
+{# Copyright © 2026 Vincent Fournet · SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 -#}
+{# Second step of sign-in: the authenticator code (or a recovery code). #}
+{% extends "base.html" %}
+{% block title %}{{ t('login_code.title') }}{% endblock %}
+{% block page_class %}auth-page{% endblock %}
+{% block content %}
+<div class="auth-card">
+  {% include "_auth_brand.html" %}
+  <h1>{{ t('login_code.title') }}</h1>
+  <p class="muted">{{ t('login_code.intro') }}</p>
+  {% if error %}<p class="flash flash-error" role="alert">{{ error }}</p>{% endif %}
+  <form method="post" action="/login/code" class="stack">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label class="field">{{ t('login_code.code') }}
+      <input name="code" class="code-input" autocomplete="one-time-code" maxlength="16"
+             spellcheck="false" autocapitalize="off" required autofocus></label>
+    <button class="btn btn-primary btn-big" type="submit">{{ t('login_code.submit') }}</button>
+  </form>
+  <p class="small muted">{{ t('login_code.recovery_hint') }}</p>
+  <p class="small"><a href="/login">{{ t('login_code.back') }}</a></p>
+</div>
+{% endblock %}

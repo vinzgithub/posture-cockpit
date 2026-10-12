@@ -1,0 +1,31 @@
+{# Copyright © 2026 Vincent Fournet · SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 -#}
+{% extends "base.html" %}
+{% block title %}{{ t('mfa.title') }}{% endblock %}
+{% block content %}
+<div class="page-head"><h1>{{ t('mfa.title') }}</h1><p class="lead">{{ t('mfa.intro') }}</p></div>
+<section class="panel narrow">
+  {% if error %}<p class="flash flash-error" role="alert">{{ error }}</p>{% endif %}
+  <h2><span class="num">1</span> {{ t('mfa.step_scan') }}</h2>
+  <p>{{ t('mfa.scan_help') }}</p>
+  <div class="qr"><img src="{{ qr }}" alt="{{ t('mfa.qr_alt') }}" width="220" height="220"></div>
+  <details>
+    <summary>{{ t('mfa.manual') }}</summary>
+    <code class="secret">{{ secret_groups | join(' ') }}</code>
+    <p class="muted small">{{ t('mfa.manual_help') }}</p>
+  </details>
+  <h2><span class="num">2</span> {{ t('mfa.step_confirm') }}</h2>
+  <form method="post" action="/settings/totp/enable" class="form-grid">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label class="field">{{ t('mfa.code') }}
+      <input name="code" class="code-input" autocomplete="one-time-code" inputmode="numeric" maxlength="7"
+             pattern="[0-9 ]{6,7}" required autofocus></label>
+    <label class="field">{{ t('mfa.password') }}
+      <input type="password" name="password" autocomplete="current-password" required></label>
+    <div class="span2"><button class="btn btn-primary" type="submit">{{ t('mfa.enable') }}</button></div>
+  </form>
+  <form method="post" action="/settings/totp/disable">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <button class="btn-link" type="submit">{{ t('mfa.cancel') }}</button>
+  </form>
+</section>
+{% endblock %}

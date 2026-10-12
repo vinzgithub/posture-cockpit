@@ -1,0 +1,16 @@
+{# Copyright © 2026 Vincent Fournet · SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 -#}
+{# Recovery codes: shown once, in this response only (the database keeps their hashes). #}
+{% extends "base.html" %}
+{% block title %}{{ t('mfa.codes_title') }}{% endblock %}
+{% block content %}
+<div class="page-head"><h1>{{ t('mfa.codes_title') }}</h1></div>
+{% if just_enabled %}<p class="flash flash-ok" role="status">{{ t('mfa.enabled_now') }}</p>{% endif %}
+<section class="panel narrow">
+  <p><strong>{{ t('mfa.codes_once') }}</strong></p>
+  <ul class="recovery-codes">
+    {% for code in codes %}<li><code>{{ code }}</code></li>{% endfor %}
+  </ul>
+  <p class="muted">{{ t('mfa.codes_help') }}</p>
+  <p><a class="btn btn-primary" href="/settings#mfa">{{ t('mfa.codes_done') }}</a></p>
+</section>
+{% endblock %}

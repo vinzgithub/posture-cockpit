@@ -1,0 +1,35 @@
+{
+  "tls.no_website": "No website on the domain or on www: this check does not apply.",
+
+  "tls.certificate.title": "Website certificate",
+  "tls.certificate.action": "Renew the website certificate",
+  "tls.certificate.why": "The certificate proves to browsers that the website is yours. Expired or invalid, it triggers the warning \"Your connection is not private\" and most visitors leave.",
+  "tls.certificate.ref": "ANSSI, « Recommandations de sécurité relatives à TLS »",
+  "tls.certificate.expired": "The certificate of {host} expired on {expires_on}.",
+  "tls.certificate.expires_soon": "The certificate of {host} expires in {days:day|days} ({expires_on}) and has not been renewed.",
+  "tls.certificate.expires": "The certificate of {host} expires in {days:day|days} ({expires_on}).",
+  "tls.certificate.renew_message": "Hello,\n\nThe HTTPS certificate of {host} expires on {expires_on}. Could you renew it before that date, preferably with automatic renewal (Let's Encrypt, for instance)?\n\nThank you.",
+  "tls.certificate.untrusted": "Browsers do not trust the certificate of {host}: {problem}.",
+  "tls.certificate.untrusted.action": "Replace the website certificate",
+  "tls.certificate.fix_message": "Hello,\n\nBrowsers do not trust the HTTPS certificate of {host} (\"{problem}\"). Visitors see a security warning.\n\nCould you install a valid certificate, with its complete chain?\n\nThank you.",
+  "tls.certificate.ok": "Trusted certificate issued by {issuer}, valid for {days:more day|more days}.",
+
+  "tls.protocols.title": "TLS versions",
+  "tls.protocols.action": "Turn off old TLS versions",
+  "tls.protocols.why": "TLS encrypts the connection. Its versions 1.0 and 1.1 have known weaknesses and browsers no longer use them: keeping them only helps attacks.",
+  "tls.protocols.ref": "ANSSI, « Recommandations de sécurité relatives à TLS » · RFC 8996 (deprecation of TLS 1.0 and 1.1)",
+  "tls.protocols.obsolete": "The server still accepts {versions}.",
+  "tls.protocols.message": "Hello,\n\nThe web server of {domain} still accepts {versions}, obsolete versions of TLS. Could you turn them off and keep only TLS 1.2 and TLS 1.3?\n\nThank you.",
+  "tls.protocols.no_tls13": "TLS 1.3, the safest and fastest version, is not offered.",
+  "tls.protocols.no_tls13.action": "Turn on TLS 1.3",
+  "tls.protocols.tls13_message": "Hello,\n\nThe web server of {domain} does not offer TLS 1.3. Could you turn it on, alongside TLS 1.2?\n\nThank you.",
+  "tls.protocols.ok": "Only recent TLS versions are accepted.",
+
+  "tls.key.title": "Certificate key",
+  "tls.key.action": "Use a longer key",
+  "tls.key.why": "A key that is too short can be broken: whoever breaks it can pose as the website.",
+  "tls.key.ref": "ANSSI, « Guide de sélection d'algorithmes cryptographiques »",
+  "tls.key.weak": "The certificate key of {host} is too short ({key}).",
+  "tls.key.message": "Hello,\n\nThe certificate of {host} uses a {key} key, which is too short. Could you issue a new one with an RSA key of at least 2048 bits or an ECDSA P-256 key?\n\nThank you.",
+  "tls.key.ok": "{key} key: strong."
+}

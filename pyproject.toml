@@ -1,0 +1,86 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "posture-cockpit"
+version = "0.1.0"
+description = "Self-hosted passive security check of a domain (mail, TLS, web, DNS) with a guided plan of fixes and a PDF report."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "Vincent Fournet" }]
+license = "PolyForm-Noncommercial-1.0.0"
+license-files = ["LICENSE", "NOTICE"]
+keywords = ["security", "dmarc", "spf", "tls", "audit", "self-hosted", "anssi"]
+dependencies = [
+    "fastapi>=0.115,<1",
+    "uvicorn>=0.32,<1",
+    "jinja2>=3.1.4,<4",
+    "itsdangerous>=2.2,<3",
+    "python-multipart>=0.0.19,<0.1",
+    "segno>=1.6,<2",
+    "dnspython>=2.7,<3",
+    "httpx>=0.27,<1",
+    "cryptography>=43",
+    "weasyprint>=62",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.8", "mypy>=1.13"]
+
+[project.scripts]
+posture-cockpit = "posture_cockpit.cli:main"
+
+# Other packages add checks by declaring an entry point in the group
+# "posture_cockpit.extensions" (see docs/EXTENSIONS.md). The built-in
+# extensions are listed in posture_cockpit/core/registry.py.
+
+[project.urls]
+Homepage = "https://github.com/vinzgithub/posture-cockpit"
+Issues = "https://github.com/vinzgithub/posture-cockpit/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+posture_cockpit = [
+    "locales/*.json",
+    "checks/locales/*.json",
+    "demo/*.json",
+    "web/templates/*.html",
+    "web/static/*",
+    "web/static/fonts/*",
+    "report/*.html",
+    "report/*.css",
+    "report/fonts/*",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "tests"]
+addopts = "-p no:cacheprovider"
+filterwarnings = ["ignore:Using `httpx` with `starlette.testclient`"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "SIM", "RUF"]
+ignore = ["S101", "RUF001", "RUF002", "RUF003"]  # French text uses typographic characters
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI declares dependencies as default values: Depends(...) is meant to be there.
+extend-immutable-calls = ["fastapi.Depends"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S105", "S106"]
+
+[tool.mypy]
+python_version = "3.11"
+packages = ["posture_cockpit"]
+mypy_path = "src"
+ignore_missing_imports = true
+check_untyped_defs = true
+warn_unused_ignores = true
