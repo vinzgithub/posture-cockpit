@@ -7,6 +7,8 @@ import re
 import pytest
 
 from helpers import DEMO, post, setup_account
+from posture_cockpit.core import scoring
+from posture_cockpit.report import report_context
 from posture_cockpit.security import new_token, token_hash
 from worlds import DOMAIN, healthy
 
@@ -145,3 +147,55 @@ def test_pages_carry_a_strict_security_policy(signed_in):
     assert "script-src 'self'" in r.headers["content-security-policy"]
     assert "unsafe-inline" not in r.headers["content-security-policy"]
     assert ' style="' not in r.text  # inline styles would be blocked by the policy
+
+
+def unreachable(domain="down.example"):
+    """A domain whose name answers, and nothing else: DNS timeouts for mail, no web server."""
+    data = {"dns": {f"{domain} SOA": ["ns1.example.net. hostmaster.example.org. 1 7200 3600 1209600 300"],
+                    f"{domain} NS": ["ns1.example.net.", "ns2.example.net."],
+                    f"{domain} A": ["192.0.2.20"], f"www.{domain} A": ["192.0.2.20"]}}
+    for name in (domain, f"_dmarc.{domain}", f"_mta-sts.{domain}", f"_smtp._tls.{domain}"):
+        data["dns"][f"{name} TXT"] = "timeout"
+    data["dns"][f"{domain} MX"] = "timeout"
+    return data
+
+
+def test_a_domain_that_could_not_be_checked_is_not_evaluated_everywhere(signed_in, world):
+    """The same verdict on the plan, the list, the API, the PDF and in the database: never 100/A."""
+    world["down.example"] = unreachable()
+    assert scan(signed_in, "down.example").headers["location"] == "/domains/down.example"
+    s = signed_in.app.state.services
+    stored = s.scans.latest(s.scans.domain("down.example")["id"])
+    assert (stored.score, stored.grade) == (None, None) and stored.coverage < scoring.MIN_COVERAGE
+
+    plan = signed_in.get("/domains/down.example").text
+    assert "Non évalué" in plan and "Note impossible" in plan and "100</strong>" not in plan
+    assert re.search(r"Couverture \d+\xa0% : \d+ contrôles évalués sur \d+", plan)
+    assert "contrôles non évalués" in plan and "Le serveur n&#39;a pas répondu" in plan
+    listing = signed_in.get("/domains").text
+    assert "Non évalué" in listing
+
+    token = new_token()
+    s.accounts.add_token(1, "cron", token_hash(token))
+    data = next(d for d in signed_in.get("/api/v1/domains", headers={"Authorization": f"Bearer {token}"})
+                .json()["domains"] if d["domain"] == "down.example")
+    assert data["score"] is None and data["grade"] is None and data["evaluation"] == "not_evaluated"
+    assert data["not_evaluated"] > 0 and data["coverage"] == round(stored.coverage, 3)
+
+    context = report_context(s.catalog, "fr", stored)
+    assert context["result"].score is None and "trop peu pour donner une note" in context["diagnosis"]
+    assert context["gaps"] and context["perimeter"] == ""
+    pdf = signed_in.get("/domains/down.example/report.pdf")
+    assert pdf.status_code == 200 and pdf.content.startswith(b"%PDF")
+
+
+def test_score_is_the_same_on_every_surface(signed_in):
+    scan(signed_in, DEMO)
+    s = signed_in.app.state.services
+    stored = s.scans.latest(s.scans.domain(DEMO)["id"])
+    computed = scoring.assess(stored.current())
+    assert (stored.score, stored.grade) == (computed.score, computed.grade) == (57, "C")
+    page = signed_in.get(f"/domains/{DEMO}").text
+    assert '<strong>57</strong><span>/100</span>' in page and "Couverture 100" in page
+    context = report_context(s.catalog, "fr", stored)
+    assert (context["result"].score, context["result"].grade) == (57, "C")

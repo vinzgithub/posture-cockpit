@@ -196,6 +196,13 @@ input:disabled, textarea:disabled { background: var(--surface-2); color: var(--m
 .plain-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .table-scroll { overflow-x: auto; }
 .audit-alert td:nth-child(3) { color: var(--fail-text); font-weight: 700; }
+/* Coverage of a scan, and the checks that could not be evaluated. */
+.coverage { margin: 0; font-size: 13.5px; color: var(--ink-2); font-weight: 600; }
+.coverage-partial { color: var(--warn-text); }
+.scorecard-score.scorecard-none strong { font-size: 30px; letter-spacing: -.01em; }
+.gaps { font-size: 13.5px; color: var(--ink-2); }
+.gaps summary { font-weight: 700; color: var(--muted); }
+.gaps ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
 
 .grade { display: inline-grid; place-items: center; min-width: 34px; height: 30px; padding: 0 8px; border-radius: 8px; font-weight: 800; }
 .grade-big { min-width: 48px; height: 48px; border-radius: 14px; font-size: 22px; }
@@ -245,6 +252,7 @@ details > summary { cursor: pointer; }
 .domain-card-body strong { font-family: var(--mono); font-weight: 500; font-size: 15px; overflow-wrap: anywhere; }
 .domain-card-score { color: var(--muted); font-size: 14px; }
 .domain-card-score strong { color: var(--ink); font-size: 20px; }
+.domain-card-score small { display: block; text-align: right; font-size: 12px; font-weight: 700; }
 .chevron { width: 18px; height: 18px; fill: none; stroke: var(--faint); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
 .empty-state { max-width: 640px; align-items: flex-start; }
 

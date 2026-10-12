@@ -4,8 +4,13 @@
 
 Page 1 is for the decision-maker: grade, diagnosis in plain words and the
 "prescription" (the priority fixes, who does them, how long they take).
-Page 2 sums up each area and lists the improvements. The annex is for the
-technician: every check, what was found and the references.
+Page 2 sums up each area, lists the improvements and what could not be
+evaluated, and states the method. The annex is for the technician: every
+check, what was found and the references.
+
+The report shows the same result as the pages and the API (Scan.assessment):
+the score with its coverage, or "not evaluated". It names its perimeter; the
+report of an internal perimeter is marked for restricted distribution.
 
 The HTML is rendered with Jinja (report.html, report.css) and turned into PDF
 by WeasyPrint. WeasyPrint needs the Pango library; when it is missing the rest
@@ -59,7 +64,7 @@ def report_context(catalog: Catalog, lang: str, scan: Scan, author: str = "") ->
     """Everything the report template shows, already worded."""
     findings = scan.current()
     plan = scoring.plan(findings)
-    value = scoring.score(findings)
+    result = scan.assessment()
     counts = scoring.counts(findings)
 
     def t(key: str, /, **params: Any) -> str:
@@ -86,24 +91,33 @@ def report_context(catalog: Catalog, lang: str, scan: Scan, author: str = "") ->
 
     # The diagnosis: the numbers, then the critical findings in plain words.
     minutes = sum(p.minutes for p in prescriptions)
-    if prescriptions:
-        diagnosis = t("report.diagnosis.issues", total=len(findings), ok=counts.get(Status.OK, 0),
-                      fail=counts.get(Status.FAIL, 0), warn=counts.get(Status.WARN, 0))
-        conclusion = t("report.diagnosis.plan", n=len(prescriptions), minutes=minutes,
-                       grade=scoring.grade(plan.target))
+    numbers = {"total": result.evaluated, "ok": counts.get(Status.OK, 0), "fail": counts.get(Status.FAIL, 0),
+               "warn": counts.get(Status.WARN, 0)}
+    if not result.evaluated_ok:
+        diagnosis = t("report.diagnosis.not_evaluated", evaluated=result.evaluated, applicable=result.applicable)
+        conclusion = t("report.diagnosis.plan_unscored", n=len(prescriptions)) if prescriptions else ""
+    elif prescriptions:
+        diagnosis = t("report.diagnosis.issues", **numbers)
+        conclusion = t("report.diagnosis.plan", n=len(prescriptions), minutes=minutes, grade=plan.target.grade)
     else:
-        diagnosis = t("report.diagnosis.clean", total=len(findings), ok=counts.get(Status.OK, 0),
-                      warn=counts.get(Status.WARN, 0))
+        diagnosis = t("report.diagnosis.clean", **numbers)
         conclusion = ""
 
     categories = []
-    for category, cat_score in scoring.by_category(findings).items():
+    for category, assessment in scoring.by_category(findings).items():
         items = [f for f in findings if f.category == category and f.status.scored]
         worst = next((f for status in (Status.FAIL, Status.WARN) for f in items if f.status is status), None)
-        categories.append({
-            "label": t(f"category.{category}"), "score": cat_score,
-            "comment": _text(catalog, lang, worst.outcome.summary, worst, scan.domain) if worst else t("report.all_ok"),
-        })
+        if assessment.score is None:
+            comment = t("report.area_not_evaluated")
+        elif worst:
+            comment = _text(catalog, lang, worst.outcome.summary, worst, scan.domain)
+        else:
+            comment = t("report.all_ok")
+        categories.append({"label": t(f"category.{category}"), "score": assessment.score,
+                           "partial": assessment.partial, "comment": comment})
+
+    gaps = [{"title": t(f"{f.check_id}.title"), "reason": _text(catalog, lang, f.outcome.summary, f, scan.domain)}
+            for f in findings if f.status is Status.ERROR]
 
     annex = []
     for f in findings:
@@ -117,10 +131,13 @@ def report_context(catalog: Catalog, lang: str, scan: Scan, author: str = "") ->
     return {
         "lang": lang, "t": t, "domain": scan.domain, "scan": scan, "author": author,
         "file_number": f"{scan.started_at[:10].replace('-', '')}-{scan.id:04d}",
-        "date": fmt_date(scan.started_at[:10], lang), "score": value, "grade": scoring.grade(value),
-        "grade_label": t(scoring.grade_label(value)), "target": plan.target, "target_grade": scoring.grade(plan.target),
+        "date": fmt_date(scan.started_at[:10], lang), "time": scan.started_at[11:16],
+        "result": result, "grade_label": t(scoring.grade_label(result.grade)) if result.grade else "",
+        "coverage": t("score.coverage", evaluated=result.evaluated, applicable=result.applicable,
+                      percent=result.coverage_percent),
+        "perimeter": scan.perimeter,
         "diagnosis": diagnosis, "conclusion": conclusion, "prescriptions": prescriptions,
-        "improvements": improvements, "categories": categories, "annex": annex,
+        "improvements": improvements, "categories": categories, "annex": annex, "gaps": gaps,
         "checks_count": len(findings),
     }
 

@@ -71,20 +71,28 @@ class StepperStep:
     state: str  # "done", "active" or "todo"
 
 
+@dataclass(frozen=True)
+class GapView:
+    """A check that should have run and could not: why, in the reader's words."""
+
+    check_id: str
+    title: str
+    reason: str
+
+
 @dataclass
 class PlanView:
     domain: str
     scan: Scan
-    score: int
-    grade: str
-    grade_label: str
-    start_score: int
-    target: int
-    target_grade: str
+    now: scoring.Assessment      # the domain as it is now (rechecks included)
+    start: scoring.Assessment    # as the scan found it
+    target: scoring.Assessment   # once every priority is fixed
+    grade_label: str             # "" when not evaluated
     priorities: list[TaskView]
     improvements: list[TaskView]
     counts: dict[str, int]
-    categories: list[tuple[str, str, int]]   # (id, label, score)
+    categories: list[tuple[str, str, scoring.Assessment]]   # (id, label, assessment)
+    gaps: list[GapView]          # checks not evaluated
     dns_hosts: list[DnsHostView]
     dns_host: str                            # id of the selected host
     detected_host: str                       # name of the detected host, "" if unknown
@@ -97,6 +105,27 @@ class PlanView:
     @property
     def tasks(self) -> list[TaskView]:
         return self.priorities + self.improvements
+
+    @property
+    def score(self) -> int | None:
+        return self.now.score
+
+    @property
+    def grade(self) -> str | None:
+        return self.now.grade
+
+    @property
+    def target_score(self) -> int | None:
+        """The score once every priority is fixed, never below the current one."""
+        if self.target.score is None or self.now.score is None:
+            return None
+        return max(self.target.score, self.now.score)
+
+    @property
+    def target_grade(self) -> str | None:
+        if self.target.grade is None or self.now.grade is None:
+            return None
+        return min(self.target.grade, self.now.grade)  # "A" < "B": the better of the two
 
     @property
     def done_count(self) -> int:
@@ -165,6 +194,13 @@ def task_view(catalog: Catalog, lang: str, scan: Scan, finding: Finding, number:
     return view
 
 
+def gaps(catalog: Catalog, lang: str, domain: str, findings: list[Finding]) -> list[GapView]:
+    """The checks that could not be evaluated, with the reason (timeout, unreachable, destination refused)."""
+    return [GapView(f.check_id, catalog.text(lang, f"{f.check_id}.title"),
+                    catalog.text(lang, f.outcome.summary, {"domain": domain, **f.outcome.params}))
+            for f in findings if f.status is Status.ERROR]
+
+
 def plan_view(catalog: Catalog, lang: str, scan: Scan, domain_row: Row) -> PlanView:
     findings = scan.findings
     current = scan.current()
@@ -183,15 +219,15 @@ def plan_view(catalog: Catalog, lang: str, scan: Scan, domain_row: Row) -> PlanV
 
     priorities = views(plan.priorities, 1)
     improvements = views(plan.improvements, len(priorities) + 1)
-    value = scoring.score(current)
+    now = scan.assessment()
     counts = scoring.counts(current)
     view = PlanView(
-        domain=scan.domain, scan=scan, score=value, grade=scoring.grade(value),
-        grade_label=catalog.text(lang, scoring.grade_label(value)),
-        start_score=plan.score, target=max(plan.target, value), target_grade=scoring.grade(max(plan.target, value)),
+        domain=scan.domain, scan=scan, now=now, start=plan.now, target=plan.target,
+        grade_label=catalog.text(lang, scoring.grade_label(now.grade)) if now.grade else "",
         priorities=priorities, improvements=improvements,
         counts={status.value: counts.get(status, 0) for status in Status},
-        categories=[(cat, catalog.text(lang, f"category.{cat}"), s) for cat, s in scoring.by_category(current).items()],
+        categories=[(cat, catalog.text(lang, f"category.{cat}"), a) for cat, a in scoring.by_category(current).items()],
+        gaps=gaps(catalog, lang, scan.domain, current),
         dns_hosts=hosts, dns_host=selected, detected_host=detected.name if detected else "", nameservers=nameservers,
     )
     _tell_the_story(catalog, lang, view)
@@ -199,7 +235,7 @@ def plan_view(catalog: Catalog, lang: str, scan: Scan, domain_row: Row) -> PlanV
 
 
 def _tell_the_story(catalog: Catalog, lang: str, view: PlanView) -> None:
-    """Headline, subline, stepper and the note under the score bar, from where the user stands."""
+    """Headline, subline, stepper and the note under the score, from where the user stands."""
     def text(key: str, /, **params: object) -> str:
         return catalog.text(lang, key, params)
 
@@ -207,19 +243,26 @@ def _tell_the_story(catalog: Catalog, lang: str, view: PlanView) -> None:
     done = view.done_count
     remaining = total - done
     minutes = sum(t.minutes for t in view.priorities if not t.done)
-    start_grade = scoring.grade(view.start_score)
-    if total == 0:
+    now = view.now
+    if not now.evaluated_ok:
+        # Too little could be checked to grade the domain: say so first, then list what was found anyway.
+        view.headline = text("plan.headline.not_evaluated")
+        view.subline = text("plan.subline.not_evaluated", evaluated=now.evaluated, applicable=now.applicable,
+                            percent=now.coverage_percent)
+    elif total == 0:
         view.headline = text("plan.headline.clean")
         view.subline = (text("plan.subline.clean_improvements", n=len(view.improvements)) if view.improvements
                         else text("plan.subline.clean"))
     elif done == 0:
-        view.headline = (text("plan.headline.start", n=total, start=start_grade, end=view.target_grade)
-                         if start_grade != view.target_grade else text("plan.headline.start_points", n=total,
-                                                                        points=view.target - view.start_score))
+        start_grade, end_grade = view.start.grade, view.target_grade
+        target, start = view.target_score or 0, view.start.score or 0
+        view.headline = (text("plan.headline.start", n=total, start=start_grade, end=end_grade)
+                         if start_grade != end_grade else text("plan.headline.start_points", n=total,
+                                                               points=target - start))
         view.subline = text("plan.subline.start", minutes=minutes)
     elif remaining:
         view.headline = text("plan.headline.progress", n=remaining, grade=view.target_grade)
-        view.subline = text("plan.subline.progress", start=view.start_score, score=view.score)
+        view.subline = text("plan.subline.progress", start=view.start.score or 0, score=now.score)
     else:
         view.headline = text("plan.headline.done")
         view.subline = text("plan.subline.done")
@@ -232,5 +275,10 @@ def _tell_the_story(catalog: Catalog, lang: str, view: PlanView) -> None:
         StepperStep(text("plan.step.check"), text("plan.step.check_detail"), "active" if all_done else "todo"),
         StepperStep(text("plan.step.share"), text("plan.step.share_detail"), "todo"),
     ]
-    view.score_note = (text("plan.score_note.remaining", n=remaining) if remaining
-                       else text("plan.score_note.reached"))
+    if not now.evaluated_ok:
+        view.score_note = text("plan.score_note.not_evaluated")
+    elif now.partial:
+        view.score_note = text("plan.score_note.partial", percent=now.coverage_percent)
+    else:
+        view.score_note = (text("plan.score_note.remaining", n=remaining) if remaining
+                           else text("plan.score_note.reached"))

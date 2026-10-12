@@ -17,7 +17,7 @@ from fastapi.responses import Response
 from starlette.datastructures import FormData
 from starlette.exceptions import HTTPException
 
-from ...core import providers
+from ...core import providers, scoring
 from ...core.engine import normalize_domain
 from ...core.model import Status
 from ...core.network import NetworkError
@@ -45,7 +45,8 @@ router = APIRouter(prefix="/domains")
 
 def list_page(request: Request, user: Row, status: int = 200, **context):
     domains = services(request).scans.domains(internal=bool(user["is_admin"]))
-    return render(request, "domains.html", status=status, domains=domains, demo_domain=DEMO_DOMAIN, **context)
+    return render(request, "domains.html", status=status, domains=domains, demo_domain=DEMO_DOMAIN,
+                  full_coverage=scoring.FULL_COVERAGE, **context)
 
 
 @router.get("")
@@ -124,10 +125,12 @@ async def verify(request: Request, name: str, check_id: str, user: Row = Depends
     if finding is None:
         raise HTTPException(404)
     audit(request, "scan.internal.recheck" if perimeter else "scan.recheck", user=user, target=name, check=check_id)
-    before = scan.score
+    before = scan.assessment()
     after = s.scans.save_recheck(scan.id, finding)
-    if finding.status is Status.OK:
-        flash(request, "ok", "flash.verified", points=max(after - before, 0), score=after)
+    if finding.status is Status.OK and before.score is not None and after.score is not None:
+        flash(request, "ok", "flash.verified", points=max(after.score - before.score, 0), score=after.score)
+    elif finding.status is Status.OK:
+        flash(request, "ok", "flash.verified_unscored")
     else:
         flash(request, "warn", "flash.not_yet")
     return redirect(f"/domains/{name}?task={check_id}#task")

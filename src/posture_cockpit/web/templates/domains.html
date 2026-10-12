@@ -31,7 +31,8 @@
           <strong>{{ d.name }}{% if d.perimeter %} <span class="tag-internal" title="{{ t('perimeter.internal') }}">{{ d.perimeter }}</span>{% endif %}</strong>
           <small class="muted">{% if d.started_at %}{{ t('domains.scanned_on', date=date(d.started_at)) }}{% else %}{{ t('domains.never') }}{% endif %}</small>
         </span>
-        {% if d.score is not none %}<span class="domain-card-score"><strong>{{ d.score }}</strong>/100</span>{% endif %}
+        {% if d.score is not none %}<span class="domain-card-score"><strong>{{ d.score }}</strong>/100{% if d.coverage < full_coverage %}<small class="coverage-partial">{{ t('score.partial_short') }}</small>{% endif %}</span>
+        {% elif d.scan_id %}<span class="domain-card-score">{{ t('score.not_evaluated') }}</span>{% endif %}
         <svg class="chevron" viewBox="0 0 24 24" aria-hidden="true"><polyline points="9 6 15 12 9 18"/></svg>
       </a>
     </li>

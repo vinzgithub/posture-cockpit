@@ -25,6 +25,7 @@ from posture_cockpit.core.model import Status
 from posture_cockpit.core.network import LiveNetwork
 from posture_cockpit.core.registry import Registry
 from posture_cockpit.i18n import LOCALES, interface_texts
+from posture_cockpit.report import render_html
 from posture_cockpit.scanner import InternalScansDisabled, Scanner
 from posture_cockpit.security import hash_password, new_token, token_hash
 from posture_cockpit.storage import PerimeterError
@@ -189,6 +190,12 @@ def test_an_administrator_creates_a_perimeter_and_scans_an_intranet_site(admin):
     assert actions(admin)[:3] == ["scan.internal", "domain.added", "perimeter.created"]
     entry = services(admin).audit.latest(1)[0]
     assert entry["detail"]["perimeter"] == "Siège" and entry["target"] == INTRANET
+    assert scan.perimeter == "Siège"
+
+    report = render_html(services(admin).catalog, "fr", scan)
+    assert "Diffusion restreinte" in report and "Périmètre interne : Siège" in report
+    assert admin.get(f"/domains/{INTRANET}/report.pdf").status_code == 200
+    assert actions(admin)[0] == "report.internal"
 
 
 def test_a_perimeter_is_checked_and_its_name_is_unique(admin):

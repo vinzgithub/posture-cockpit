@@ -53,15 +53,25 @@ def _certificate_days(findings: Iterable[Finding]) -> int | None:
 
 
 def _summary(scan: Scan) -> dict:
+    """What a monitoring tool needs. ``score`` and ``grade`` are null when the scan is not evaluated
+    (too little could be checked); ``evaluation`` says which case applies."""
     current = scan.current()
     counts = scoring.counts(current)
+    result = scan.assessment()
+    evaluation = "not_evaluated" if not result.evaluated_ok else "partial" if result.partial else "complete"
     return {
         "domain": scan.domain,
-        "score": scan.score,
-        "grade": scan.grade,
+        "score": result.score,
+        "grade": result.grade,
+        "evaluation": evaluation,
+        "coverage": round(result.coverage, 3),
+        "checks_evaluated": result.evaluated,
+        "checks_applicable": result.applicable,
         "scanned_at": scan.started_at,
+        "perimeter": scan.perimeter or None,
         "critical": counts.get(Status.FAIL, 0),
         "to_improve": counts.get(Status.WARN, 0),
+        "not_evaluated": counts.get(Status.ERROR, 0),
         "certificate_days_left": _certificate_days(current),
     }
 

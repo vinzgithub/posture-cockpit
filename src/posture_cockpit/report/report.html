@@ -10,24 +10,30 @@
   <link rel="stylesheet" href="report.css">
 </head>
 <body>
-  <div class="running-footer">Posture Cockpit · {{ domain }} · {{ date }}</div>
+  <div class="running-footer">{% if perimeter %}{{ t('report.restricted') }} · {% endif %}Posture Cockpit · {{ domain }} · {{ date }}</div>
 
   <!-- Page 1: for the decision-maker -->
   <section class="sheet">
     <header class="masthead">
       <div>
-        <p class="kicker">{{ t('report.file_number', number=file_number) }} · {{ t('report.passive_scan', date=date) }}</p>
+        {% if perimeter %}<p class="restricted">{{ t('report.restricted') }} — {{ t('report.restricted_text') }}</p>{% endif %}
+        <p class="kicker">{{ t('report.file_number', number=file_number) }} · {{ t('report.passive_scan', date=date) }} · {{ time }} UTC</p>
         <h1>{{ domain }}</h1>
-        <p class="scope">{{ t('report.scope', n=checks_count) }}</p>
+        <p class="scope">{{ t('report.perimeter_internal', name=perimeter) if perimeter else t('report.perimeter_internet') }}</p>
+        <p class="scope">{{ coverage }}</p>
       </div>
       <div class="seal">
         <svg viewBox="0 0 120 120" width="118" height="118" aria-hidden="true">
           <circle cx="60" cy="60" r="56" fill="none" stroke="#8A2C1D" stroke-width="2.2"/>
           <circle cx="60" cy="60" r="49" fill="none" stroke="#8A2C1D" stroke-width="1" stroke-dasharray="1.5 3.5"/>
-          <text x="60" y="72" text-anchor="middle" font-family="Newsreader" font-weight="600" font-size="50" fill="#8A2C1D">{{ grade }}</text>
-          <text x="60" y="93" text-anchor="middle" font-family="IBM Plex Mono" font-size="10" fill="#8A2C1D">{{ score }} / 100</text>
+          {% if result.score is not none %}
+          <text x="60" y="72" text-anchor="middle" font-family="Newsreader" font-weight="600" font-size="50" fill="#8A2C1D">{{ result.grade }}</text>
+          <text x="60" y="93" text-anchor="middle" font-family="IBM Plex Mono" font-size="10" fill="#8A2C1D">{{ result.score }} / 100</text>
+          {% else %}
+          <text x="60" y="70" text-anchor="middle" font-family="Newsreader" font-weight="600" font-size="40" fill="#8A2C1D">–</text>
+          {% endif %}
         </svg>
-        <p class="seal-label">{{ grade_label }}</p>
+        <p class="seal-label">{{ grade_label if result.score is not none else t('score.not_evaluated') }}{% if result.partial %}<br><span class="seal-partial">{{ t('score.partial_short') }}</span>{% endif %}</p>
       </div>
     </header>
 
@@ -46,7 +52,7 @@
           <p class="p-meta">{{ t('report.who', who=p.who) }} · {{ t('report.minutes', n=p.minutes) }}</p>
         </div>
         <div class="p-side">
-          <span class="p-gain">{{ t('report.points', n=p.gain) }}</span>
+          {% if result.score is not none %}<span class="p-gain">{{ t('report.points', n=p.gain) }}</span>{% endif %}
           {% if p.deadline %}<span class="badge badge-urgent">{{ p.deadline }}</span>{% else %}<span class="badge">{{ t('status.fail') }}</span>{% endif %}
         </div>
       </li>
@@ -64,9 +70,9 @@
       {% for c in categories %}
       <tr>
         <th>{{ c.label }}</th>
-        <td class="num">{{ c.score }}</td>
-        <td class="bar"><svg viewBox="0 0 100 4" width="150" height="6" preserveAspectRatio="none"><rect width="100" height="4" fill="#E2DACB"/><rect width="{{ c.score }}" height="4" fill="#1C1B18"/></svg></td>
-        <td>{{ c.comment }}</td>
+        <td class="num">{{ c.score if c.score is not none else '–' }}</td>
+        <td class="bar">{% if c.score is not none %}<svg viewBox="0 0 100 4" width="150" height="6" preserveAspectRatio="none"><rect width="100" height="4" fill="#E2DACB"/><rect width="{{ c.score }}" height="4" fill="#1C1B18"/></svg>{% endif %}</td>
+        <td>{{ c.comment }}{% if c.partial %} <span class="ref">({{ t('score.partial_short') }})</span>{% endif %}</td>
       </tr>
       {% endfor %}
     </table>
@@ -75,8 +81,15 @@
     <p class="section-label">{{ t('report.improvements') }}</p>
     <ul class="improvements">
       {% for i in improvements %}
-      <li><strong>{{ i.title }}</strong> — {{ i.summary }}{% if i.gain > 0 %} <span class="gain">({{ t('report.points', n=i.gain) }})</span>{% endif %}</li>
+      <li><strong>{{ i.title }}</strong> — {{ i.summary }}{% if i.gain > 0 and result.score is not none %} <span class="gain">({{ t('report.points', n=i.gain) }})</span>{% endif %}</li>
       {% endfor %}
+    </ul>
+    {% endif %}
+
+    {% if gaps %}
+    <p class="section-label">{{ t('report.gaps') }}</p>
+    <ul class="improvements">
+      {% for g in gaps %}<li><strong>{{ g.title }}</strong> — {{ g.reason }}</li>{% endfor %}
     </ul>
     {% endif %}
 

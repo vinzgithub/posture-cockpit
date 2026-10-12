@@ -9,10 +9,61 @@ the migration's transaction.
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from collections.abc import Callable
 
+from ..core import scoring
+from ..core.model import Finding
+
 Migration = str | Callable[[sqlite3.Connection], None]
+
+
+def _scores_with_coverage(conn: sqlite3.Connection) -> None:
+    """3 — version 0.2.0: a scan may be "not evaluated", and keeps its coverage and perimeter.
+
+    The table is rebuilt (SQLite cannot drop NOT NULL from a column), then the
+    score, grade and coverage of every stored scan are computed again from its
+    findings and rechecks with the rules of core/scoring.py. With the same
+    weights, a scan whose coverage reaches 50 % keeps its score; below, it
+    becomes "not evaluated" (0.1.0 gave 100/A when nothing could be checked);
+    below 90 %, an A becomes a B. The findings themselves are not touched, and
+    the database was copied to backups/ before this migration.
+    """
+    conn.execute("""
+        CREATE TABLE scans_new (
+            id INTEGER PRIMARY KEY,
+            domain_id INTEGER NOT NULL REFERENCES domains(id) ON DELETE CASCADE,
+            started_at TEXT NOT NULL,
+            duration_ms INTEGER NOT NULL,
+            score INTEGER,                        -- NULL: not evaluated; updated after each recheck
+            grade TEXT,                           -- NULL: not evaluated
+            coverage REAL NOT NULL DEFAULT 1,     -- weight evaluated / weight applicable, 0 to 1
+            version TEXT NOT NULL,                -- application version that ran the scan
+            started_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+            perimeter TEXT NOT NULL DEFAULT ''    -- internal perimeter at the time of the scan ('' = Internet)
+        )""")
+    conn.execute("INSERT INTO scans_new(id, domain_id, started_at, duration_ms, score, grade, version, started_by) "
+                 "SELECT id, domain_id, started_at, duration_ms, score, grade, version, started_by FROM scans")
+    conn.execute("DROP TABLE scans")
+    conn.execute("ALTER TABLE scans_new RENAME TO scans")
+    conn.execute("CREATE INDEX scans_by_domain ON scans(domain_id, started_at)")
+    for (scan_id,) in conn.execute("SELECT id FROM scans").fetchall():
+        current: dict[str, Finding] = {}
+        for check_id, category, weight, status, outcome in conn.execute(
+                "SELECT check_id, category, weight, status, outcome FROM findings WHERE scan_id = ? ORDER BY rowid",
+                (scan_id,)).fetchall():
+            current[check_id] = Finding.from_stored(check_id, category, weight, status, json.loads(outcome))
+        for check_id, status, outcome in conn.execute(
+                "SELECT check_id, status, outcome FROM rechecks WHERE scan_id = ?", (scan_id,)).fetchall():
+            if check_id in current:
+                original = current[check_id]
+                current[check_id] = Finding.from_stored(check_id, original.category, original.weight, status,
+                                                        json.loads(outcome))
+        result = scoring.assess(list(current.values()))
+        conn.execute("UPDATE scans SET score = ?, grade = ?, coverage = ? WHERE id = ?",
+                     (result.score, result.grade, result.coverage, scan_id))
+
 
 MIGRATIONS: list[Migration] = [
     # 1 — version 0.1.0
@@ -126,4 +177,5 @@ MIGRATIONS: list[Migration] = [
     );
     CREATE INDEX audit_log_by_time ON audit_log(at);
     """,
+    _scores_with_coverage,
 ]

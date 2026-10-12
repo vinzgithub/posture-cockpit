@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from posture_cockpit.core import engine
+from posture_cockpit.core import engine, scoring
 from posture_cockpit.core.fixture import FixtureNetwork
 from posture_cockpit.core.registry import Registry
 from posture_cockpit.storage import Database, Scans
@@ -63,22 +63,37 @@ def test_upgrade_from_0_1_0_keeps_the_data_and_a_backup(tmp_path):
     old = Database(path, MIGRATIONS[:1])
     old.execute("INSERT INTO users(username, pw_hash, created_at, is_admin) VALUES('vincent', 'x', '2026-01-01', 1)")
     old.execute("INSERT INTO domains(name, created_at) VALUES('example.org', '2026-01-01')")
+    finding = "INSERT INTO findings VALUES(?, ?, ?, ?, ?, '{\"summary\": \"x\"}')"
+    # Scan 1: an ordinary scan, scored 75/B by 0.1.0.
     old.execute("INSERT INTO scans(domain_id, started_at, duration_ms, score, grade, version) "
-                "VALUES(1, '2026-01-02T10:00:00+00:00', 900, 72, 'B', '0.1.0')")
-    old.execute("INSERT INTO findings VALUES(1, 'mail.dmarc', 'mail', 10, 'warn', '{\"summary\": \"x\"}')")
-    old.execute("INSERT INTO rechecks VALUES(1, 'mail.dmarc', 'ok', '{\"summary\": \"y\"}', '2026-01-03')")
+                "VALUES(1, '2026-01-02T10:00:00+00:00', 900, 75, 'B', '0.1.0')")
+    old.execute(finding, (1, "mail.dmarc", "mail", 10, "warn"))
+    old.execute(finding, (1, "tls.certificate", "tls", 10, "ok"))
+    # Scan 2: almost nothing could be checked, and 0.1.0 said 100/A.
+    old.execute("INSERT INTO scans(domain_id, started_at, duration_ms, score, grade, version) "
+                "VALUES(1, '2026-01-03T10:00:00+00:00', 900, 100, 'A', '0.1.0')")
+    old.execute(finding, (2, "tls.certificate", "tls", 10, "error"))
+    old.execute(finding, (2, "web.hsts", "web", 6, "error"))
+    old.execute(finding, (2, "dns.caa", "dns", 2, "ok"))
+    old.execute("INSERT INTO rechecks VALUES(1, 'mail.dmarc', 'warn', '{\"summary\": \"y\"}', '2026-01-03')")
     old.close()
 
     db = Database(path)
     assert db.schema_version == len(MIGRATIONS)
     assert db.value("SELECT username FROM users") == "vincent"
     assert dict(db.one("SELECT name, perimeter_id FROM domains")) == {"name": "example.org", "perimeter_id": None}
-    assert db.value("SELECT COUNT(*) FROM findings") == 1 and db.value("SELECT COUNT(*) FROM rechecks") == 1
+    assert db.value("SELECT COUNT(*) FROM findings") == 5 and db.value("SELECT COUNT(*) FROM rechecks") == 1
+    rows = [dict(r) for r in db.all("SELECT id, score, grade, coverage, perimeter FROM scans ORDER BY id")]
+    assert rows[0] == {"id": 1, "score": 75, "grade": "B", "coverage": 1.0, "perimeter": ""}  # unchanged
+    assert rows[1]["score"] is None and rows[1]["grade"] is None                              # not evaluated
+    assert rows[1]["coverage"] == pytest.approx(2 / 18)
+    assert Scans(db).get(1).assessment().score == 75
+
     backups = list((tmp_path / "backups").glob("posture_cockpit-schema1-*.db"))
     assert len(backups) == 1
     copy = sqlite3.connect(backups[0])
     assert copy.execute("SELECT value FROM meta WHERE key = 'schema_version'").fetchone() == ("1",)
-    assert copy.execute("SELECT score FROM scans").fetchone() == (72,)
+    assert copy.execute("SELECT score, grade FROM scans WHERE id = 2").fetchone() == (100, "A")  # as it was
     copy.close()
     for file in (path, backups[0]):
         assert file.stat().st_mode & 0o777 == 0o600, file
@@ -94,9 +109,10 @@ def test_rechecks_update_the_score_but_keep_the_scan(tmp_path):
     before = scans.get(scan_id)
     assert before.score < 100
     fixed = asyncio.run(engine.scan(DOMAIN, [registry.get("mail.dmarc")], FixtureNetwork(healthy(), NOW), now=NOW))
-    assert scans.save_recheck(scan_id, fixed.findings[0]) == 100
+    assert scans.save_recheck(scan_id, fixed.findings[0]).score == 100
     after = scans.get(scan_id)
-    assert after.score == 100 and after.grade == "A"
+    assert after.score == 100 and after.grade == "A" and after.coverage == 1.0
+    assert after.assessment() == scoring.assess(after.current())  # what is stored is what is computed
     assert next(f for f in after.findings if f.check_id == "mail.dmarc").status.value == "fail"  # original kept
     assert next(f for f in after.current() if f.check_id == "mail.dmarc").status.value == "ok"
 
