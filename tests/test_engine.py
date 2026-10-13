@@ -266,3 +266,51 @@ def test_a_check_that_times_out_does_not_cancel_shared_work_for_the_others():
     impatient_result, patient_result = asyncio.run(main())
     assert impatient_result.status is Status.ERROR
     assert patient_result.outcome.params == {"value": 7}
+
+
+
+@pytest.mark.asyncio
+async def test_smtp_engine_observations_are_explicitly_disabled_by_default():
+    class NoNetwork:
+        async def dns(self, *args):
+            pytest.fail("disabled SMTP observation performed DNS")
+
+    assert await engine.smtp_observations("example.org", NoNetwork()) == ()
+
+
+@pytest.mark.asyncio
+async def test_smtp_engine_observations_respect_dns_mx_and_host_limit():
+    from posture_cockpit.core.network import DnsAnswer
+    from posture_cockpit.checks.smtp_probe import SmtpObservation
+
+    class FakeNetwork:
+        def __init__(self):
+            self.probed = []
+            self.dns_calls = []
+
+        async def dns(self, name, kind):
+            self.dns_calls.append((name, kind))
+            return DnsAnswer(("10 mx1.example.org.", "20 mx2.example.org.",
+                              "30 mx3.example.org.", "0 .", "bad MX"))
+
+        async def smtp_ehlo_for_domain(self, domain, host, *, verify_tls):
+            self.probed.append((domain, host, verify_tls))
+            return SmtpObservation(host, (), False)
+
+    net = FakeNetwork()
+    results = await engine.smtp_observations("example.org", net, enabled=True, max_hosts=2)
+    assert [result.mx for result in results] == ["mx1.example.org", "mx2.example.org"]
+    assert net.probed == [
+        ("example.org", "mx1.example.org", True),
+        ("example.org", "mx2.example.org", True),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_smtp_engine_rejects_invalid_host_limit_before_dns():
+    class NoNetwork:
+        async def dns(self, *args):
+            pytest.fail("invalid limit triggered DNS")
+
+    with pytest.raises(ValueError, match="host limit"):
+        await engine.smtp_observations("example.org", NoNetwork(), enabled=True, max_hosts=6)
