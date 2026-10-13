@@ -123,6 +123,10 @@ async def smtp_observations(
         return ()
     if not 1 <= max_hosts <= 5:
         raise ValueError("SMTP host limit must be between 1 and 5")
+    if normalize_domain(domain) != domain:
+        raise ValueError("SMTP audit requires a normalized domain name")
+    if net.policy.internal:
+        raise NetworkError("SMTP probing is disabled for internal perimeters")
     records = (await net.dns(domain, "MX")).records
     hosts: list[str] = []
     for record in records:
