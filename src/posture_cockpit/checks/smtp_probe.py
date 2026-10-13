@@ -18,7 +18,7 @@ class SmtpObservation:
 
 
 async def _reply(reader: asyncio.StreamReader) -> tuple[str, ...]:
-    lines = []
+    lines: list[str] = []
     for _ in range(32):
         raw = await reader.readline()
         if not raw or len(raw) > 1024 or not raw.endswith(b"\n"):
