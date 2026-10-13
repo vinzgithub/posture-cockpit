@@ -5,26 +5,26 @@
 <p class="small"><a href="/domains/{{ domain.name }}">← {{ t('details.back') }}</a></p>
 <div class="page-head">
   {% if domain.perimeter %}<p class="eyebrow"><span class="tag-internal">{{ t('perimeter.internal_audit', name=domain.perimeter) }}</span></p>{% endif %}
-  <h1>{{ t('details.history') }} <span class="muted">· {{ domain.name }}</span></h1>
+  <h1 class="history-heading">{{ t('details.history') }} <span class="muted">· {{ domain.name }}</span></h1>
   <p class="lead">{{ t('history.count', n=total) }}</p>
 </div>
-<section class="panel">
-<div class="table-scroll"><table class="table history">
+<section class="panel history-panel">
+<div class="table-scroll history-scroll"><table class="table history">
 <thead><tr><th>{{ t('details.history_date') }}</th><th>{{ t('details.history_result') }}</th><th>{{ t('details.history_coverage') }}</th><th>{{ t('details.history_version') }}</th><th>{{ t('history.actions') }}</th></tr></thead>
 <tbody>
 {% for h in history %}
 <tr>
-  <td>{{ date(h.started_at) }} {{ local_time(h.started_at) }}</td>
-  <td>{% if h.score is not none %}<span class="grade grade-{{ h.grade }}">{{ h.grade }}</span> {{ h.score }}/100{% else %}{{ t('score.not_evaluated') }}{% endif %}</td>
-  <td class="{{ 'coverage-partial' if h.coverage < full_coverage }}">{{ (h.coverage * 100 + 0.000001) | int }}&nbsp;%</td>
-  <td>{{ h.version }}</td>
-  <td><a href="/domains/{{ domain.name }}/history/{{ h.id }}">{{ t('history.view') }}</a> · <a href="/domains/{{ domain.name }}/history/{{ h.id }}/report.pdf">{{ t('history.pdf') }}</a></td>
+  <td class="history-date"><time datetime="{{ h.started_at }}">{{ date(h.started_at) }} <span class="history-clock">{{ local_time(h.started_at) }}</span></time></td>
+  <td class="history-result">{% if h.score is not none %}<span class="grade grade-{{ h.grade }}">{{ h.grade }}</span> <span class="history-score">{{ h.score }}/100</span>{% else %}{{ t('score.not_evaluated') }}{% endif %}</td>
+  <td class="history-coverage {{ 'coverage-partial' if h.coverage < full_coverage }}" data-label="{{ t('details.history_coverage') }}">{{ (h.coverage * 100 + 0.000001) | int }}&nbsp;%</td>
+  <td class="history-version" data-label="{{ t('details.history_version') }}">{{ h.version }}</td>
+  <td class="history-actions"><a class="btn btn-secondary" href="/domains/{{ domain.name }}/history/{{ h.id }}">{{ t('history.view') }}</a> <a class="btn btn-secondary" href="/domains/{{ domain.name }}/history/{{ h.id }}/report.pdf">{{ t('history.pdf') }}</a></td>
 </tr>
 {% endfor %}
 </tbody>
 </table></div>
 {% if pages > 1 %}
-<nav aria-label="{{ t('details.history') }}" class="side-links">
+<nav aria-label="{{ t('details.history') }}" class="side-links history-pagination">
 {% if page > 1 %}<a class="btn btn-secondary" href="?page={{ page - 1 }}">{{ t('history.previous') }}</a>{% endif %}
 <span>{{ t('history.page', page=page, pages=pages) }}</span>
 {% if page < pages %}<a class="btn btn-secondary" href="?page={{ page + 1 }}">{{ t('history.next') }}</a>{% endif %}
