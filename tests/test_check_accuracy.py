@@ -57,7 +57,7 @@ def with_headers(**headers):
     ("v=DMARC1; p=reject; adkim=x", (Status.WARN, "mail.dmarc.syntax")),
     # 0.1.0: "missing". §6.6.3: a record that does not start with v=DMARC1 is discarded.
     ("p=reject; v=DMARC1", (Status.FAIL, "mail.dmarc.malformed")),
-    ("v=DMARC1; rua=mailto:d@example.org", (Status.FAIL, "mail.dmarc.invalid")),
+    ("v=DMARC1; rua=mailto:d@example.org", (Status.WARN, "mail.dmarc.monitoring")),
     # Subdomains left out of an enforced policy.
     ("v=DMARC1; p=reject; sp=none", (Status.WARN, "mail.dmarc.subdomains_open")),
     ("v=DMARC1; p=reject; sp=quarantine; rua=mailto:a@example.org,mailto:b@example.net!10m",
