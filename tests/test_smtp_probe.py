@@ -4,10 +4,16 @@
 
 import asyncio
 import ssl
+from datetime import UTC, datetime, timedelta
+
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.x509.oid import NameOID
 
 import pytest
 
-from posture_cockpit.checks.smtp_probe import _reply, probe_smtp_ehlo
+from posture_cockpit.checks.smtp_probe import _certificate_details, _reply, probe_smtp_ehlo
 from posture_cockpit.core.network import DnsAnswer, Limits, LiveNetwork, NetworkError
 
 
@@ -206,6 +212,9 @@ async def test_verified_starttls_handshake_uses_mx_hostname(monkeypatch):
         def version(self):
             return "TLSv1.3"
 
+        def getpeercert(self, binary_form=False):
+            return b"fake DER"
+
     writer.start_tls = start_tls
     writer.get_extra_info = lambda name: TLS() if name == "ssl_object" else None
 
@@ -214,10 +223,16 @@ async def test_verified_starttls_handshake_uses_mx_hostname(monkeypatch):
                            "220 Ready to start TLS"), writer
 
     monkeypatch.setattr(asyncio, "open_connection", fake_open)
+    expires = datetime.now(UTC) + timedelta(days=20)
+    monkeypatch.setattr("posture_cockpit.checks.smtp_probe._certificate_details",
+                        lambda der: ("Test CA", expires, 20))
     result = await probe_smtp_ehlo(
         "mx.example.org", ("mx.example.org",), ("8.8.8.8",),
         reserve_connection=lambda: None, verify_tls=True,
     )
+    assert result.certificate_issuer == "Test CA"
+    assert result.certificate_not_after == expires
+    assert result.certificate_days_remaining == 20
     assert result.tls_verified is True
     assert result.tls_protocol == "TLSv1.3"
     assert handshakes == [(ssl.CERT_REQUIRED, True, "mx.example.org", 5.0)]
@@ -244,3 +259,23 @@ async def test_verified_starttls_reports_certificate_failure(monkeypatch):
     assert result.starttls_accepted is True
     assert result.tls_verified is False
     assert "certificate verify failed" in result.tls_error
+
+
+
+def test_certificate_details_from_der():
+    key = ec.generate_private_key(ec.SECP256R1())
+    issuer = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "MX Test Authority")])
+    now = datetime.now(UTC)
+    cert = (
+        x509.CertificateBuilder()
+        .subject(issuer).issuer(issuer).public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - timedelta(days=1))
+        .not_valid_after(now + timedelta(days=31))
+        .sign(key, hashes.SHA256())
+    )
+    der = cert.public_bytes(serialization.Encoding.DER)
+    name, expires, remaining = _certificate_details(der)
+    assert name == "MX Test Authority"
+    assert expires.tzinfo is not None
+    assert 29 <= remaining <= 31
