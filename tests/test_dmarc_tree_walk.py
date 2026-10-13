@@ -90,3 +90,21 @@ def test_existing_domain_uses_sp_not_np():
     })
     assert f.status is Status.OK
     assert f.outcome.evidence["existence"] == "existing"
+
+
+def test_invalid_exact_policy_falls_back_to_parent():
+    f = _check("sub.example.org", {
+        "_dmarc.sub.example.org TXT": ["p=reject; v=DMARC1"],
+        "_dmarc.example.org TXT": ["v=DMARC1; p=reject; psd=n"],
+    })
+    assert f.status is Status.OK
+    assert f.outcome.evidence["found_at"] == "_dmarc.example.org"
+
+
+def test_invalid_sp_never_reports_full_enforcement():
+    f = _check("sub.example.org", {
+        "_dmarc.sub.example.org TXT": None,
+        "_dmarc.example.org TXT": ["v=DMARC1; p=reject; sp=invalid; rua=mailto:a@example.org"],
+    })
+    assert f.status is Status.WARN
+    assert f.outcome.summary == "mail.dmarc.invalid_monitoring"
