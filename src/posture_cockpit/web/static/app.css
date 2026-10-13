@@ -222,6 +222,39 @@ input:disabled, textarea:disabled { background: var(--surface-2); color: var(--m
 .table th { text-align: left; color: var(--muted); font-weight: 700; font-size: 12.5px; padding: 8px 10px; border-bottom: 1px solid var(--line); }
 .table td { padding: 10px; border-bottom: 1px solid var(--line-soft); vertical-align: middle; }
 
+/* History: desktop table, readable card layout on narrow viewports. */
+.history-heading { overflow-wrap: anywhere; }
+.history .history-date time { display: inline-block; }
+.history .history-clock { white-space: nowrap; }
+.history-actions { white-space: nowrap; }
+.history-actions .btn { height: 36px; padding: 0 12px; font-size: 13px; }
+.history-actions .btn + .btn { margin-left: 6px; }
+.history-pagination { flex-direction: row; flex-wrap: wrap; gap: 12px; align-items: center; padding: 12px; }
+.history-pagination .btn { flex: 0 1 auto; }
+
+@media (max-width: 720px) {
+  .history-panel { min-width: 0; }
+  .history-scroll { overflow: visible; min-width: 0; }
+  .history { display: block; }
+  .history thead { display: none; }
+  .history tbody { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .history tr {
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 12px 16px; min-width: 0; padding: 16px;
+    border: 1px solid var(--line); border-radius: 14px; background: var(--surface-2);
+  }
+  .history td { display: block; min-width: 0; padding: 0; border: 0; overflow-wrap: anywhere; }
+  .history-date { grid-column: 1 / -1; font-weight: 700; }
+  .history-result { grid-column: 1 / -1; display: flex !important; gap: 8px; align-items: center; }
+  .history-score { font-weight: 700; }
+  .history-coverage, .history-version { display: flex !important; flex-direction: column; gap: 3px; }
+  .history-coverage::before, .history-version::before {
+    content: attr(data-label); font-size: 12px; font-weight: 700; color: var(--muted);
+  }
+  .history-actions { grid-column: 1 / -1; display: flex !important; flex-wrap: wrap; gap: 8px; white-space: normal; }
+  .history-actions .btn { flex: 1 1 120px; margin: 0 !important; white-space: normal; text-align: center; height: auto; min-height: 42px; }
+}
+
 details > summary { cursor: pointer; }
 .secret { display: block; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--line); word-break: break-all; font-size: 15px; }
 
