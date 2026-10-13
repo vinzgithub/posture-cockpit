@@ -5,9 +5,9 @@
 import pytest
 
 from helpers import DEMO, post, setup_account
-from posture_cockpit.report import render_html
-from posture_cockpit.i18n import finding_summary
 from posture_cockpit.core.model import Finding, Outcome, Status
+from posture_cockpit.i18n import finding_summary
+from posture_cockpit.report import render_html
 
 
 @pytest.fixture
