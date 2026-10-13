@@ -62,7 +62,6 @@ SPF_LOOKUP_LIMIT = 10  # RFC 7208 §4.6.4: more DNS lookups than this and SPF fa
 DKIM_SELECTORS = ("default", "dkim", "mail", "selector1", "selector2", "google", "k1", "k2", "s1", "s2",
                   "protonmail", "protonmail2", "fm1", "fm2", "zoho", "mxvault", "smtp", "key1")
 MTA_STS_MIN_MAX_AGE = 86_400  # a policy cached for less than a day protects little (RFC 8461 §3.2: "weeks")
-DMARC_TREE_WALK = 5  # parent names searched for an inherited DMARC policy
 
 
 # ---------------------------------------------------------------- helpers
@@ -229,7 +228,7 @@ async def dmarc(ctx: CheckContext) -> Outcome:
     inherited = owner != ctx.domain
     valid = [r for r in candidates if parse_dmarc(r).starts_right]
     if not valid:
-        # RFC 7489 §6.6.3: a record that does not start with "v=DMARC1" is discarded.
+        # RFC 9989 §4.10: a record that does not start with "v=DMARC1" is discarded.
         return fail("mail.dmarc.malformed", Remedy(10, Effort.EASY, how="mail.dmarc.malformed.how"), evidence,
                     name=f"_dmarc.{owner}")
     if len(valid) > 1:
@@ -278,7 +277,8 @@ async def dmarc(ctx: CheckContext) -> Outcome:
             return warn("mail.dmarc.monitoring_inherited", Remedy(10, Effort.MEDIUM, how="mail.dmarc.monitoring.how"),
                         evidence, **params)
         # Next step once the reports show that legitimate mail passes: quarantine.
-        stricter = re.sub(r"(?<![a-z])p\s*=\s*none", "p=quarantine", valid[0], count=1, flags=re.IGNORECASE)
+        stricter = (re.sub(r"(?<![a-z])p\s*=\s*none", "p=quarantine", valid[0], count=1, flags=re.IGNORECASE)
+                    if "p" in record.tags else valid[0].rstrip("; ") + "; p=quarantine")
         return warn("mail.dmarc.monitoring", Remedy(10, Effort.MEDIUM, how="mail.dmarc.monitoring.how",
                                                     dns=(DnsChange("delete", "TXT", "_dmarc", valid[0]),
                                                          DnsChange("add", "TXT", "_dmarc", stricter))),
@@ -287,9 +287,6 @@ async def dmarc(ctx: CheckContext) -> Outcome:
         evidence["errors"] = [list(e) for e in record.errors]
         return warn("mail.dmarc.syntax", Remedy(5, Effort.EASY, how="mail.dmarc.syntax.how"), evidence,
                     tags=_tags_text(record.errors), name=f"_dmarc.{owner}", **params)
-    if record.pct < 100:
-        return warn("mail.dmarc.partial", Remedy(5, Effort.MEDIUM, how="mail.dmarc.partial.how"), evidence,
-                    pct=record.pct, **params)
     if not inherited and record.subdomain_policy == "none":
         return warn("mail.dmarc.subdomains_open", Remedy(5, Effort.MEDIUM, how="mail.dmarc.subdomains_open.how"),
                     evidence, **params)
