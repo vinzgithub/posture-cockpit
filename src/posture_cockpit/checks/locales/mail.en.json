@@ -1,9 +1,7 @@
 {
   "mail.extension.name": "Mail",
   "mail.extension.description": "MX, SPF, DKIM, DMARC, MTA-STS and TLS reporting.",
-
   "mail.no_inbound": "The domain receives no mail: this check does not apply.",
-
   "mail.mx.title": "Mail servers",
   "mail.mx.why": "MX records say where the domain's mail arrives. This is information, unless a server named there cannot be reached.",
   "mail.mx.none": "No mail server: the domain receives no mail.",
@@ -16,7 +14,6 @@
   "mail.mx.unresolved": "{n:mail server has|mail servers have} no address in the DNS ({hosts}): mail meant for them cannot be delivered.",
   "mail.mx.unresolved.action": "Make the mail servers reachable",
   "mail.mx.message": "Hello,\n\nThe MX record of {domain} names servers without an address in the DNS ({hosts}): mail meant for them cannot be delivered.\n\nCould you check the MX records?\n\nThank you.",
-
   "mail.spf.title": "Allowed senders (SPF)",
   "mail.spf.action": "Publish the list of allowed senders (SPF)",
   "mail.spf.why": "SPF publishes the list of servers allowed to send e-mail for the domain. Receiving mail services use it to set fakes aside.",
@@ -47,7 +44,6 @@
   "mail.spf.ptr": "The SPF record uses the \"ptr\" mechanism, which the standard advises against: it is slow and some receivers ignore it.",
   "mail.spf.ptr.action": "Remove the ptr mechanism",
   "mail.spf.ptr.how": "Replace \"ptr\" by the addresses (ip4:, ip6:) or names (a:) of the servers that send the mail.",
-
   "mail.dmarc.title": "Protection against spoofing (DMARC)",
   "mail.dmarc.action": "Publish a DMARC policy",
   "mail.dmarc.why": "Without DMARC, anyone can send an e-mail that seems to come from the domain, such as a fake invoice with other bank details. DMARC tells mail services what to do with such fakes, and sends you reports.",
@@ -77,7 +73,6 @@
   "mail.dmarc.subdomains_open.action": "Protect the subdomains too",
   "mail.dmarc.subdomains_open.how": "Remove \"sp=none\" from the _dmarc record so that subdomains follow the same policy, or set sp=quarantine.",
   "mail.dmarc.enforced_inherited": "The domain is protected by the DMARC policy of {parent} (p={policy} for subdomains).",
-
   "mail.dkim.title": "E-mail signature (DKIM)",
   "mail.dkim.action": "Lengthen the DKIM key",
   "mail.dkim.why": "DKIM signs every e-mail sent: the recipient checks that it really comes from you and was not changed on the way.",
@@ -90,7 +85,6 @@
   "mail.dkim.unreadable": "A published DKIM key cannot be read ({selectors}): e-mails signed with it fail verification.",
   "mail.dkim.unreadable.action": "Publish the DKIM key again",
   "mail.dkim.unreadable.message": "Hello,\n\nThe DKIM key published for {domain} (selector {selectors}) cannot be read: it is probably cut or copied wrongly. E-mails signed with this key fail verification.\n\nCould you send us the exact DNS record to publish again?\n\nThank you.",
-
   "mail.mta_sts.title": "Encryption required on delivery (MTA-STS)",
   "mail.mta_sts.action": "Require encryption for incoming mail",
   "mail.mta_sts.why": "MTA-STS makes the servers that write to you encrypt the connection and check they talk to the right server. Without it, someone in between can read or divert the mail.",
@@ -112,7 +106,6 @@
   "mail.mta_sts.short_max_age": "The MTA-STS policy is only remembered for {seconds:second|seconds}: the protection lasts little between two visits.",
   "mail.mta_sts.short_max_age.action": "Lengthen the MTA-STS policy duration",
   "mail.mta_sts.max_age_message": "Hello,\n\nThe MTA-STS policy of {domain} has a duration (max_age) of {seconds} seconds. The standard recommends several weeks, for instance max_age: 1209600. Could you lengthen it?\n\nThank you.",
-
   "mail.tls_rpt.title": "Encryption reports (TLS-RPT)",
   "mail.tls_rpt.action": "Receive the mail encryption reports",
   "mail.tls_rpt.why": "These daily reports list e-mails that could not reach you over an encrypted connection. They show a problem before it costs a message.",
@@ -122,5 +115,8 @@
   "mail.tls_rpt.how": "Create the address given (or replace it with an existing one): it will get one short report per day and per sender.",
   "mail.tls_rpt.invalid": "The TLS-RPT record is invalid ({problems}): no report will be sent.",
   "mail.tls_rpt.invalid.action": "Fix the TLS-RPT record",
-  "mail.tls_rpt.invalid.how": "There must be a single _smtp._tls record, like \"v=TLSRPTv1; rua=mailto:address@{domain}\"."
+  "mail.tls_rpt.invalid.how": "There must be a single _smtp._tls record, like \"v=TLSRPTv1; rua=mailto:address@{domain}\".",
+  "mail.dmarc.testing": "DMARC requests testing mode (t=y): declared policy p={policy}, effective level {effective}.",
+  "mail.dmarc.existence_unknown": "DNS could not establish whether the domain exists: the np policy inherited from {parent} cannot be assessed reliably.",
+  "mail.dmarc.invalid_monitoring": "DMARC policy at {name} has an invalid policy value: reporting-only processing may remain available."
 }
