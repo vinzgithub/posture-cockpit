@@ -176,6 +176,20 @@ def test_mta_sts_invalid_dns_takes_precedence_over_https_testing():
     assert finding.outcome.remedy.message != "mail.mta_sts.enforce_message"
 
 
+def test_mta_sts_invalid_dns_overrides_enforce_https_policy():
+    url = f"https://mta-sts.{DOMAIN}/.well-known/mta-sts.txt"
+    body = "version: STSv1\nmode: enforce\nmx: mx.example.net\nmax_age: 604800\n"
+    data = changed(
+        healthy(),
+        dns={f"_mta-sts.{DOMAIN} TXT": ["v=STSv1; id=20261012-01"]},
+        http={url: {"status": 200, "body": body}},
+    )
+    finding = one(data, "mail.mta_sts")
+    assert finding.status is Status.WARN
+    assert finding.outcome.summary == "mail.mta_sts.bad_record"
+    assert finding.outcome.remedy.message != "mail.mta_sts.enforce_message"
+
+
 def test_mta_sts_record_without_policy_file():
     data = healthy()
     del data["http"][f"https://mta-sts.{DOMAIN}/.well-known/mta-sts.txt"]
