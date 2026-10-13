@@ -88,3 +88,20 @@ async def test_probe_closes_stream_after_invalid_greeting(monkeypatch):
     with pytest.raises(ValueError, match="greeting"):
         await probe_smtp_ehlo("mail.example.org", ("mail.example.org",), ("8.8.8.8",))
     assert writer.closed
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("payload", [
+    b"250 STARTTLS\n",
+    b"250 STARTTLS\r",
+    b"250 STARTTLS\r\n250 EXTRA\r\n",
+    b"250 STARTTLS\x00\r\n",
+    b"250 STARTTLS\x1b\r\n",
+    b"250 STARTTLS\x7f\r\n",
+])
+async def test_smtp_reply_rejects_noncanonical_or_control_bytes(payload):
+    reader = asyncio.StreamReader()
+    reader.feed_data(payload)
+    reader.feed_eof()
+    with pytest.raises(ValueError):
+        await _reply(reader)
