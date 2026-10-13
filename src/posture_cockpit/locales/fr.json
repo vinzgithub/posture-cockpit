@@ -465,5 +465,11 @@
   "history.all": "Voir tout l’historique →",
   "history.read_only": "Analyse historique · lecture seule",
   "history.pdf_notice": "Rapport historique · Analyse avec le moteur {scan_version} · PDF généré avec {generator_version}",
-  "history.recalculated": "Note historique recalculée selon les règles de couverture actuelles ; le résultat peut différer de la note affichée lors de l'analyse."
+  "history.recalculated": "Note historique recalculée selon les règles de couverture actuelles ; le résultat peut différer de la note affichée lors de l'analyse.",
+  "history.legacy_dns.nameservers_ok": "Les serveurs de noms relevés répondent pour le domaine.",
+  "history.legacy_dns.nameservers_single": "Un seul serveur de noms a été relevé : {host}.",
+  "history.legacy_dns.dnssec_on": "Une signature DNSSEC a été relevée lors de cette analyse.",
+  "history.legacy_dns.dnssec_off": "Aucune signature DNSSEC n'a été relevée lors de cette analyse.",
+  "history.legacy_dns.dnssec_broken": "La signature DNSSEC relevée était incohérente : enregistrement DS sans clé DNSKEY.",
+  "history.legacy_dns.caa_inherited": "Des enregistrements CAA hérités ont été relevés pour ce domaine."
 }
