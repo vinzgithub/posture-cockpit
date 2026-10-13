@@ -176,7 +176,7 @@ async def spf(ctx: CheckContext) -> Outcome:
 
 
 # ------------------------------------------------------------------ DMARC
-async def _dmarc_records(ctx: CheckContext) -> tuple[str, list[str]]:
+async def _dmarc_records(ctx: CheckContext) -> tuple[str, list[str], list[str]]:
     """RFC 9989 §4.10: at most eight DNS queries, including the exact domain.
 
     Exact records have priority. Ancestor discovery retains the highest
@@ -188,7 +188,7 @@ async def _dmarc_records(ctx: CheckContext) -> tuple[str, list[str]]:
     own_records = [r for r in await ctx.txt(f"_dmarc.{own}") if is_dmarc_candidate(r)]
     valid_own = [r for r in own_records if parse_dmarc(r).starts_right]
     if len(valid_own) == 1:
-        return own, valid_own
+        return own, valid_own, []
     # Multiple or malformed local policies are unusable for DMARC discovery.
     # Search for a valid organizational/PSD policy instead. Retain the broken
     # local records for an actionable diagnosis when nothing is inherited.
@@ -203,29 +203,33 @@ async def _dmarc_records(ctx: CheckContext) -> tuple[str, list[str]]:
             continue  # Multiple/invalid records cannot establish an inherited policy.
         record = parse_dmarc(valid[0])
         if record.psd == "n":
-            return name, valid
+            return name, valid, own_records if len(valid_own) > 1 else []
         if record.psd == "y":
             # RFC 9989: the organizational domain is exactly one label below
             # the PSD. A policy at any deeper intermediate name does not
             # supersede the PSD policy unless it is the organizational domain.
             organizational = ".".join(labels[start - 1:])
-            return next((item for item in discovered if item[0] == organizational), (name, valid))
+            selected = next((item for item in discovered if item[0] == organizational), (name, valid))
+            return *selected, own_records if len(valid_own) > 1 else []
         discovered.append((name, valid))
     if discovered:
-        return discovered[-1]
-    return (own, own_records) if own_records else (own, [])
+        return *discovered[-1], own_records if len(valid_own) > 1 else []
+    return own, own_records, []
 
 
 @extension.check("dmarc", category="mail", weight=10, internal=False)
 async def dmarc(ctx: CheckContext) -> Outcome:
     """DMARC tells receiving servers what to do with mail that fails SPF and DKIM."""
-    owner, candidates = await _dmarc_records(ctx)
+    owner, candidates, ignored_local = await _dmarc_records(ctx)
     first_step = f"v=DMARC1; p=none; rua=mailto:dmarc@{ctx.domain}"
     add_first_step = Remedy(10, Effort.EASY, how="mail.dmarc.how", dns=(DnsChange("add", "TXT", "_dmarc", first_step),))
     if not candidates:
         return fail("mail.dmarc.missing", add_first_step)
     evidence: dict[str, object] = {"records": candidates, "found_at": f"_dmarc.{owner}"}
     inherited = owner != ctx.domain
+    if ignored_local:
+        evidence["ignored_local_records"] = ignored_local
+        evidence["ignored_local_at"] = f"_dmarc.{ctx.domain}"
     valid = [r for r in candidates if parse_dmarc(r).starts_right]
     if not valid:
         # RFC 9989 §4.10: a record that does not start with "v=DMARC1" is discarded.
@@ -290,6 +294,9 @@ async def dmarc(ctx: CheckContext) -> Outcome:
     if not inherited and record.subdomain_policy == "none":
         return warn("mail.dmarc.subdomains_open", Remedy(5, Effort.MEDIUM, how="mail.dmarc.subdomains_open.how"),
                     evidence, **params)
+    if ignored_local:
+        return warn("mail.dmarc.multiple_inherited", Remedy(5, Effort.MEDIUM, how="mail.dmarc.multiple.how"),
+                    evidence, parent=owner, policy=policy or "", name=f"_dmarc.{ctx.domain}")
     return ok("mail.dmarc.enforced_inherited" if inherited else "mail.dmarc.enforced", evidence, **params)
 
 
