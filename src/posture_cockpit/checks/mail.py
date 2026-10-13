@@ -227,15 +227,39 @@ async def dmarc(ctx: CheckContext) -> Outcome:
                     name=f"_dmarc.{owner}")
     record = parse_dmarc(valid[0])
     evidence["tags"] = record.tags
-    policy = record.subdomain_policy if inherited else record.policy
-    if inherited and record.psd == "y":
-        policy = record.tags.get("sp", record.tags.get("p", "none")).lower()
+    # RFC 9989 §4.10.1: np applies only to an NXDOMAIN (not NODATA).
+    # A TXT query for _dmarc.DOMAIN does not establish whether DOMAIN exists.
+    policy = record.policy
+    if inherited:
+        policy = record.subdomain_policy
+        if record.non_existent_policy is not None:
+            try:
+                exists = (await ctx.net.dns(ctx.domain, "A")).exists
+            except NetworkError:
+                evidence["existence"] = "unknown"
+                return warn("mail.dmarc.existence_unknown", Remedy(5, Effort.DELEGATE), evidence,
+                            parent=owner)
+            evidence["existence"] = "existing" if exists else "nxdomain"
+            if not exists:
+                policy = record.non_existent_policy
     params: dict[str, str | int] = {"policy": policy or "", "parent": owner}
-    if policy is None:
+    if policy is None or record.policy is None:
         evidence["errors"] = [list(e) for e in record.errors]
+        # Invalid p/sp/np: receivers fall back to monitoring only with usable
+        # reporting URIs; otherwise there is no applicable DMARC processing.
+        if record.rua:
+            return warn("mail.dmarc.invalid_monitoring", Remedy(10, Effort.EASY), evidence,
+                        name=f"_dmarc.{owner}")
         return fail("mail.dmarc.invalid", Remedy(10, Effort.EASY, how="mail.dmarc.how", dns=() if inherited else (
             DnsChange("delete", "TXT", "_dmarc", valid[0]), DnsChange("add", "TXT", "_dmarc", first_step))),
             evidence, name=f"_dmarc.{owner}")
+    if record.testing and policy != "none":
+        # t=y requests one level less enforcement (reject -> quarantine;
+        # quarantine -> none), not full protection at the declared level.
+        effective = "quarantine" if policy == "reject" else "none"
+        evidence["effective_policy"] = effective
+        return warn("mail.dmarc.testing", Remedy(5, Effort.MEDIUM), evidence,
+                    policy=policy, effective=effective, parent=owner)
     if policy == "none":
         if inherited:
             return warn("mail.dmarc.monitoring_inherited", Remedy(10, Effort.MEDIUM, how="mail.dmarc.monitoring.how"),
