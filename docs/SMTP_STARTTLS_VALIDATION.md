@@ -32,6 +32,29 @@
 | V13 | Plusieurs MX | Au plus `max_hosts` hôtes, valeur plafonnée à 5 |
 | V14 | Audit standard exécuté sur validation | Aucun changement de score, rapport ou trafic SMTP |
 
+## État de couverture automatisée (13 octobre 2026)
+
+Les tests cités utilisent des flux simulés. « Couvert » signifie que le comportement est exercé en CI, **pas** qu'un MX public a été interrogé en conditions réelles.
+
+| ID | Couverture actuelle | Tests de référence / reste à vérifier |
+|---|---|---|
+| V01 | Couvert | `test_smtp_engine_observations_are_explicitly_disabled_by_default` |
+| V02 | Couvert | `test_smtp_engine_refuses_unnormalized_domain_before_dns` |
+| V03 | Couvert | `test_smtp_engine_refuses_internal_perimeter_before_dns` |
+| V04 | Couvert | `test_smtp_domain_probe_refuses_undeclared_mx_before_address_dns` |
+| V05 | Couvert | `test_refuses_unsafe_smtp_destinations`, `test_live_network_smtp_rejects_mixed_public_private_addresses` |
+| V06 | Couvert | `test_no_tls_handshake_without_starttls_advertisement` |
+| V07 | Couvert | `test_smtp_starttls_refusal_is_not_a_success` |
+| V08 | Couvert (simulation) | `test_verified_starttls_handshake_uses_mx_hostname`, `test_certificate_details_from_der` ; vrai serveur à vérifier |
+| V09 | Partiel | `test_verified_starttls_reports_certificate_failure`, `test_starttls_missing_or_invalid_certificate_is_not_verified`, `test_verified_starttls_missing_ssl_object_is_failure` ; ajouter un échec de vérification du nom MX spécifiquement simulé |
+| V10 | Couvert | `test_smtp_reply_rejects_oversized_or_incomplete_data`, `test_smtp_reply_rejects_noncanonical_or_control_bytes` |
+| V11 | Couvert | `test_smtp_reply_timeout_closes_writer`, `test_smtp_connection_timeout_consumes_one_budget_and_never_retries` |
+| V12 | Couvert | `test_probe_refuses_exhausted_budget_before_socket`, `test_live_network_smtp_reuses_dns_and_connection_budget` |
+| V13 | Couvert | `test_smtp_engine_observations_respect_dns_mx_and_host_limit`, `test_smtp_engine_caps_observations_at_five_mx` |
+| V14 | Partiel | `test_standard_scan_does_not_invoke_smtp_probe` ; absence d'impact réel sur score, rapport et réseau à confirmer sur validation |
+
+**Bilan : 12 scénarios couverts en simulation et 2 partiellement couverts.** Aucun des 14 scénarios n'a été validé par un essai réseau réel depuis :8081.
+
 ## Séquence
 
 1. Vérifier la CI de la PR #8 : lint, typage, tests Python et construction Docker.
