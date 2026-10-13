@@ -187,8 +187,12 @@ async def _dmarc_records(ctx: CheckContext) -> tuple[str, list[str]]:
     labels = ctx.domain.lower().rstrip(".").split(".")
     own = ctx.domain.lower().rstrip(".")
     own_records = [r for r in await ctx.txt(f"_dmarc.{own}") if is_dmarc_candidate(r)]
-    if own_records:
-        return own, own_records
+    valid_own = [r for r in own_records if parse_dmarc(r).starts_right]
+    if len(valid_own) == 1:
+        return own, valid_own
+    # Multiple or malformed local policies are unusable for DMARC discovery.
+    # Search for a valid organizational/PSD policy instead. Retain the broken
+    # local records for an actionable diagnosis when nothing is inherited.
     # The initial query counts toward the eight-query bound.
     first_parent = max(1, len(labels) - 7)
     discovered: list[tuple[str, list[str]]] = []
@@ -204,7 +208,9 @@ async def _dmarc_records(ctx: CheckContext) -> tuple[str, list[str]]:
         if record.psd == "y":
             return discovered[-1] if discovered else (name, valid)
         discovered.append((name, valid))
-    return discovered[-1] if discovered else (ctx.domain, [])
+    if discovered:
+        return discovered[-1]
+    return (own, own_records) if own_records else (own, [])
 
 
 @extension.check("dmarc", category="mail", weight=10, internal=False)
@@ -243,10 +249,13 @@ async def dmarc(ctx: CheckContext) -> Outcome:
             if not exists:
                 policy = record.non_existent_policy
     params: dict[str, str | int] = {"policy": policy or "", "parent": owner}
-    if policy is None or record.policy is None:
+    invalid_policy = policy is None or record.policy is None or any(
+        name in {"p", "sp", "np"} for name, _value in record.errors
+    )
+    if invalid_policy:
         evidence["errors"] = [list(e) for e in record.errors]
-        # Invalid p/sp/np: receivers fall back to monitoring only with usable
-        # reporting URIs; otherwise there is no applicable DMARC processing.
+        # RFC 9989 §4.10.1: invalid p/sp/np disables enforcement even when
+        # p=reject looks usable. A valid rua allows reporting-only treatment.
         if record.rua:
             return warn("mail.dmarc.invalid_monitoring", Remedy(10, Effort.EASY), evidence,
                         name=f"_dmarc.{owner}")
