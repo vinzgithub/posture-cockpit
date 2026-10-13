@@ -31,7 +31,7 @@
           <span class="badge badge-{{ f.status.value }}">{{ t('status.' ~ f.status.value) }}</span>
           {% if f.check_id in rechecks %}<span class="muted small">{{ t('details.rechecked', date=date(rechecks[f.check_id].checked_at)) }}</span>{% endif %}
         </p>
-        <p>{{ t(f.outcome.summary, domain=scan.domain, **f.outcome.params) }}</p>
+        <p>{{ finding_summary(f, scan.domain) }}</p>
         {% if f.outcome.evidence %}
         <details>
           <summary>{{ t('details.evidence') }}</summary>
