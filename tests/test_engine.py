@@ -340,3 +340,47 @@ async def test_smtp_engine_refuses_unnormalized_domain_before_dns():
 
     with pytest.raises(ValueError, match="normalized"):
         await engine.smtp_observations("http://example.org", NoNetwork(), enabled=True)
+
+
+@pytest.mark.asyncio
+async def test_standard_scan_does_not_invoke_smtp_probe():
+    class NetworkWithoutSMTP(FixtureNetwork):
+        async def smtp_ehlo_for_domain(self, *args, **kwargs):
+            pytest.fail("ordinary scan invoked SMTP")
+
+    ext = Extension("smtp_guard", name="SMTP guard", version="1")
+
+    @ext.check("dns_only", category="dns", weight=1)
+    async def dns_only(ctx):
+        return ok("dns.only")
+
+    result = await engine.scan("example.org", ext.checks, NetworkWithoutSMTP({}))
+    assert len(result.findings) == 1
+    assert result.findings[0].status is Status.OK
+
+
+@pytest.mark.asyncio
+async def test_smtp_engine_caps_observations_at_five_mx():
+    from posture_cockpit.checks.smtp_probe import SmtpObservation
+    from posture_cockpit.core.egress import INTERNET
+    from posture_cockpit.core.network import DnsAnswer
+
+    class FakeNetwork:
+        policy = INTERNET
+
+        def __init__(self):
+            self.visited = []
+
+        async def dns(self, domain, kind):
+            assert kind == "MX"
+            return DnsAnswer(tuple(f"{i} mx{i}.example.org." for i in range(1, 9)))
+
+        async def smtp_ehlo_for_domain(self, domain, host, *, verify_tls):
+            self.visited.append(host)
+            return SmtpObservation(host, (), False)
+
+    net = FakeNetwork()
+    observations = await engine.smtp_observations("example.org", net, enabled=True, max_hosts=5)
+    assert len(observations) == 5
+    assert len(net.visited) == 5
+    assert "mx6.example.org" not in net.visited
