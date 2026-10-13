@@ -211,7 +211,7 @@ class LiveNetwork:
             return DnsAnswer(())
         return DnsAnswer(tuple(_record_text(r) for r in answer.rrset))
 
-    async def smtp_ehlo(self, mx: str, declared_mx: tuple[str, ...]):
+    async def smtp_ehlo(self, mx: str, declared_mx: tuple[str, ...], *, verify_tls: bool = False):
         """Inactive SMTP integration point: DNS, public-only gating and shared connection budget.
 
         Caller supplies the MX names already observed for the audited domain. No
@@ -229,6 +229,7 @@ class LiveNetwork:
             mx, declared_mx, addresses,
             reserve_connection=self.reserve_connection,
             timeout=min(self.timeout, self.limits.operation_seconds, 20.0),
+            verify_tls=verify_tls,
         )
 
     # ---------------------------------------------------------- destinations
