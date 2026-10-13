@@ -70,7 +70,8 @@ def test_scans_cannot_be_cross_read_between_domains(signed_in, world):
     for suffix in (f"/history/{scan_id}", f"/history/{scan_id}/report.pdf"):
         assert signed_in.get("/domains/other.example" + suffix).status_code == 404
         assert signed_in.get("/domains/missing.example" + suffix).status_code == 404
-        assert signed_in.get(f"/domains/{DEMO}/history/-1" + ("/report.pdf" if suffix.endswith("pdf") else "")).status_code == 404
+        invalid_path = f"/domains/{DEMO}/history/-1" + ("/report.pdf" if suffix.endswith("pdf") else "")
+        assert signed_in.get(invalid_path).status_code == 404
 
 
 def test_history_requires_authentication(client):
