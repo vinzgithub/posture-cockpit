@@ -8,14 +8,13 @@ addresses before connecting, and still enforce scan budgets and timeouts.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
 from ipaddress import ip_address
-import re
 
 from posture_cockpit.core.egress import Zone, classify, parse_address
 
-
-_DNS_LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\Z")
+_DNS_LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\Z")
 
 
 def _valid_mx_name(name: str) -> bool:
