@@ -88,3 +88,15 @@ def test_legacy_dns_zone_placeholder_never_leaks(signed_in):
     with_zone = Finding("dns.dnssec", "dns", 4,
                         Outcome(Status.OK, "dns.dnssec.on", evidence={"zone": "other.example"}))
     assert "other.example" in finding_summary(s.catalog, "fr", with_zone, DEMO)
+
+
+def test_history_has_mobile_card_structure(signed_in):
+    create_demo_scan(signed_in)
+    html = signed_in.get(f"/domains/{DEMO}/history").text
+    assert 'class="panel history-panel"' in html
+    assert 'class="history-actions"' in html
+    assert 'class="history-date"' in html
+    assert 'data-label="Couverture"' in html
+    assert 'data-label="Version"' in html
+    assert f"/domains/{DEMO}/history/" in html
+    assert "report.pdf" in html
