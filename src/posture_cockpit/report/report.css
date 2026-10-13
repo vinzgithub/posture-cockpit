@@ -67,6 +67,7 @@ code { font: 400 8.5pt "IBM Plex Mono", monospace; color: #5A554B; }
 .improvements li { margin: 0 0 5pt; font-size: 9.5pt; }
 .improvements .gain { color: #6B6559; font-family: "IBM Plex Mono"; font-size: 8.5pt; }
 .method { font-size: 9pt; color: #5A554B; }
+.method-block { break-inside: avoid; page-break-inside: avoid; }
 
 .annex-title { font-size: 18pt; margin-bottom: 10pt; }
 .checks { width: 100%; border-collapse: collapse; font-size: 8.5pt; }

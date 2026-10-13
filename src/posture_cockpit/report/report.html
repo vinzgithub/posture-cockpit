@@ -6,12 +6,13 @@
   <meta charset="utf-8">
   <title>{{ t('report.title', domain=domain) }}</title>
   <meta name="author" content="{{ author or 'Posture Cockpit' }}">
-  <meta name="generator" content="Posture Cockpit {{ scan.version }}">
+  <meta name="generator" content="Posture Cockpit {{ generator_version }}">
   <link rel="stylesheet" href="report.css">
 </head>
 <body>
   <div class="running-footer">{% if perimeter %}{{ t('report.restricted') }} · {% endif %}Posture Cockpit · {{ domain }} · {{ date }}</div>
 
+  {% if historical %}<p class="history-stamp">{{ t("history.pdf_notice", scan_version=scan.version, generator_version=generator_version) }}</p>{% endif %}
   <!-- Page 1: for the decision-maker -->
   <section class="sheet">
     <header class="masthead">
@@ -60,6 +61,7 @@
     </ol>
     {% endif %}
 
+    {% if historical and scan.version.startswith("0.1.") %}<p class="history-stamp">{{ t("history.recalculated") }}</p>{% endif %}
     <p class="signature">{{ t('report.signed_by', author=author) if author else t('report.signed_tool') }}</p>
   </section>
 
@@ -94,8 +96,10 @@
     </ul>
     {% endif %}
 
-    <p class="section-label">{{ t('report.method') }}</p>
-    <p class="method">{{ t('report.method_text') }}</p>
+    <div class="method-block">
+      <p class="section-label">{{ t('report.method') }}</p>
+      <p class="method">{{ t('report.method_text') }}</p>
+    </div>
   </section>
 
   <!-- Annex: for the technician -->

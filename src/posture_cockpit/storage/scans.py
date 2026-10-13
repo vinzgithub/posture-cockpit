@@ -148,6 +148,18 @@ class Scans:
         return self.db.all("SELECT id, started_at, score, grade, coverage, perimeter, version FROM scans "
                            "WHERE domain_id = ? ORDER BY started_at DESC, id DESC LIMIT ?", (domain_id, limit))
 
+    def history_page(self, domain_id: int, *, page: int = 1, page_size: int = 20) -> tuple[list[Row], int]:
+        """Page of stored scans and total count; no changes to historic records."""
+        if page < 1 or not 1 <= page_size <= 100:
+            raise ValueError("Invalid history pagination")
+        total = int(self.db.value("SELECT COUNT(*) FROM scans WHERE domain_id = ?", (domain_id,)) or 0)
+        rows = self.db.all(
+            "SELECT id, started_at, score, grade, coverage, perimeter, version FROM scans "
+            "WHERE domain_id = ? ORDER BY started_at DESC, id DESC LIMIT ? OFFSET ?",
+            (domain_id, page_size, (page - 1) * page_size),
+        )
+        return rows, total
+
     def save_recheck(self, scan_id: int, finding: Finding) -> scoring.Assessment:
         """Stores the new result of one check and returns the scan's updated assessment."""
         with self.db.transaction():

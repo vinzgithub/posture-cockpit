@@ -73,6 +73,7 @@
     {% endif %}
 
     <div class="side-links">
+      <a href="/domains/{{ plan.domain }}/history" class="side-link"><span class="side-link-icon ok">↺</span><span><strong>{{ t("details.history") }}</strong><small>{{ t("history.all") }}</small></span></a>
       <a href="/domains/{{ plan.domain }}/details" class="side-link">
         <span class="side-link-icon ok">{{ check_icon() }}</span>
         <span><strong>{{ t('plan.ok_count', n=plan.counts.ok) }}</strong><small>{{ t('plan.details_hint') }}</small></span>

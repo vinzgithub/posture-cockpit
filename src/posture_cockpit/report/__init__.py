@@ -26,9 +26,10 @@ from typing import Any
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
+from .. import __version__
 from ..core import scoring
 from ..core.model import Effort, Finding, Status
-from ..i18n import Catalog, fmt_date
+from ..i18n import Catalog, finding_summary, fmt_date
 from ..storage import Scan
 from ..timezones import UTC, local, offset_label
 
@@ -59,10 +60,11 @@ def _who(catalog: Catalog, lang: str, finding: Finding) -> str:
 
 
 def _text(catalog: Catalog, lang: str, key: str, finding: Finding, domain: str) -> str:
-    return catalog.text(lang, key, {"domain": domain, **finding.outcome.params})
+    return finding_summary(catalog, lang, finding, domain)
 
 
-def report_context(catalog: Catalog, lang: str, scan: Scan, author: str = "", tz: tzinfo = UTC) -> dict[str, Any]:
+def report_context(catalog: Catalog, lang: str, scan: Scan, author: str = "", tz: tzinfo = UTC, *,
+                   historical: bool = False) -> dict[str, Any]:
     """Everything the report template shows, already worded."""
     findings = scan.current()
     plan = scoring.plan(findings)
@@ -133,6 +135,7 @@ def report_context(catalog: Catalog, lang: str, scan: Scan, author: str = "", tz
     started = local(scan.started_at, tz)
     return {
         "lang": lang, "t": t, "domain": scan.domain, "scan": scan, "author": author,
+        "historical": historical, "generator_version": __version__,
         # The file number keeps the UTC day: it must not change with the time zone of the instance.
         "file_number": f"{scan.started_at[:10].replace('-', '')}-{scan.id:04d}",
         "date": fmt_date(started.date(), lang), "time": started.strftime("%H:%M"), "zone": offset_label(started),
@@ -146,11 +149,14 @@ def report_context(catalog: Catalog, lang: str, scan: Scan, author: str = "", tz
     }
 
 
-def render_html(catalog: Catalog, lang: str, scan: Scan, author: str = "", tz: tzinfo = UTC) -> str:
-    return _env.get_template("report.html").render(**report_context(catalog, lang, scan, author, tz))
+def render_html(catalog: Catalog, lang: str, scan: Scan, author: str = "", tz: tzinfo = UTC, *,
+                historical: bool = False) -> str:
+    context = report_context(catalog, lang, scan, author, tz, historical=historical)
+    return _env.get_template("report.html").render(**context)
 
 
-def build_pdf(catalog: Catalog, lang: str, scan: Scan, author: str = "", tz: tzinfo = UTC) -> bytes:
+def build_pdf(catalog: Catalog, lang: str, scan: Scan, author: str = "", tz: tzinfo = UTC, *,
+              historical: bool = False) -> bytes:
     """The report as PDF bytes, times in the time zone ``tz``.
 
     Raises ReportUnavailable when WeasyPrint cannot run here."""
@@ -158,5 +164,5 @@ def build_pdf(catalog: Catalog, lang: str, scan: Scan, author: str = "", tz: tzi
         from weasyprint import HTML  # imported here: it loads system libraries
     except (ImportError, OSError) as e:
         raise ReportUnavailable(str(e)) from e
-    html = render_html(catalog, lang, scan, author, tz)
+    html = render_html(catalog, lang, scan, author, tz, historical=historical)
     return HTML(string=html, base_url=str(REPORT_DIR)).write_pdf()
