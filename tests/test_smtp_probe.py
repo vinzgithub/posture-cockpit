@@ -455,3 +455,53 @@ async def test_smtp_domain_probe_uses_dns_declared_mx(monkeypatch):
     assert result.mx == "mx.example.org"
     assert queries == [("example.org", "MX"), ("mx.example.org", "A"), ("mx.example.org", "AAAA")]
     assert net._spent["connections"] == 1
+
+
+@pytest.mark.asyncio
+async def test_verified_starttls_missing_ssl_object_is_failure(monkeypatch):
+    writer = FakeWriter()
+
+    async def start_tls(context, *, server_hostname, ssl_handshake_timeout):
+        pass
+
+    writer.start_tls = start_tls
+    writer.get_extra_info = lambda name: None
+
+    async def fake_open(ip, port):
+        return reader_with("220 mx.example.org ready", "250-mx.example.org",
+                           "250 STARTTLS", "220 Ready to start TLS"), writer
+
+    monkeypatch.setattr(asyncio, "open_connection", fake_open)
+    result = await probe_smtp_ehlo(
+        "mx.example.org", ("mx.example.org",), ("8.8.8.8",),
+        reserve_connection=lambda: None, verify_tls=True,
+    )
+    assert result.starttls_accepted is True
+    assert result.tls_verified is False
+    assert "SSL object" in result.tls_error
+    assert writer.closed
+
+
+@pytest.mark.asyncio
+async def test_no_tls_handshake_without_starttls_advertisement(monkeypatch):
+    writer = FakeWriter()
+
+    async def forbidden_tls(*args, **kwargs):
+        pytest.fail("TLS handshake attempted without STARTTLS advertisement")
+
+    writer.start_tls = forbidden_tls
+
+    async def fake_open(ip, port):
+        return reader_with("220 mx.example.org ready", "250-mx.example.org",
+                           "250 SIZE 1024"), writer
+
+    monkeypatch.setattr(asyncio, "open_connection", fake_open)
+    result = await probe_smtp_ehlo(
+        "mx.example.org", ("mx.example.org",), ("8.8.8.8",),
+        reserve_connection=lambda: None, verify_tls=True,
+    )
+    assert result.starttls_advertised is False
+    assert result.starttls_accepted is None
+    assert result.tls_verified is None
+    assert len(writer.sent) == 1
+    assert writer.closed
