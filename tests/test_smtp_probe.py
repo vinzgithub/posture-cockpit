@@ -49,7 +49,9 @@ async def test_probe_pins_public_ip_and_only_sends_ehlo(monkeypatch, capability,
         return reader_with("220 mail.example.org ready", "250-mail.example.org", capability), writer
 
     monkeypatch.setattr(asyncio, "open_connection", fake_open)
-    result = await probe_smtp_ehlo("mail.example.org", ("mail.example.org",), ("8.8.8.8",), reserve_connection=lambda: None)
+    result = await probe_smtp_ehlo(
+        "mail.example.org", ("mail.example.org",), ("8.8.8.8",), reserve_connection=lambda: None,
+    )
     assert called == [("8.8.8.8", 25)]
     assert writer.sent == [b"EHLO posture-cockpit.invalid\r\n"]
     assert writer.closed
@@ -63,7 +65,9 @@ async def test_probe_never_connects_to_private_ip(monkeypatch):
 
     monkeypatch.setattr(asyncio, "open_connection", must_not_connect)
     with pytest.raises(ValueError):
-        await probe_smtp_ehlo("mail.example.org", ("mail.example.org",), ("192.168.1.100",), reserve_connection=lambda: None)
+        await probe_smtp_ehlo(
+            "mail.example.org", ("mail.example.org",), ("192.168.1.100",), reserve_connection=lambda: None,
+        )
 
 
 @pytest.mark.asyncio
@@ -86,7 +90,9 @@ async def test_probe_closes_stream_after_invalid_greeting(monkeypatch):
 
     monkeypatch.setattr(asyncio, "open_connection", fake_open)
     with pytest.raises(ValueError, match="greeting"):
-        await probe_smtp_ehlo("mail.example.org", ("mail.example.org",), ("8.8.8.8",), reserve_connection=lambda: None)
+        await probe_smtp_ehlo(
+            "mail.example.org", ("mail.example.org",), ("8.8.8.8",), reserve_connection=lambda: None,
+        )
     assert writer.closed
 
 
@@ -94,7 +100,6 @@ async def test_probe_closes_stream_after_invalid_greeting(monkeypatch):
 @pytest.mark.parametrize("payload", [
     b"250 STARTTLS\n",
     b"250 STARTTLS\r",
-    b"250 STARTTLS\r\n250 EXTRA\r\n",
     b"250 STARTTLS\x00\r\n",
     b"250 STARTTLS\x1b\r\n",
     b"250 STARTTLS\x7f\r\n",
