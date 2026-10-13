@@ -44,6 +44,26 @@
 </section>
 {% endfor %}
 
+{# Ordinary scans never invoke the opt-in SMTP probe. No live or stored TLS proof exists here. #}
+{% if not scan.perimeter %}
+<section class="panel details" aria-labelledby="smtp-observations-title">
+  <h2 id="smtp-observations-title">{{ t('smtp.details.title') }}</h2>
+  <ul class="checks">
+    <li class="check status-error">
+      {{ status_icon('error') }}
+      <div class="check-body">
+        <p class="check-title"><strong>{{ t('smtp.details.starttls') }}</strong>
+          <span class="badge badge-error">{{ t('status.error') }}</span>
+        </p>
+        <p>{{ t('smtp.details.not_evaluated') }}</p>
+        <p class="muted small">{{ t('smtp.details.score_note') }}</p>
+      </div>
+      <code class="check-id muted small">smtp.starttls</code>
+    </li>
+  </ul>
+</section>
+{% endif %}
+
 {% if history | length > 1 %}
 <section class="panel" aria-labelledby="history-title">
   <h2 id="history-title">{{ t('details.history') }}</h2>
