@@ -109,7 +109,7 @@
   "mail.mta_sts.mx_mismatch": "La politique MTA-STS (mode {mode}) ne couvre pas {n:serveur de messagerie|serveurs de messagerie} ({hosts}). En mode « enforce », les expéditeurs refusent de leur livrer le courrier.",
   "mail.mta_sts.mx_mismatch.action": "Ajouter les serveurs de messagerie à la politique MTA-STS",
   "mail.mta_sts.mx_message": "Bonjour,\n\nLa politique MTA-STS du domaine {domain} (https://mta-sts.{domain}/.well-known/mta-sts.txt) ne mentionne pas ces serveurs de messagerie : {hosts}. Pourriez-vous ajouter une ligne « mx: » pour chacun, puis changer l'identifiant de l'enregistrement _mta-sts ?\n\nMerci d'avance.",
-  "mail.mta_sts.short_max_age": "La politique MTA-STS n'est gardée en mémoire que {seconds} secondes : la protection tient peu de temps entre deux visites.",
+  "mail.mta_sts.short_max_age": "La politique MTA-STS n'est gardée en mémoire que {seconds:seconde|secondes} : la protection tient peu de temps entre deux visites.",
   "mail.mta_sts.short_max_age.action": "Allonger la durée de la politique MTA-STS",
   "mail.mta_sts.max_age_message": "Bonjour,\n\nLa politique MTA-STS du domaine {domain} a une durée (max_age) de {seconds} secondes. La norme recommande plusieurs semaines, par exemple max_age: 1209600. Pourriez-vous l'allonger ?\n\nMerci d'avance.",
 

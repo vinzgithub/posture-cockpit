@@ -20,6 +20,7 @@ of the application keeps working and only this report is unavailable.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import tzinfo
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +30,7 @@ from ..core import scoring
 from ..core.model import Effort, Finding, Status
 from ..i18n import Catalog, fmt_date
 from ..storage import Scan
+from ..timezones import UTC, local, offset_label
 
 REPORT_DIR = Path(__file__).parent
 _env = Environment(loader=FileSystemLoader(REPORT_DIR), autoescape=select_autoescape(["html"]))
@@ -60,7 +62,7 @@ def _text(catalog: Catalog, lang: str, key: str, finding: Finding, domain: str) 
     return catalog.text(lang, key, {"domain": domain, **finding.outcome.params})
 
 
-def report_context(catalog: Catalog, lang: str, scan: Scan, author: str = "") -> dict[str, Any]:
+def report_context(catalog: Catalog, lang: str, scan: Scan, author: str = "", tz: tzinfo = UTC) -> dict[str, Any]:
     """Everything the report template shows, already worded."""
     findings = scan.current()
     plan = scoring.plan(findings)
@@ -128,10 +130,12 @@ def report_context(catalog: Catalog, lang: str, scan: Scan, author: str = "") ->
             "ref": catalog.text(lang, f"{f.check_id}.ref") if catalog.has(lang, f"{f.check_id}.ref") else "",
         })
 
+    started = local(scan.started_at, tz)
     return {
         "lang": lang, "t": t, "domain": scan.domain, "scan": scan, "author": author,
+        # The file number keeps the UTC day: it must not change with the time zone of the instance.
         "file_number": f"{scan.started_at[:10].replace('-', '')}-{scan.id:04d}",
-        "date": fmt_date(scan.started_at[:10], lang), "time": scan.started_at[11:16],
+        "date": fmt_date(started.date(), lang), "time": started.strftime("%H:%M"), "zone": offset_label(started),
         "result": result, "grade_label": t(scoring.grade_label(result.grade)) if result.grade else "",
         "coverage": t("score.coverage", evaluated=result.evaluated, applicable=result.applicable,
                       percent=result.coverage_percent),
@@ -142,15 +146,17 @@ def report_context(catalog: Catalog, lang: str, scan: Scan, author: str = "") ->
     }
 
 
-def render_html(catalog: Catalog, lang: str, scan: Scan, author: str = "") -> str:
-    return _env.get_template("report.html").render(**report_context(catalog, lang, scan, author))
+def render_html(catalog: Catalog, lang: str, scan: Scan, author: str = "", tz: tzinfo = UTC) -> str:
+    return _env.get_template("report.html").render(**report_context(catalog, lang, scan, author, tz))
 
 
-def build_pdf(catalog: Catalog, lang: str, scan: Scan, author: str = "") -> bytes:
-    """The report as PDF bytes. Raises ReportUnavailable when WeasyPrint cannot run here."""
+def build_pdf(catalog: Catalog, lang: str, scan: Scan, author: str = "", tz: tzinfo = UTC) -> bytes:
+    """The report as PDF bytes, times in the time zone ``tz``.
+
+    Raises ReportUnavailable when WeasyPrint cannot run here."""
     try:
         from weasyprint import HTML  # imported here: it loads system libraries
     except (ImportError, OSError) as e:
         raise ReportUnavailable(str(e)) from e
-    html = render_html(catalog, lang, scan, author)
+    html = render_html(catalog, lang, scan, author, tz)
     return HTML(string=html, base_url=str(REPORT_DIR)).write_pdf()

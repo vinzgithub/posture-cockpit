@@ -50,7 +50,7 @@
   <tbody>
   {% for e in entries %}
   <tr class="audit-{{ e.action.split('.')[0] }}{{ ' audit-alert' if e.action in ('login.failed', 'login.locked', 'confirm.failed') }}">
-    <td><time datetime="{{ e.at }}">{{ date(e.at) }} {{ e.at[11:16] }}</time></td>
+    <td><time datetime="{{ e.at }}" title="{{ e.at[:16] | replace('T', ' ') }} UTC">{{ date(e.at) }} {{ local_time(e.at) }}</time></td>
     <td>{{ e.username or '—' }}</td>
     <td>{{ t('audit.action.' ~ e.action) }}{% if e.detail.perimeter %} <span class="tag-internal">{{ e.detail.perimeter }}</span>{% endif %}</td>
     <td><code>{{ e.target }}</code></td>

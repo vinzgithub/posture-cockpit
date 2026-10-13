@@ -149,7 +149,7 @@
   "admin.delete_confirm": "Supprimer définitivement le compte {name} ?",
   "admin.delete_submit": "Supprimer",
   "admin.confirm_title": "Confirmez votre mot de passe",
-  "admin.confirm_intro": "Les pages d'administration restent ensuite ouvertes {minutes} minutes.",
+  "admin.confirm_intro": "Les pages d'administration restent ensuite ouvertes {minutes:minute|minutes}.",
   "admin.confirm_submit": "Continuer",
 
   "flash.welcome": "Bienvenue ! Saisissez un domaine pour lancer la première analyse.",
@@ -168,7 +168,7 @@
   "flash.extension_off": "Extension {name} désactivée.",
   "flash.saved": "Enregistré.",
   "flash.scanned": "Nouvelle analyse terminée.",
-  "flash.verified": "C'est corrigé : +{points} points, votre note passe à {score}.",
+  "flash.verified": "C'est corrigé : +{points:point|points}, votre note passe à {score}.",
   "flash.not_yet": "Pas encore visible. Les changements DNS mettent parfois quelques minutes à se propager : réessayez un peu plus tard.",
   "flash.domain_deleted": "{name} et ses analyses ont été supprimés.",
 
@@ -268,7 +268,7 @@
 
   "plan.subline.clean": "Tous les contrôles notés sont conformes. Bravo.",
   "plan.subline.clean_improvements": "Il reste {n:amélioration|améliorations} possibles, sans urgence.",
-  "plan.subline.start": "Classées par effet sur votre note. Comptez environ {minutes} minutes en tout.",
+  "plan.subline.start": "Classées par effet sur votre note. Comptez environ {minutes:minute|minutes} en tout.",
   "plan.subline.progress": "Votre note est passée de {start} à {score}. Continuez sur votre lancée.",
   "plan.subline.done": "Lancez une nouvelle analyse pour tout confirmer, puis partagez le rapport.",
 
@@ -345,8 +345,8 @@
   "report.diagnosis": "Le diagnostic, en clair",
   "report.prescription": "L'ordonnance",
   "report.who": "Qui : {who}",
-  "report.minutes": "{n} minutes",
-  "report.points": "+{n} pts",
+  "report.minutes": "{n:minute|minutes}",
+  "report.points": "+{n:pt|pts}",
   "report.deadline": "Avant le {date}",
   "report.signed_by": "Dossier établi par {author}",
   "report.signed_tool": "Dossier établi avec Posture Cockpit",
@@ -361,9 +361,9 @@
   "report.col_result": "Résultat",
   "report.col_found": "Constat et références",
 
-  "report.diagnosis.issues": "Sur {total:contrôle évalué|contrôles évalués}, {ok} sont conformes, {fail} demandent une correction rapide et {warn} peuvent être améliorés.",
-  "report.diagnosis.plan": "{n:correction|corrections}, environ {minutes} minutes au total, suffisent pour atteindre la note {grade}.",
-  "report.diagnosis.clean": "Sur {total:contrôle évalué|contrôles évalués}, {ok} sont conformes et aucun ne demande de correction urgente. {warn} points peuvent encore être améliorés.",
+  "report.diagnosis.issues": "Sur {total:contrôle évalué|contrôles évalués}, {ok:est conforme|sont conformes}, {fail:demande une correction rapide|demandent une correction rapide} et {warn:peut être amélioré|peuvent être améliorés}.",
+  "report.diagnosis.plan": "{n:correction|corrections}, environ {minutes:minute|minutes} au total, suffisent pour atteindre la note {grade}.",
+  "report.diagnosis.clean": "Sur {total:contrôle évalué|contrôles évalués}, {ok:est conforme|sont conformes} et aucun ne demande de correction urgente. {warn:point peut encore être amélioré|points peuvent encore être améliorés}.",
 
   "report.who.you": "vous-même",
   "report.who.you_dns": "vous-même, chez votre hébergeur de nom de domaine",
@@ -467,12 +467,20 @@
   "score.coverage": "Couverture {percent} % : {evaluated:contrôle évalué|contrôles évalués} sur {applicable}.",
   "score.partial_badge": "partielle",
   "plan.headline.not_evaluated": "Note impossible : trop de contrôles n'ont pas pu être réalisés",
-  "plan.subline.not_evaluated": "Seuls {evaluated} contrôles sur {applicable} ont pu être réalisés ({percent} %). Il en faut au moins la moitié pour noter le domaine. Les raisons sont sous la note ; les problèmes déjà trouvés restent à corriger.",
+  "plan.headline.start_plain": "{n:correction prioritaire|corrections prioritaires} à faire",
+  "plan.headline.progress_plain": "Plus que {n:correction prioritaire|corrections prioritaires}",
+  "plan.subline.not_evaluated": "{evaluated:contrôle réalisé|contrôles réalisés} sur {applicable} seulement ({percent} %). Il en faut au moins la moitié pour noter le domaine. Les raisons sont sous la note ; les problèmes déjà trouvés restent à corriger.",
+  "plan.subline.progress_plain": "Votre note est maintenant de {score}. Continuez sur votre lancée.",
   "plan.score_note.not_evaluated": "Une note n'est donnée que si au moins la moitié des contrôles applicables ont été réalisés.",
   "plan.score_note.partial": "Évaluation partielle : une partie des contrôles n'a pas pu être réalisée. La note A demande une couverture d'au moins 90 %.",
   "plan.gaps": "{n:contrôle non évalué|contrôles non évalués}",
+  "plan.point": "point",
+  "plan.gained_one": "gagné",
+  "plan.under_one": "< 1",
+  "plan.gain_under_one": "moins d'1 point",
   "flash.verified_unscored": "Ce point est maintenant conforme.",
-  "report.diagnosis.not_evaluated": "Seuls {evaluated} contrôles sur {applicable} ont pu être réalisés : c'est trop peu pour donner une note. Les constats ci-dessous restent valables.",
+  "flash.verified_small": "C'est corrigé. Votre note reste à {score} : ce contrôle pèse moins d'1 point.",
+  "report.diagnosis.not_evaluated": "{evaluated:contrôle réalisé|contrôles réalisés} sur {applicable} seulement : c'est trop peu pour donner une note. Les constats ci-dessous restent valables.",
   "report.diagnosis.plan_unscored": "{n:correction|corrections} à faire en priorité.",
   "report.diagnosis.all_ok": "Sur {total:contrôle évalué|contrôles évalués}, tous sont conformes.",
   "report.area_not_evaluated": "Non évalué : les contrôles de ce domaine n'ont pas pu être réalisés.",
@@ -480,5 +488,6 @@
   "report.restricted": "Diffusion restreinte",
   "report.restricted_text": "audit d'un réseau interne, à ne pas diffuser hors de l'organisation",
   "report.perimeter_internet": "Périmètre : Internet · messagerie, site web, certificats et DNS publics",
-  "report.perimeter_internal": "Périmètre interne : {name} · sites web et certificats"
+  "report.perimeter_internal": "Périmètre interne : {name} · sites web et certificats",
+  "report.points_under_one": "< 1 pt"
 }

@@ -109,7 +109,7 @@
   "mail.mta_sts.mx_mismatch": "The MTA-STS policy (mode {mode}) does not cover {n:mail server|mail servers} ({hosts}). In \"enforce\" mode, senders refuse to deliver mail to them.",
   "mail.mta_sts.mx_mismatch.action": "Add the mail servers to the MTA-STS policy",
   "mail.mta_sts.mx_message": "Hello,\n\nThe MTA-STS policy of {domain} (https://mta-sts.{domain}/.well-known/mta-sts.txt) does not mention these mail servers: {hosts}. Could you add an \"mx:\" line for each, then change the id of the _mta-sts record?\n\nThank you.",
-  "mail.mta_sts.short_max_age": "The MTA-STS policy is only remembered for {seconds} seconds: the protection lasts little between two visits.",
+  "mail.mta_sts.short_max_age": "The MTA-STS policy is only remembered for {seconds:second|seconds}: the protection lasts little between two visits.",
   "mail.mta_sts.short_max_age.action": "Lengthen the MTA-STS policy duration",
   "mail.mta_sts.max_age_message": "Hello,\n\nThe MTA-STS policy of {domain} has a duration (max_age) of {seconds} seconds. The standard recommends several weeks, for instance max_age: 1209600. Could you lengthen it?\n\nThank you.",
 

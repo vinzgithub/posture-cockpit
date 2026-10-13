@@ -149,7 +149,7 @@
   "admin.delete_confirm": "Delete the account {name} for good?",
   "admin.delete_submit": "Delete",
   "admin.confirm_title": "Confirm your password",
-  "admin.confirm_intro": "The administration pages then stay open for {minutes} minutes.",
+  "admin.confirm_intro": "The administration pages then stay open for {minutes:minute|minutes}.",
   "admin.confirm_submit": "Continue",
 
   "flash.welcome": "Welcome! Type a domain to run the first scan.",
@@ -168,7 +168,7 @@
   "flash.extension_off": "Extension {name} turned off.",
   "flash.saved": "Saved.",
   "flash.scanned": "New scan done.",
-  "flash.verified": "Fixed: +{points} points, your score is now {score}.",
+  "flash.verified": "Fixed: +{points:point|points}, your score is now {score}.",
   "flash.not_yet": "Not visible yet. DNS changes sometimes take a few minutes to spread: try again a little later.",
   "flash.domain_deleted": "{name} and its scans have been deleted.",
 
@@ -268,7 +268,7 @@
 
   "plan.subline.clean": "Every scored check is compliant. Well done.",
   "plan.subline.clean_improvements": "{n:improvement is|improvements are} still possible, none urgent.",
-  "plan.subline.start": "Sorted by effect on your score. Allow about {minutes} minutes in all.",
+  "plan.subline.start": "Sorted by effect on your score. Allow about {minutes:minute|minutes} in all.",
   "plan.subline.progress": "Your score went from {start} to {score}. Keep going.",
   "plan.subline.done": "Run a new scan to confirm everything, then share the report.",
 
@@ -345,8 +345,8 @@
   "report.diagnosis": "The diagnosis, in plain words",
   "report.prescription": "The prescription",
   "report.who": "Who: {who}",
-  "report.minutes": "{n} minutes",
-  "report.points": "+{n} pts",
+  "report.minutes": "{n:minute|minutes}",
+  "report.points": "+{n:pt|pts}",
   "report.deadline": "Before {date}",
   "report.signed_by": "File prepared by {author}",
   "report.signed_tool": "File prepared with Posture Cockpit",
@@ -361,9 +361,9 @@
   "report.col_result": "Result",
   "report.col_found": "Finding and references",
 
-  "report.diagnosis.issues": "Out of {total:check evaluated|checks evaluated}, {ok} are compliant, {fail} need a quick fix and {warn} can be improved.",
-  "report.diagnosis.plan": "{n:fix|fixes}, about {minutes} minutes in all, are enough to reach grade {grade}.",
-  "report.diagnosis.clean": "Out of {total:check evaluated|checks evaluated}, {ok} are compliant and none needs an urgent fix. {warn} points can still be improved.",
+  "report.diagnosis.issues": "Out of {total:check evaluated|checks evaluated}, {ok:is compliant|are compliant}, {fail:needs a quick fix|need a quick fix} and {warn:can be improved|can be improved}.",
+  "report.diagnosis.plan": "{n:fix|fixes}, about {minutes:minute|minutes} in all, are enough to reach grade {grade}.",
+  "report.diagnosis.clean": "Out of {total:check evaluated|checks evaluated}, {ok:is compliant|are compliant} and none needs an urgent fix. {warn:point|points} can still be improved.",
 
   "report.who.you": "yourself",
   "report.who.you_dns": "yourself, at your domain name host",
@@ -467,12 +467,20 @@
   "score.coverage": "Coverage {percent}%: {evaluated:check evaluated|checks evaluated} out of {applicable}.",
   "score.partial_badge": "partial",
   "plan.headline.not_evaluated": "No score: too many checks could not run",
-  "plan.subline.not_evaluated": "Only {evaluated} checks out of {applicable} could run ({percent}%). At least half are needed to grade the domain. The reasons are under the score; the problems already found still need fixing.",
+  "plan.headline.start_plain": "{n:priority fix|priority fixes} to make",
+  "plan.headline.progress_plain": "{n:priority fix|priority fixes} left",
+  "plan.subline.not_evaluated": "Only {evaluated:check|checks} out of {applicable} could run ({percent}%). At least half are needed to grade the domain. The reasons are under the score; the problems already found still need fixing.",
+  "plan.subline.progress_plain": "Your score is now {score}. Keep going.",
   "plan.score_note.not_evaluated": "A score is only given when at least half of the applicable checks ran.",
   "plan.score_note.partial": "Partial evaluation: some checks could not run. Grade A requires a coverage of at least 90%.",
   "plan.gaps": "{n:check not evaluated|checks not evaluated}",
+  "plan.point": "point",
+  "plan.gained_one": "gained",
+  "plan.under_one": "< 1",
+  "plan.gain_under_one": "less than 1 point",
   "flash.verified_unscored": "This point is now compliant.",
-  "report.diagnosis.not_evaluated": "Only {evaluated} checks out of {applicable} could run: too few to give a score. The findings below still stand.",
+  "flash.verified_small": "Fixed. Your score stays at {score}: this check is worth less than 1 point.",
+  "report.diagnosis.not_evaluated": "Only {evaluated:check|checks} out of {applicable} could run: too few to give a score. The findings below still stand.",
   "report.diagnosis.plan_unscored": "{n:fix|fixes} to make first.",
   "report.diagnosis.all_ok": "Out of {total:check evaluated|checks evaluated}, all are compliant.",
   "report.area_not_evaluated": "Not evaluated: the checks of this area could not run.",
@@ -480,5 +488,6 @@
   "report.restricted": "Restricted distribution",
   "report.restricted_text": "audit of an internal network, not to be shared outside the organisation",
   "report.perimeter_internet": "Perimeter: Internet · public mail, website, certificates and DNS",
-  "report.perimeter_internal": "Internal perimeter: {name} · websites and certificates"
+  "report.perimeter_internal": "Internal perimeter: {name} · websites and certificates",
+  "report.points_under_one": "< 1 pt"
 }

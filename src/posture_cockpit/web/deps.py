@@ -28,6 +28,7 @@ from .. import __version__
 from ..i18n import LOCALES, fmt_date, pick_locale
 from ..security import csrf_token, csrf_valid
 from ..storage import Row
+from ..timezones import local, local_date
 from .services import services
 
 # Time allowed between the right password and the authenticator code.
@@ -175,8 +176,13 @@ def t(request: Request, key: str, /, **params: Any) -> str:
 
 # ---------------------------------------------------------------- rendering
 def flash(request: Request, level: str, key: str, **params: Any) -> None:
-    """A message shown once on the next page. ``level``: ok, info, warn or error."""
-    request.session.setdefault("flash", []).append([level, key, {k: str(v) for k, v in params.items()}])
+    """A message shown once on the next page. ``level``: ok, info, warn or error.
+
+    Whole numbers stay numbers, so the text can agree with them ("1 point", "3 points")."""
+    def kept(value: Any) -> Any:
+        return value if isinstance(value, int) and not isinstance(value, bool) else str(value)
+
+    request.session.setdefault("flash", []).append([level, key, {k: kept(v) for k, v in params.items()}])
 
 
 def redirect(url: str) -> RedirectResponse:
@@ -203,6 +209,16 @@ def render(request: Request, template: str, status: int = 200, **context: Any) -
     def text(key: str, /, **params: Any) -> str:
         return catalog.text(lang, key, params)
 
+    zone = s.config.timezone
+
+    def day(value: Any) -> str:
+        """The day of a stored time, in the instance's time zone: "13 octobre 2026"."""
+        return fmt_date(local_date(value, zone), lang) if value else ""
+
+    def hour(value: Any) -> str:
+        """The hour of a stored time, in the instance's time zone: "09:19"."""
+        return local(value, zone).strftime("%H:%M") if value else ""
+
     base = {
         "lang": lang,
         "user": current_user(request),
@@ -210,7 +226,8 @@ def render(request: Request, template: str, status: int = 200, **context: Any) -
         "csrf": csrf_token(request.session),
         "flashes": request.session.pop("flash", []),
         "t": text,
-        "date": lambda value: fmt_date(str(value)[:10], lang) if value else "",
+        "date": day,
+        "local_time": hour,
         "path": request.url.path,
     }
     return s.templates.TemplateResponse(request, template, {**base, **context}, status_code=status)

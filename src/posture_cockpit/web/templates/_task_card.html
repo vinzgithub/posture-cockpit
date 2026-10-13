@@ -15,8 +15,10 @@
   </span>
   {% if plan.score is not none %}{# without a score, points would refer to nothing #}
   <span class="task-gain">
-    {% if task.gain > 0 %}<strong>+{{ task.gain }}</strong>{% else %}<strong>+</strong>{% endif %}
-    <small>{{ t('plan.gained') if task.done else t('plan.points') }}</small>
+    {# A fix whose effect rounds to 0 is "< 1 point", never "+ points" with no number. #}
+    {% if task.gain > 0 %}<strong>+{{ task.gain }}</strong>{% else %}<strong>{{ t('plan.under_one') }}</strong>{% endif %}
+    {% if task.gain > 1 %}<small>{{ t('plan.gained') if task.done else t('plan.points') }}</small>
+    {% else %}<small>{{ t('plan.point') }}{% if task.done %} {{ t('plan.gained_one') }}{% endif %}</small>{% endif %}
   </span>
   {% endif %}
 </a>

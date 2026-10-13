@@ -137,7 +137,11 @@ async def verify(request: Request, name: str, check_id: str, user: Row = Depends
     before = scan.assessment()
     after = s.scans.save_recheck(scan.id, finding)
     if finding.status is Status.OK and before.score is not None and after.score is not None:
-        flash(request, "ok", "flash.verified", points=max(after.score - before.score, 0), score=after.score)
+        points = after.score - before.score
+        if points > 0:
+            flash(request, "ok", "flash.verified", points=points, score=after.score)
+        else:  # the check weighs less than one point once rounded: no "+0 points"
+            flash(request, "ok", "flash.verified_small", score=after.score)
     elif finding.status is Status.OK:
         flash(request, "ok", "flash.verified_unscored")
     else:

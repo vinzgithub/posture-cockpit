@@ -14,7 +14,7 @@
     <p class="chips">
       <span class="chip">{{ t('plan.minutes', n=task.minutes) }}</span>
       <span class="chip chip-{{ task.effort }}">{{ task.effort_label }}</span>
-      {% if task.gain > 0 %}<span class="chip chip-gain">{{ t('plan.gain', n=task.gain) }}</span>{% endif %}
+      {% if plan.score is not none %}<span class="chip chip-gain">{{ t('plan.gain', n=task.gain) if task.gain > 0 else t('plan.gain_under_one') }}</span>{% endif %}
     </p>
   </header>
 
@@ -27,7 +27,7 @@
   <div class="success" role="status">
     <span class="success-mark">{{ check_icon() }}</span>
     <div>
-      <p class="eyebrow-ok">{{ t('plan.verified_at', date=date(task.checked_at), time=task.checked_at[11:16]) }}</p>
+      <p class="eyebrow-ok">{{ t('plan.verified_at', date=date(task.checked_at), time=local_time(task.checked_at)) }}</p>
       <p class="success-text">{{ task.summary }}</p>
     </div>
     {% if task.gain > 0 %}<strong class="success-gain">+{{ task.gain }}</strong>{% endif %}
@@ -108,7 +108,7 @@
   {% endif %}
 
   {% if task.still_failing %}
-  <p class="flash flash-warn">{{ t('plan.still_failing', date=date(task.checked_at), time=task.checked_at[11:16]) }}</p>
+  <p class="flash flash-warn">{{ t('plan.still_failing', date=date(task.checked_at), time=local_time(task.checked_at)) }}</p>
   {% endif %}
 
   <form method="post" action="/domains/{{ plan.domain }}/verify/{{ task.check_id }}" class="verify" data-busy>

@@ -70,7 +70,7 @@ def create_app(config: Config | None = None, registry: Registry | None = None,
             response.headers["Cache-Control"] = "no-store"
         return response
 
-    app.add_middleware(SessionMiddleware, secret_key=secret_key(config.data_dir), session_cookie="posture_cockpit",
+    app.add_middleware(SessionMiddleware, secret_key=secret_key(config.data_dir), session_cookie=config.session_cookie,
                        max_age=config.session_max_age, same_site="lax", https_only=config.cookie_secure)
 
     _add_error_pages(app)
