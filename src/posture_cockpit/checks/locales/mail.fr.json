@@ -51,6 +51,7 @@
   "mail.dmarc.missing": "Aucune politique DMARC : n'importe qui peut envoyer des e-mails au nom du domaine.",
   "mail.dmarc.how": "Sans risque : avec p=none, aucun e-mail n'est bloqué, vous recevez seulement des rapports à l'adresse indiquée (créez-la si elle n'existe pas). Une fois les rapports propres, passez à p=quarantine.",
   "mail.dmarc.multiple": "Plusieurs politiques DMARC sur {name} : les messageries les ignorent toutes.",
+  "mail.dmarc.multiple_inherited": "Plusieurs politiques DMARC sur {name} sont ignorées ; la politique de {parent} (p={policy}) est utilisée. Corrigez les doublons locaux.",
   "mail.dmarc.multiple.action": "Ne garder qu'une politique DMARC",
   "mail.dmarc.multiple.how": "Supprimez les enregistrements _dmarc en trop pour n'en garder qu'un.",
   "mail.dmarc.monitoring": "DMARC est en observation (p=none) : les faux e-mails sont encore livrés.",
