@@ -140,6 +140,22 @@ def test_mta_sts_dns_distinguishes_absence_from_invalid_records(records, summary
     assert f.outcome.summary == summary
 
 
+@pytest.mark.parametrize("mx_line", [
+    "mx: *example.net",
+    "mx: mx.*.example.net",
+    "mx: https://mx.example.net",
+    "mx: mx.example.net:25",
+    "mx: *.example.net/path",
+])
+def test_mta_sts_rejects_invalid_https_policy_mx_patterns(mx_line):
+    url = f"https://mta-sts.{DOMAIN}/.well-known/mta-sts.txt"
+    body = f"version: STSv1\nmode: testing\n{mx_line}\nmax_age: 604800\n"
+    data = changed(healthy(), http={url: {"status": 200, "body": body}})
+    finding = one(data, "mail.mta_sts")
+    assert finding.outcome.summary == "mail.mta_sts.bad_policy"
+    assert "mx" in finding.outcome.params["fields"]
+
+
 def test_mta_sts_record_without_policy_file():
     data = healthy()
     del data["http"][f"https://mta-sts.{DOMAIN}/.well-known/mta-sts.txt"]
