@@ -29,7 +29,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from .. import __version__
 from ..core import scoring
 from ..core.model import Effort, Finding, Status
-from ..i18n import Catalog, fmt_date
+from ..i18n import Catalog, finding_summary, fmt_date
 from ..storage import Scan
 from ..timezones import UTC, local, offset_label
 
@@ -60,7 +60,7 @@ def _who(catalog: Catalog, lang: str, finding: Finding) -> str:
 
 
 def _text(catalog: Catalog, lang: str, key: str, finding: Finding, domain: str) -> str:
-    return catalog.text(lang, key, {"domain": domain, **finding.outcome.params})
+    return finding_summary(catalog, lang, finding, domain)
 
 
 def report_context(catalog: Catalog, lang: str, scan: Scan, author: str = "", tz: tzinfo = UTC, *,
