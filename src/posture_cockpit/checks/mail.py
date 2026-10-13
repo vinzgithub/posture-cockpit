@@ -178,34 +178,33 @@ async def spf(ctx: CheckContext) -> Outcome:
 
 # ------------------------------------------------------------------ DMARC
 async def _dmarc_records(ctx: CheckContext) -> tuple[str, list[str]]:
-    """RFC 9989 DNS Tree Walk, bounded to the DNS name's parents.
+    """RFC 9989 §4.10: at most eight DNS queries, including the exact domain.
 
-    An exact record wins. Otherwise a record with psd=n identifies an
-    organizational domain, while psd=y identifies a public-suffix policy.
-    With no explicit markers, the nearest ancestor is used as a conservative
-    legacy-compatible fallback. Never inspect the TLD itself.
+    Exact records have priority. Ancestor discovery retains the highest
+    organizational record (fewest labels), stopping at psd=n or psd=y.
+    PSD policies are selected only in the absence of an organizational record.
     """
     labels = ctx.domain.lower().rstrip(".").split(".")
-    candidates: list[tuple[str, list[str], str]] = []
-    for start in range(len(labels) - 1):
+    own = ctx.domain.lower().rstrip(".")
+    own_records = [r for r in await ctx.txt(f"_dmarc.{own}") if is_dmarc_candidate(r)]
+    if own_records:
+        return own, own_records
+    # The initial query counts toward the eight-query bound.
+    first_parent = max(1, len(labels) - 7)
+    discovered: list[tuple[str, list[str]]] = []
+    for start in range(first_parent, len(labels)):
         name = ".".join(labels[start:])
         records = [r for r in await ctx.txt(f"_dmarc.{name}") if is_dmarc_candidate(r)]
-        if not records:
-            continue
-        parsed = parse_dmarc(records[0]) if len(records) == 1 else None
-        marker = parsed.psd if parsed is not None and parsed.starts_right else "u"
-        candidates.append((name, records, marker))
-        if start == 0:
-            return name, records  # exact-domain policy, even when invalid/multiple
-        if marker == "n":
-            return name, records
-    for name, records, marker in candidates:
-        if marker != "y":
-            return name, records
-    for name, records, marker in candidates:
-        if marker == "y":
-            return name, records
-    return ctx.domain, []
+        valid = [r for r in records if parse_dmarc(r).starts_right]
+        if len(valid) != 1:
+            continue  # Multiple/invalid records cannot establish an inherited policy.
+        record = parse_dmarc(valid[0])
+        if record.psd == "n":
+            return name, valid
+        if record.psd == "y":
+            return discovered[-1] if discovered else (name, valid)
+        discovered.append((name, valid))
+    return discovered[-1] if discovered else (ctx.domain, [])
 
 
 @extension.check("dmarc", category="mail", weight=10, internal=False)
