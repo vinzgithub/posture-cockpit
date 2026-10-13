@@ -179,6 +179,10 @@ class LiveNetwork:
             raise NetworkError(f"limit of {allowed} {kind} per scan reached")
         self._spent[kind] += 1
 
+    def reserve_connection(self) -> None:
+        """Reserve one connection from the shared per-scan budget for a bounded external probe."""
+        self._spend("connections")
+
     async def _bounded(self, key: tuple, make: Callable[[], Awaitable[T]]) -> T:
         # Shielded work outlives the check that asked for it: it needs its own deadline.
         try:
