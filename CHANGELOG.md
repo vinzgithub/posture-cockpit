@@ -1,6 +1,29 @@
 # Changelog
 
-## 0.2.0 — unreleased
+## Unreleased
+
+Display fixes shared by the next changes (history, PDF): local time, wording, PDF layout, cookie name. No change to the stored data, the scores or the API.
+
+### Times
+
+- **Local time on pages and in PDF reports.** Times were shown in UTC ("07:19" for a scan at 09:19 in Paris), and the day could be wrong between midnight and 2 a.m. Pages, the audit log and reports now use the time zone of the instance: `POSTURE_COCKPIT_TIMEZONE`, else `TZ`, else UTC. The PDF states the offset ("09:19 UTC+2"). The database, the API (`scanned_at`) and the file number of the report keep UTC. Summer and winter time are handled (tests on both changes of hour).
+- New dependency `tzdata`: zone names are available even where the system has none.
+
+### Wording
+
+- A fix worth less than one point once rounded showed "+ points" with no number: it now says "< 1 point" (card, panel, PDF), and checking it again says the score stays where it was instead of "+0 points".
+- Agreement with numbers: "1 demande une correction rapide" (was "1 demandent"), "1 est conforme", "1 point peut encore être amélioré", "+1 point", "+1 pt", "1 minute", "1 seconde", "1 contrôle réalisé"; English likewise.
+- A scan that had no score at first and got one through rechecks no longer reads "Votre note est passée de 0 à 70": a missing score is never shown as 0.
+
+### PDF report
+
+- A heading is never left alone at the bottom of a page ("MÉTHODE" ended page 2 of the fournet.one report, its text alone on page 3). The annex now follows on the same page when there is room.
+
+### Sessions
+
+- `POSTURE_COCKPIT_SESSION_COOKIE` names the session cookie (default unchanged: `posture_cockpit`), so that two instances at the same address no longer sign each other out. Names browsers would refuse are rejected at start-up.
+
+## 0.2.0 — 2026-10-13
 
 Audit and consolidation release: security of the scanner and of the application, accuracy of the checks, reliability of the score. No new family of checks.
 
