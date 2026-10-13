@@ -285,6 +285,9 @@ async def test_smtp_engine_observations_respect_dns_mx_and_host_limit():
 
     class FakeNetwork:
         def __init__(self):
+            from posture_cockpit.core.egress import INTERNET
+
+            self.policy = INTERNET
             self.probed = []
             self.dns_calls = []
 
