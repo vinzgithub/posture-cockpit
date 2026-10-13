@@ -108,3 +108,24 @@ def test_invalid_sp_never_reports_full_enforcement():
     })
     assert f.status is Status.WARN
     assert f.outcome.summary == "mail.dmarc.invalid_monitoring"
+
+
+def test_intermediate_policy_does_not_override_psd():
+    f = _check("x.organization.example", {
+        "_dmarc.x.organization.example TXT": None,
+        "_dmarc.organization.example TXT": None,
+        "_dmarc.example TXT": ["v=DMARC1; p=reject; psd=y"],
+        "_dmarc.x.example TXT": ["v=DMARC1; p=none"],
+    })
+    assert f.status is Status.OK
+    assert f.outcome.evidence["found_at"] == "_dmarc.example"
+
+
+def test_organizational_domain_immediately_below_psd_wins():
+    f = _check("host.organization.example", {
+        "_dmarc.host.organization.example TXT": None,
+        "_dmarc.organization.example TXT": ["v=DMARC1; p=reject"],
+        "_dmarc.example TXT": ["v=DMARC1; p=none; psd=y"],
+    })
+    assert f.status is Status.OK
+    assert f.outcome.evidence["found_at"] == "_dmarc.organization.example"
