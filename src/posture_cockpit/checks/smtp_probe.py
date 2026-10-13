@@ -43,7 +43,10 @@ def _certificate_details(der: bytes) -> tuple[str, datetime, int]:
 async def _reply(reader: asyncio.StreamReader) -> tuple[str, ...]:
     lines: list[str] = []
     for _ in range(32):
-        raw = await reader.readline()
+        try:
+            raw = await reader.readuntil(b"\r\n")
+        except (asyncio.IncompleteReadError, asyncio.LimitOverrunError) as exc:
+            raise ValueError("SMTP reply incomplete or oversized") from exc
         if not raw or len(raw) > 1024 or not raw.endswith(b"\r\n"):
             raise ValueError("SMTP reply incomplete or oversized")
         line = raw[:-2].decode("ascii")
