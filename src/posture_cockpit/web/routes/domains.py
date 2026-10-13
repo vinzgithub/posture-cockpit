@@ -18,10 +18,10 @@ from starlette.datastructures import FormData
 from starlette.exceptions import HTTPException
 
 from ...core import providers, scoring
-from ...i18n import finding_summary
 from ...core.engine import normalize_domain
 from ...core.model import Status
 from ...core.network import NetworkError
+from ...i18n import finding_summary
 from ...scanner import DEMO_DOMAIN, InternalScansDisabled
 from ...storage import Row
 from ..deps import (
