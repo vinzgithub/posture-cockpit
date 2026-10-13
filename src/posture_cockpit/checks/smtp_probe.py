@@ -4,8 +4,8 @@
 
 import asyncio
 import contextlib
-from dataclasses import dataclass
 from collections.abc import Callable
+from dataclasses import dataclass
 
 from .smtp import parse_ehlo_reply
 from .smtp_egress import allowed_smtp_mx_addresses
