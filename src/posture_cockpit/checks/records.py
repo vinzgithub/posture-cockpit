@@ -137,7 +137,7 @@ def _mechanism_value_ok(name: str, rest: str) -> bool:
 
 
 # ====================================================================== DMARC
-# RFC 7489, §6.3 (tags) and §6.4 (syntax). https://www.rfc-editor.org/rfc/rfc7489
+# RFC 9989, §4.7 and §4.10 (tags and discovery). https://www.rfc-editor.org/rfc/rfc9989
 DMARC_POLICIES = ("none", "quarantine", "reject")
 _URI = re.compile(r"[a-z][a-z0-9+.-]*:\S+", re.IGNORECASE)
 
@@ -146,11 +146,14 @@ _URI = re.compile(r"[a-z][a-z0-9+.-]*:\S+", re.IGNORECASE)
 class Dmarc:
     tags: dict[str, str]
     starts_right: bool                    # the record begins with v=DMARC1 (otherwise it is discarded)
-    policy: str | None                    # p: none, quarantine, reject; None when missing or invalid
+    policy: str | None                    # p: none, quarantine, reject; absent defaults to none
     subdomain_policy: str | None          # sp, or p when sp is absent
-    pct: int                              # 100 when absent or invalid (the value receivers then use)
+    pct: int                              # legacy compatibility; RFC 9989 does not use pct
     rua: tuple[str, ...]
     errors: tuple[tuple[str, str], ...]   # (tag, value) that do not follow the RFC
+    psd: str = "u"                        # y: public suffix; n: explicitly organizational; u: unspecified
+    non_existent_policy: str | None = None  # np, when given; None means use sp/p
+    testing: bool = False                 # t=y: requested reduced enforcement
 
 
 def is_dmarc_candidate(record: str) -> bool:
@@ -160,9 +163,14 @@ def is_dmarc_candidate(record: str) -> bool:
 
 def parse_dmarc(record: str) -> Dmarc:
     pairs = tags(record)
-    values = dict(pairs)  # the first occurrence would be better, but duplicated tags are rare
-    starts_right = bool(pairs) and pairs[0][0] == "v" and pairs[0][1].upper() == "DMARC1"
+    values = dict(pairs)
+    starts_right = bool(pairs) and pairs[0] == ("v", "DMARC1")
     errors: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    for name, value in pairs:
+        if name in seen:
+            errors.append((name, value))
+        seen.add(name)
 
     def policy_tag(name: str) -> str | None:
         value = values.get(name)
@@ -173,24 +181,25 @@ def parse_dmarc(record: str) -> Dmarc:
         errors.append((name, value))
         return None
 
-    policy = policy_tag("p")
-    if "p" not in values:
-        errors.append(("p", ""))
+    # RFC 9989 §4.7: an omitted p tag means monitoring, not invalid syntax.
+    policy = policy_tag("p") if "p" in values else "none"
     subdomain_policy = policy_tag("sp") if "sp" in values else policy
+    non_existent_policy = policy_tag("np") if "np" in values else None
+    psd = values.get("psd", "u").lower()
+    if psd not in ("y", "n", "u"):
+        errors.append(("psd", values["psd"]))
+        psd = "u"
+    testing = values.get("t", "n").lower() == "y"
+    if values.get("t", "n").lower() not in ("y", "n"):
+        errors.append(("t", values["t"]))
 
+    # RFC 9989 §4.7: unregistered tags (including legacy pct/rf/ri)
+    # MUST be ignored, not treated as syntax errors or partial enforcement.
     pct = 100
-    if "pct" in values:
-        raw = values["pct"]
-        if raw.isdigit() and 0 <= int(raw) <= 100:
-            pct = int(raw)
-        else:
-            errors.append(("pct", raw))  # §6.3: an integer from 0 to 100; receivers fall back to 100
 
     for name, allowed in (("adkim", ("r", "s")), ("aspf", ("r", "s"))):
         if name in values and values[name].lower() not in allowed:
             errors.append((name, values[name]))
-    if "ri" in values and not values["ri"].isdigit():
-        errors.append(("ri", values["ri"]))
     if "fo" in values and not all(token.strip().lower() in ("0", "1", "d", "s") for token in values["fo"].split(":")):
         errors.append(("fo", values["fo"]))
 
@@ -201,7 +210,8 @@ def parse_dmarc(record: str) -> Dmarc:
                 errors.append((name, uri))
             elif name == "rua":
                 rua.append(uri)
-    return Dmarc(values, starts_right, policy, subdomain_policy, pct, tuple(rua), tuple(errors))
+    return Dmarc(values, starts_right, policy, subdomain_policy, pct, tuple(rua), tuple(errors),
+                 psd, non_existent_policy, testing)
 
 
 # ======================================================================= DKIM
