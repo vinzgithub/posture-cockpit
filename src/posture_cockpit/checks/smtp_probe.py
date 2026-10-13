@@ -3,6 +3,7 @@
 """Isolated and bounded SMTP EHLO probe, not activated in live scans."""
 
 import asyncio
+import contextlib
 from dataclasses import dataclass
 
 from .smtp import parse_ehlo_reply
@@ -58,9 +59,7 @@ async def probe_smtp_ehlo(mx: str, declared_mx: tuple[str, ...],
             return SmtpObservation(mx, ehlo, parse_ehlo_reply(ehlo).starttls_advertised)
         finally:
             writer.close()
-            try:
+            with contextlib.suppress(OSError, TimeoutError):
                 await asyncio.wait_for(writer.wait_closed(), 1)
-            except (OSError, TimeoutError):
-                pass
 
     return await asyncio.wait_for(exchange(), timeout)
