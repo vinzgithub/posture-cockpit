@@ -20,6 +20,8 @@ from datetime import date
 from functools import cache
 from pathlib import Path
 
+from .core.model import Finding
+
 LOCALES = ("fr", "en")
 _DIR = Path(__file__).parent / "locales"
 
@@ -102,6 +104,32 @@ class Catalog:
             if self.has(lang, key) or self.has("en", key):
                 return self.text(lang, key, params)
         return keys[-1]
+
+
+
+# Early scans may not have saved the zone name needed by newer DNS wordings.
+# Render the recorded zone when available, otherwise use a truthful generic
+# sentence rather than displaying an unexpanded "{zone}" or inventing a zone.
+_LEGACY_DNS_TEXT = {
+    "dns.nameservers.ok": "history.legacy_dns.nameservers_ok",
+    "dns.nameservers.single": "history.legacy_dns.nameservers_single",
+    "dns.dnssec.on": "history.legacy_dns.dnssec_on",
+    "dns.dnssec.off": "history.legacy_dns.dnssec_off",
+    "dns.dnssec.broken": "history.legacy_dns.dnssec_broken",
+    "dns.caa.present_inherited": "history.legacy_dns.caa_inherited",
+}
+
+
+def finding_summary(catalog: Catalog, lang: str, finding: Finding, domain: str) -> str:
+    """Translate an outcome, including incomplete legacy DNS observations."""
+    values = {"domain": domain, **finding.outcome.params}
+    if "zone" not in values:
+        recorded_zone = finding.outcome.evidence.get("zone")
+        if isinstance(recorded_zone, str) and recorded_zone:
+            values["zone"] = recorded_zone
+        elif finding.outcome.summary in _LEGACY_DNS_TEXT:
+            return catalog.text(lang, _LEGACY_DNS_TEXT[finding.outcome.summary], values)
+    return catalog.text(lang, finding.outcome.summary, values)
 
 
 def pick_locale(accept_language: str | None, default: str = "fr") -> str:
