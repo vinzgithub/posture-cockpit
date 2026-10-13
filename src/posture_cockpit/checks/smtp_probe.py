@@ -5,6 +5,7 @@
 import asyncio
 import contextlib
 from dataclasses import dataclass
+from collections.abc import Callable
 
 from .smtp import parse_ehlo_reply
 from .smtp_egress import allowed_smtp_mx_addresses
@@ -38,14 +39,16 @@ async def _reply(reader: asyncio.StreamReader) -> tuple[str, ...]:
 
 async def probe_smtp_ehlo(mx: str, declared_mx: tuple[str, ...],
                           addresses: tuple[str, ...], *, internal: bool = False,
+                          reserve_connection: Callable[[], None],
                           timeout: float = 5.0) -> SmtpObservation:
     """One connection to a prevalidated, pinned MX IP, no retry or mail delivery.
 
-    Caller must account for this probe in the per-scan connection budget.
+    The caller must supply a per-scan connection budget reservation callback.
     """
     if not 0 < timeout <= 20:
         raise ValueError("SMTP timeout out of bounds")
     ip = allowed_smtp_mx_addresses(mx, declared_mx, addresses, internal=internal)[0]
+    reserve_connection()  # Refuse the probe before any socket if the scan budget is exhausted.
 
     async def exchange() -> SmtpObservation:
         reader, writer = await asyncio.open_connection(ip, 25)
