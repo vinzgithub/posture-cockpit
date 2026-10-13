@@ -67,6 +67,8 @@
   "mail.dmarc.malformed.action": "Réécrire la politique DMARC",
   "mail.dmarc.malformed.how": "L'enregistrement doit commencer exactement par « v=DMARC1; » suivi de « p=… ». Par exemple : v=DMARC1; p=none; rua=mailto:dmarc@{domain}",
   "mail.dmarc.monitoring_inherited": "Le domaine suit la politique DMARC de {parent}, qui est en observation : les faux e-mails sont encore livrés.",
+  "mail.dmarc.monitoring_inherited.action": "Renforcer la politique DMARC héritée",
+  "mail.dmarc.monitoring_inherited.how": "La politique DMARC est publiée sur {parent}. Vérifiez les rapports et coordonnez un renforcement avec le gestionnaire du domaine parent. Aucun nouvel enregistrement DMARC local n’est nécessaire.",
   "mail.dmarc.syntax": "La politique DMARC (p={policy}) contient des valeurs non conformes : {tags}. Les messageries les remplacent par les valeurs par défaut, mais l'enregistrement est à corriger.",
   "mail.dmarc.syntax.action": "Corriger les valeurs de la politique DMARC",
   "mail.dmarc.syntax.how": "Valeurs admises : pct de 0 à 100, adkim et aspf r ou s, rua et ruf des adresses « mailto:adresse@domaine » séparées par des virgules. Retirez ou corrigez les balises signalées dans {name}.",
