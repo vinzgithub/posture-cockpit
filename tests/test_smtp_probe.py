@@ -312,3 +312,34 @@ async def test_live_network_verified_tls_is_explicit_opt_in(monkeypatch):
     observation = await net.smtp_ehlo("mx.example.org", ("mx.example.org",), verify_tls=True)
     assert observation.tls_verified is True
     assert tls_calls == ["mx.example.org"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("peer_certificate", [None, b"", b"not-der"])
+async def test_starttls_missing_or_invalid_certificate_is_not_verified(monkeypatch, peer_certificate):
+    writer = FakeWriter()
+
+    async def start_tls(context, *, server_hostname, ssl_handshake_timeout):
+        pass
+
+    class TLS:
+        def version(self):
+            return "TLSv1.3"
+
+        def getpeercert(self, binary_form=False):
+            return peer_certificate
+
+    writer.start_tls = start_tls
+    writer.get_extra_info = lambda name: TLS() if name == "ssl_object" else None
+
+    async def fake_open(ip, port):
+        return reader_with("220 mx.example.org ready", "250-mx.example.org", "250 STARTTLS",
+                           "220 Ready to start TLS"), writer
+
+    monkeypatch.setattr(asyncio, "open_connection", fake_open)
+    result = await probe_smtp_ehlo(
+        "mx.example.org", ("mx.example.org",), ("8.8.8.8",),
+        reserve_connection=lambda: None, verify_tls=True,
+    )
+    assert result.tls_verified is False
+    assert result.tls_error
