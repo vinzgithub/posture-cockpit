@@ -206,7 +206,11 @@ async def _dmarc_records(ctx: CheckContext) -> tuple[str, list[str]]:
         if record.psd == "n":
             return name, valid
         if record.psd == "y":
-            return discovered[-1] if discovered else (name, valid)
+            # RFC 9989: the organizational domain is exactly one label below
+            # the PSD. A policy at any deeper intermediate name does not
+            # supersede the PSD policy unless it is the organizational domain.
+            organizational = ".".join(labels[start - 1:])
+            return next((item for item in discovered if item[0] == organizational), (name, valid))
         discovered.append((name, valid))
     if discovered:
         return discovered[-1]
