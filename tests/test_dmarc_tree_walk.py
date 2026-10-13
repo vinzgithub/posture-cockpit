@@ -129,3 +129,13 @@ def test_organizational_domain_immediately_below_psd_wins():
     })
     assert f.status is Status.OK
     assert f.outcome.evidence["found_at"] == "_dmarc.organization.example"
+
+
+def test_missing_p_monitoring_remedy_adds_quarantine_policy():
+    f = _check("example.org", {
+        "_dmarc.example.org TXT": ["v=DMARC1; rua=mailto:d@example.org"],
+    })
+    assert f.status is Status.WARN
+    assert f.outcome.summary == "mail.dmarc.monitoring"
+    assert any(change.action == "add" and "p=quarantine" in change.value
+               for change in f.outcome.remedy.dns)
