@@ -2,6 +2,10 @@
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """DMARC DNS Tree Walk and RFC 9989 policy markers."""
 
+import asyncio
+from types import SimpleNamespace
+
+from posture_cockpit.checks.mail import _dmarc_records
 from posture_cockpit.checks.records import parse_dmarc
 from posture_cockpit.core.model import Status
 from worlds import changed, healthy, run
@@ -161,3 +165,41 @@ def test_multiple_local_records_without_parent_still_fail():
     })
     assert f.status is Status.FAIL
     assert f.outcome.summary == "mail.dmarc.multiple"
+
+
+def test_tree_walk_limits_to_eight_queries_and_skips_middle_labels():
+    domain = "a.b.c.d.e.f.g.h.i.j.mail.example.com"
+    asked = []
+
+    async def txt(name):
+        asked.append(name)
+        return ["v=DMARC1; p=reject; psd=y"] if name == "_dmarc.com" else []
+
+    owner, records, ignored = asyncio.run(_dmarc_records(SimpleNamespace(domain=domain, txt=txt)))
+    assert owner == "com"
+    assert records == ["v=DMARC1; p=reject; psd=y"]
+    assert ignored == []
+    assert asked == [
+        "_dmarc.a.b.c.d.e.f.g.h.i.j.mail.example.com",
+        "_dmarc.g.h.i.j.mail.example.com",
+        "_dmarc.h.i.j.mail.example.com",
+        "_dmarc.i.j.mail.example.com",
+        "_dmarc.j.mail.example.com",
+        "_dmarc.mail.example.com",
+        "_dmarc.example.com",
+        "_dmarc.com",
+    ]
+
+
+def test_np_distinguishes_nxdomain_from_nodata():
+    policy = ["v=DMARC1; p=reject; sp=reject; np=none; psd=n"]
+    base = {
+        "_dmarc.sub.example.org TXT": None,
+        "_dmarc.example.org TXT": policy,
+    }
+    nxdomain = _check("sub.example.org", {**base, "sub.example.org A": None})
+    nodata = _check("sub.example.org", {**base, "sub.example.org A": []})
+    assert nxdomain.outcome.evidence["existence"] == "nxdomain"
+    assert nxdomain.outcome.summary == "mail.dmarc.monitoring_inherited"
+    assert nodata.outcome.evidence["existence"] == "existing"
+    assert nodata.outcome.summary == "mail.dmarc.enforced_inherited"
