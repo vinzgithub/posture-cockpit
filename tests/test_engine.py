@@ -317,3 +317,26 @@ async def test_smtp_engine_rejects_invalid_host_limit_before_dns():
 
     with pytest.raises(ValueError, match="host limit"):
         await engine.smtp_observations("example.org", NoNetwork(), enabled=True, max_hosts=6)
+
+
+
+@pytest.mark.asyncio
+async def test_smtp_engine_refuses_internal_perimeter_before_dns():
+    class InternalNetwork:
+        policy = type("Policy", (), {"internal": True})()
+
+        async def dns(self, *args):
+            pytest.fail("internal perimeter reached DNS")
+
+    with pytest.raises(NetworkError, match="internal"):
+        await engine.smtp_observations("example.org", InternalNetwork(), enabled=True)
+
+
+@pytest.mark.asyncio
+async def test_smtp_engine_refuses_unnormalized_domain_before_dns():
+    class NoNetwork:
+        async def dns(self, *args):
+            pytest.fail("invalid domain reached DNS")
+
+    with pytest.raises(ValueError, match="normalized"):
+        await engine.smtp_observations("http://example.org", NoNetwork(), enabled=True)
