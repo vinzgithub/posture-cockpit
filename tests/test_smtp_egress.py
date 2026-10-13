@@ -26,3 +26,14 @@ def test_accepts_only_public_ips_for_declared_mx():
 def test_refuses_unsafe_smtp_destinations(host, mx, addresses, internal):
     with pytest.raises(ValueError):
         allowed_smtp_mx_addresses(host, mx, addresses, internal=internal)
+
+
+
+@pytest.mark.parametrize("host", [
+    "mx.example.org\n", "mx..example.org", "-mx.example.org",
+    "mx-.example.org", "mx_example.org", "localhost",
+    "a" * 64 + ".example.org", "mx.example.org:25",
+])
+def test_rejects_invalid_mx_hostnames(host):
+    with pytest.raises(ValueError, match="eligible declared MX"):
+        allowed_smtp_mx_addresses(host, [host], ["8.8.8.8"])
