@@ -33,8 +33,8 @@ from ..deps import (
     lang_of,
     redirect,
     render,
-    require_user,
     require_admin,
+    require_user,
     t,
     visible_domain,
 )
