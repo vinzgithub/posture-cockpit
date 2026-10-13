@@ -203,3 +203,15 @@ def test_np_distinguishes_nxdomain_from_nodata():
     assert nxdomain.outcome.summary == "mail.dmarc.monitoring_inherited"
     assert nodata.outcome.evidence["existence"] == "existing"
     assert nodata.outcome.summary == "mail.dmarc.enforced_inherited"
+
+
+def test_inherited_monitoring_has_specific_actions_in_both_languages():
+    import json
+    from pathlib import Path
+
+    locales = Path(__file__).resolve().parents[1] / "src" / "posture_cockpit" / "checks" / "locales"
+    for lang in ("fr", "en"):
+        messages = json.loads((locales / f"mail.{lang}.json").read_text(encoding="utf-8"))
+        assert messages["mail.dmarc.monitoring_inherited.action"]
+        assert messages["mail.dmarc.monitoring_inherited.action"] != messages["mail.dmarc.action"]
+        assert "{parent}" in messages["mail.dmarc.monitoring_inherited.how"]
