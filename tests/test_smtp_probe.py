@@ -358,3 +358,59 @@ async def test_smtp_reply_rejects_oversized_or_incomplete_data(payload):
     reader.feed_eof()
     with pytest.raises(ValueError, match="incomplete or oversized"):
         await _reply(reader)
+
+
+
+@pytest.mark.asyncio
+async def test_smtp_connection_timeout_consumes_one_budget_and_never_retries(monkeypatch):
+    opened = []
+    net = LiveNetwork(limits=Limits(connections=1), timeout=0.01)
+
+    async def fake_dns(name, rtype):
+        return DnsAnswer(("8.8.8.8",)) if rtype == "A" else DnsAnswer(())
+
+    async def hanging_open(ip, port):
+        opened.append((ip, port))
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(net, "dns", fake_dns)
+    monkeypatch.setattr(asyncio, "open_connection", hanging_open)
+    with pytest.raises(TimeoutError):
+        await net.smtp_ehlo("mx.example.org", ("mx.example.org",))
+    assert opened == [("8.8.8.8", 25)]
+    assert net._spent["connections"] == 1
+    with pytest.raises(NetworkError, match="limit of 1 connections"):
+        await net.smtp_ehlo("mx.example.org", ("mx.example.org",))
+    assert opened == [("8.8.8.8", 25)]
+
+
+@pytest.mark.asyncio
+async def test_smtp_reply_timeout_closes_writer(monkeypatch):
+    writer = FakeWriter()
+    reader = asyncio.StreamReader()
+
+    async def fake_open(ip, port):
+        return reader, writer
+
+    monkeypatch.setattr(asyncio, "open_connection", fake_open)
+    with pytest.raises(TimeoutError):
+        await probe_smtp_ehlo(
+            "mx.example.org", ("mx.example.org",), ("8.8.8.8",),
+            reserve_connection=lambda: None, timeout=0.01,
+        )
+    assert writer.closed
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("timeout", [0, -1, 21, float("nan"), float("inf")])
+async def test_smtp_rejects_invalid_timeout_without_reserving_socket(timeout, monkeypatch):
+    async def must_not_connect(ip, port):
+        pytest.fail("socket opened despite invalid timeout")
+
+    monkeypatch.setattr(asyncio, "open_connection", must_not_connect)
+    with pytest.raises(ValueError, match="timeout"):
+        await probe_smtp_ehlo(
+            "mx.example.org", ("mx.example.org",), ("8.8.8.8",),
+            reserve_connection=lambda: pytest.fail("budget spent despite invalid timeout"),
+            timeout=timeout,
+        )
