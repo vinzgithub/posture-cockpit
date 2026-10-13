@@ -28,14 +28,14 @@ def test_exact_record_wins_over_parent():
     assert f.outcome.evidence["found_at"] == "_dmarc.sub.example.org"
 
 
-def test_psd_n_is_preferred_to_nearer_psd_y():
+def test_psd_y_stops_the_walk_before_higher_ancestors():
     f = _check("x.site.example.org", {
         "_dmarc.x.site.example.org TXT": None,
         "_dmarc.site.example.org TXT": ["v=DMARC1; p=none; psd=y"],
         "_dmarc.example.org TXT": ["v=DMARC1; p=reject; psd=n"],
     })
-    assert f.status is Status.OK
-    assert f.outcome.evidence["found_at"] == "_dmarc.example.org"
+    assert f.status is Status.WARN
+    assert f.outcome.evidence["found_at"] == "_dmarc.site.example.org"
 
 
 def test_psd_policy_applies_when_no_organization_record():
@@ -47,12 +47,13 @@ def test_psd_policy_applies_when_no_organization_record():
     assert f.outcome.evidence["found_at"] == "_dmarc.gov.fr"
 
 
-def test_does_not_query_root_tld_policy():
+def test_tld_psd_policy_can_be_inherited():
     f = _check("example.org", {
         "_dmarc.example.org TXT": None,
         "_dmarc.org TXT": ["v=DMARC1; p=reject; psd=y"],
     })
-    assert f.status is Status.FAIL
+    assert f.status is Status.OK
+    assert f.outcome.evidence["found_at"] == "_dmarc.org"
 
 
 def test_removed_pct_tag_is_reported_as_syntax_issue():
