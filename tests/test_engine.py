@@ -414,6 +414,6 @@ async def test_smtp_opt_in_does_not_mutate_standard_scan_result():
     observations = await engine.smtp_observations("example.org", net, enabled=True)
     after = await engine.scan("example.org", ext.checks, net)
     assert len(observations) == 1
-    assert [(finding.id, finding.status, finding.outcome_json()) for finding in before.findings] == [
-        (finding.id, finding.status, finding.outcome_json()) for finding in after.findings
+    assert [(finding.check_id, finding.status, finding.outcome_json()) for finding in before.findings] == [
+        (finding.check_id, finding.status, finding.outcome_json()) for finding in after.findings
     ]
