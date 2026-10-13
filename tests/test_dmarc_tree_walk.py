@@ -139,3 +139,25 @@ def test_missing_p_monitoring_remedy_adds_quarantine_policy():
     assert f.outcome.summary == "mail.dmarc.monitoring"
     assert any(change.action == "add" and "p=quarantine" in change.value
                for change in f.outcome.remedy.dns)
+
+
+def test_multiple_local_records_do_not_mask_inherited_policy_warning():
+    f = _check("sub.example.org", {
+        "_dmarc.sub.example.org TXT": ["v=DMARC1; p=reject", "v=DMARC1; p=none"],
+        "_dmarc.example.org TXT": ["v=DMARC1; p=reject; psd=n"],
+    })
+    assert f.status is Status.WARN
+    assert f.outcome.summary == "mail.dmarc.multiple_inherited"
+    assert f.outcome.evidence["found_at"] == "_dmarc.example.org"
+    assert f.outcome.evidence["ignored_local_at"] == "_dmarc.sub.example.org"
+    assert len(f.outcome.evidence["ignored_local_records"]) == 2
+
+
+def test_multiple_local_records_without_parent_still_fail():
+    f = _check("sub.example.org", {
+        "_dmarc.sub.example.org TXT": ["v=DMARC1; p=reject", "v=DMARC1; p=none"],
+        "_dmarc.example.org TXT": None,
+        "_dmarc.org TXT": None,
+    })
+    assert f.status is Status.FAIL
+    assert f.outcome.summary == "mail.dmarc.multiple"
