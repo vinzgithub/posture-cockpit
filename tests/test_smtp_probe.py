@@ -6,12 +6,11 @@ import asyncio
 import ssl
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import NameOID
-
-import pytest
 
 from posture_cockpit.checks.smtp_probe import _certificate_details, _reply, probe_smtp_ehlo
 from posture_cockpit.core.network import DnsAnswer, Limits, LiveNetwork, NetworkError
