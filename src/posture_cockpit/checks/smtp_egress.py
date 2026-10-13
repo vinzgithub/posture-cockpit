@@ -10,8 +10,18 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from ipaddress import ip_address
+import re
 
 from posture_cockpit.core.egress import Zone, classify, parse_address
+
+
+_DNS_LABEL = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\Z")
+
+
+def _valid_mx_name(name: str) -> bool:
+    return 0 < len(name) <= 253 and "." in name and all(
+        _DNS_LABEL.fullmatch(label) for label in name.split(".")
+    )
 
 
 def allowed_smtp_mx_addresses(
@@ -21,7 +31,7 @@ def allowed_smtp_mx_addresses(
     """Fail closed unless host is a declared MX and *every* IP is public."""
     name = host.lower().rstrip(".")
     mx_names = {mx.lower().rstrip(".") for mx in declared_mx}
-    if internal or not name or name not in mx_names or parse_address(name) is not None:
+    if internal or not _valid_mx_name(name) or name not in mx_names or parse_address(name) is not None:
         raise ValueError("SMTP target is not an eligible declared MX")
     candidates = tuple(addresses)
     if not candidates:
