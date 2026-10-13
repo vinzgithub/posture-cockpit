@@ -40,7 +40,8 @@ def normalize_domain(text: str) -> str:
     """Turns what a user typed into a domain name, or raises ValueError.
 
     Accepts ``Example.org``, ``https://www.example.org/contact`` (→ ``example.org``:
-    the website's ``www`` is checked with its domain), bare ``www.example.org``\n    (kept as a distinct DNS name), and internationalised names
+    the website's ``www`` is checked with its domain), bare ``www.example.org``
+    (kept as a distinct DNS name), and internationalised names
     (``café.fr`` → ``xn--caf-dma.fr``)."""
     name = (text or "").strip().lower()
     # Bare hostnames are exact DNS names. Keep legacy URL / port normalization.
