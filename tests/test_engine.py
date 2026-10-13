@@ -384,3 +384,36 @@ async def test_smtp_engine_caps_observations_at_five_mx():
     assert len(observations) == 5
     assert len(net.visited) == 5
     assert "mx6.example.org" not in net.visited
+
+
+@pytest.mark.asyncio
+async def test_smtp_opt_in_does_not_mutate_standard_scan_result():
+    from posture_cockpit.checks.smtp_probe import SmtpObservation
+    from posture_cockpit.core.egress import INTERNET
+    from posture_cockpit.core.network import DnsAnswer
+
+    class ValidationNetwork(FixtureNetwork):
+        policy = INTERNET
+
+        async def dns(self, name, rtype):
+            if rtype == "MX":
+                return DnsAnswer(("10 mx.example.org.",))
+            return await super().dns(name, rtype)
+
+        async def smtp_ehlo_for_domain(self, domain, host, *, verify_tls):
+            return SmtpObservation(host, ("250 STARTTLS",), True, True, True)
+
+    ext = Extension("smtp_unchanged", name="Unchanged", version="1")
+
+    @ext.check("status", category="dns", weight=1)
+    async def status(ctx):
+        return ok("dns.only")
+
+    net = ValidationNetwork({})
+    before = await engine.scan("example.org", ext.checks, net)
+    observations = await engine.smtp_observations("example.org", net, enabled=True)
+    after = await engine.scan("example.org", ext.checks, net)
+    assert len(observations) == 1
+    assert [(finding.id, finding.status, finding.outcome_json()) for finding in before.findings] == [
+        (finding.id, finding.status, finding.outcome_json()) for finding in after.findings
+    ]
