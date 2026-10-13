@@ -483,5 +483,6 @@
   "smtp.state.starttls_rejected": "STARTTLS rejected",
   "smtp.state.starttls_missing": "STARTTLS missing",
   "smtp.state.not_evaluated": "Not evaluated",
-  "audit.action.smtp.observations": "Manual MX server check (SMTP/STARTTLS)"
+  "audit.action.smtp.observations": "Manual MX server check (SMTP/STARTTLS)",
+  "smtp.details.observations": "Observations collected"
 }
