@@ -505,3 +505,33 @@ async def test_no_tls_handshake_without_starttls_advertisement(monkeypatch):
     assert result.tls_verified is None
     assert len(writer.sent) == 1
     assert writer.closed
+
+
+@pytest.mark.asyncio
+async def test_starttls_certificate_hostname_mismatch_is_not_verified(monkeypatch):
+    writer = FakeWriter()
+
+    async def start_tls(context, *, server_hostname, ssl_handshake_timeout):
+        assert server_hostname == "mx.example.org"
+        assert context.check_hostname is True
+        raise ssl.SSLCertVerificationError(
+            "Hostname mismatch, certificate is not valid for 'mx.example.org'"
+        )
+
+    writer.start_tls = start_tls
+
+    async def fake_open(ip, port):
+        return reader_with("220 mx.example.org ready", "250-mx.example.org",
+                           "250 STARTTLS", "220 Ready to start TLS"), writer
+
+    monkeypatch.setattr(asyncio, "open_connection", fake_open)
+    result = await probe_smtp_ehlo(
+        "mx.example.org", ("mx.example.org",), ("8.8.8.8",),
+        reserve_connection=lambda: None, verify_tls=True,
+    )
+    assert result.starttls_advertised is True
+    assert result.starttls_accepted is True
+    assert result.tls_verified is False
+    assert "Hostname mismatch" in result.tls_error
+    assert result.certificate_issuer == ""
+    assert writer.closed
