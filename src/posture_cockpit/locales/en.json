@@ -1,36 +1,29 @@
 {
   "app.tagline": "Passive security check of a domain, with a step-by-step plan of fixes.",
-
   "nav.label": "Main navigation",
   "nav.domains": "Domains",
   "nav.settings": "Settings",
   "nav.admin": "Administration",
   "nav.logout": "Sign out",
-
   "footer.passive": "Passive checks only: DNS, public certificates, website headers. Nothing is changed on your side.",
-
   "status.ok": "Compliant",
   "status.warn": "To improve",
   "status.fail": "Critical",
   "status.info": "Information",
   "status.error": "Not evaluated",
-
   "category.mail": "Mail",
   "category.web": "Website",
   "category.tls": "Certificates and TLS",
   "category.dns": "DNS",
-
   "effort.easy": "Easy",
   "effort.medium": "Careful",
   "effort.delegate": "To delegate",
-
   "grade.A": "Strong",
   "grade.B": "Fair",
   "grade.C": "Needs watching",
   "grade.D": "Fragile",
   "grade.E": "Exposed",
   "grade.F": "Critical",
-
   "check.error.timeout": "No answer within {seconds} seconds: this point could not be evaluated.",
   "check.error.network": "No answer (DNS server or the site's server): this point could not be evaluated.",
   "check.error.internal": "This check ran into an error: this point could not be evaluated. The details are in the values found.",
@@ -38,38 +31,31 @@
   "check.error.blocked.outside": "Not evaluated: {host} points to {address}, outside the networks allowed for this internal perimeter.",
   "check.error.blocked.forbidden": "Not evaluated: {host} points to {address}, a reserved address (link-local, multicast, metadata service) that Posture Cockpit never contacts.",
   "check.error.blocked.port": "Not evaluated: port {port} of {host} is not allowed for this scan.",
-
   "setup.title": "Welcome",
   "setup.intro": "Create the administrator account. You can add other accounts afterwards.",
   "setup.min_length": "at least {n} characters",
   "setup.password2": "The same password, once more",
   "setup.demo": "Check the demo domain to discover the tool",
   "setup.submit": "Create the account",
-
   "login.title": "Sign in",
   "login.username": "Username",
   "login.password": "Password",
   "login.submit": "Sign in",
-
   "login_code.title": "Verification code",
   "login_code.intro": "Type the six-digit code shown by your authenticator app.",
   "login_code.code": "Code",
   "login_code.submit": "Confirm",
   "login_code.recovery_hint": "Lost your phone? Type one of your recovery codes instead.",
   "login_code.back": "Back to username and password",
-
   "account.password_title": "Choose your password",
   "account.password_intro": "The password of {name} was set by an administrator. Choose one that only you know.",
   "account.password_submit": "Save and continue",
-
   "password.new": "New password",
   "password.current": "Current password",
-
   "settings.title": "Settings",
   "settings.language": "Language",
   "settings.password": "Password",
   "settings.password_submit": "Change the password",
-
   "mfa.title": "Two-factor authentication",
   "mfa.intro": "Once on, signing in asks for a code shown by your phone, on top of the password.",
   "mfa.step_scan": "Scan this QR code",
@@ -97,7 +83,6 @@
   "mfa.disable": "Turn off",
   "mfa.disable_confirm": "Turn two-factor authentication off?",
   "mfa.start": "Turn on two-factor authentication",
-
   "api.title": "API keys",
   "api.help": "To read the domains' scores from Home Assistant or a monitoring tool (GET /api/v1/domains, header Authorization: Bearer).",
   "api.created": "Key \"{name}\" created.",
@@ -108,7 +93,6 @@
   "api.revoke": "Revoke",
   "api.revoke_confirm": "Revoke the key \"{name}\"?",
   "api.create": "Create a key",
-
   "admin.title": "Administration",
   "admin.intro": "Accounts, internal perimeters, extensions, audit log and the report signature. Public domains are shared by every account; those of internal perimeters are for administrators only.",
   "admin.users": "Accounts",
@@ -151,7 +135,6 @@
   "admin.confirm_title": "Confirm your password",
   "admin.confirm_intro": "The administration pages then stay open for {minutes:minute|minutes}.",
   "admin.confirm_submit": "Continue",
-
   "flash.welcome": "Welcome! Type a domain to run the first scan.",
   "flash.recovery_used": "You signed in with a recovery code. {n} left.",
   "flash.password_set": "Password saved.",
@@ -171,7 +154,6 @@
   "flash.verified": "Fixed: +{points:point|points}, your score is now {score}.",
   "flash.not_yet": "Not visible yet. DNS changes sometimes take a few minutes to spread: try again a little later.",
   "flash.domain_deleted": "{name} and its scans have been deleted.",
-
   "error.title": "Oops",
   "error.back": "Back to the domains",
   "error.csrf": "The form has expired. Go back, reload the page and try again.",
@@ -195,7 +177,6 @@
   "error.domain_unknown": "The domain {domain} does not exist.",
   "error.pdf_unavailable": "The PDF report could not be created: the WeasyPrint library is missing on this server.",
   "error.domain_empty": "The DNS returns nothing for {domain}. Check the name, or the DNS servers Posture Cockpit uses (POSTURE_COCKPIT_NAMESERVERS).",
-
   "domains.title": "Domains",
   "domains.headline": "Is your domain well protected?",
   "domains.lead": "Mail, certificates, website, DNS: about twenty checks in a few seconds, then a plan to fix what matters.",
@@ -210,7 +191,6 @@
   "domains.empty_title": "No domain yet",
   "domains.empty_text": "Type yours above, or discover the tool with a fictitious domain.",
   "domains.try_demo": "Try the demo domain",
-
   "plan.scanned": "{domain} · checked on {date} at {time}",
   "plan.steps": "Steps",
   "plan.your_score": "Your score",
@@ -259,19 +239,16 @@
   "plan.verify_dns": "I made the change — check",
   "plan.verify_delegate": "It's done — check",
   "plan.verify": "Check",
-
   "plan.headline.clean": "No urgent fix",
   "plan.headline.start": "{n:fix|fixes} to go from {start} to {end}",
   "plan.headline.start_points": "{n:fix|fixes} to gain {points:point|points}",
   "plan.headline.progress": "{n:fix|fixes} left before grade {grade}",
   "plan.headline.done": "The priority fixes are done",
-
   "plan.subline.clean": "Every scored check is compliant. Well done.",
   "plan.subline.clean_improvements": "{n:improvement is|improvements are} still possible, none urgent.",
   "plan.subline.start": "Sorted by effect on your score. Allow about {minutes:minute|minutes} in all.",
   "plan.subline.progress": "Your score went from {start} to {score}. Keep going.",
   "plan.subline.done": "Run a new scan to confirm everything, then share the report.",
-
   "plan.step.scan": "Scan",
   "plan.step.scan_detail": "{n:check|checks}",
   "plan.step.fix": "Fix",
@@ -281,10 +258,8 @@
   "plan.step.share": "Share",
   "plan.step.share_detail": "PDF report",
   "plan.step.scan_incomplete": "{evaluated} of {applicable} evaluated",
-
   "plan.score_note.remaining": "The hatched part shows what the remaining fixes will bring.",
   "plan.score_note.reached": "Target reached. Remember to run a scan every month.",
-
   "details.title": "Technical details",
   "details.back": "Back to the plan",
   "details.lead": "Scan of {date} at {time}, in {seconds} s, by Posture Cockpit {version}.",
@@ -302,7 +277,6 @@
   "details.history_coverage": "Coverage",
   "details.history_version": "Version",
   "details.history_note": "Every scan is kept. Scores of scans made before version 0.2.0 were computed again with the current coverage rules.",
-
   "dnshost.other.name": "Other",
   "dnshost.other.open": "Open the customer area of the company where you bought the domain, then look for:",
   "dnshost.other.path": "DNS zone  or  DNS records",
@@ -310,35 +284,30 @@
   "dnshost.other.fill": "Paste the name and the value below, then save.",
   "dnshost.other.apex": "For the domain itself, the name is \"@\" (or left empty, depending on the host).",
   "dnshost.other.delete": "Delete the {rtype} record named \"{name}\".",
-
   "dnshost.ovh.open": "Sign in to the OVHcloud Control Panel, then open the DNS zone:",
   "dnshost.ovh.path": "Web Cloud › Domain names › {domain} › DNS zone",
   "dnshost.ovh.add": "Click \"Add an entry\" and choose the type {rtype}.",
   "dnshost.ovh.fill": "Paste the name in \"Sub-domain\" and the value in \"Value\", then confirm.",
   "dnshost.ovh.apex": "For a name \"@\", leave \"Sub-domain\" empty: the record is for the domain itself.",
   "dnshost.ovh.delete": "Find the {rtype} line named \"{name}\", click \"…\" at the end of the line, then \"Delete entry\".",
-
   "dnshost.gandi.open": "Sign in to Gandi, then open the DNS records:",
   "dnshost.gandi.path": "Domain names › {domain} › DNS records",
   "dnshost.gandi.add": "Click \"Add record\" and choose the type {rtype}.",
   "dnshost.gandi.fill": "Paste the name and the value below, then create the record.",
   "dnshost.gandi.apex": "For the domain itself, the name is \"@\".",
   "dnshost.gandi.delete": "Find the {rtype} record named \"{name}\", then click the bin.",
-
   "dnshost.ionos.open": "Sign in to your IONOS account, then open the domain's DNS:",
   "dnshost.ionos.path": "Domains & SSL › {domain} › DNS",
   "dnshost.ionos.add": "Click \"Add record\" and choose {rtype}.",
   "dnshost.ionos.fill": "Paste the name in \"Host name\" and the value in \"Value\", then save.",
   "dnshost.ionos.apex": "For the domain itself, the host name is \"@\".",
   "dnshost.ionos.delete": "Find the {rtype} record named \"{name}\", then click the bin.",
-
   "dnshost.cloudflare.open": "Sign in to the Cloudflare dashboard, then open the records:",
   "dnshost.cloudflare.path": "{domain} › DNS › Records",
   "dnshost.cloudflare.add": "Click \"Add record\" and choose the type {rtype}.",
   "dnshost.cloudflare.fill": "Paste the name in \"Name\" and the value in \"Content\", then save.",
   "dnshost.cloudflare.apex": "For the domain itself, the name is \"@\".",
   "dnshost.cloudflare.delete": "Find the {rtype} record named \"{name}\", click \"Edit\", then \"Delete\".",
-
   "report.title": "Security file — {domain}",
   "report.file_number": "File no. {number}",
   "report.passive_scan": "passive scan of {date}",
@@ -360,15 +329,12 @@
   "report.col_check": "Check",
   "report.col_result": "Result",
   "report.col_found": "Finding and references",
-
   "report.diagnosis.issues": "Out of {total:check evaluated|checks evaluated}, {ok:is compliant|are compliant}, {fail:needs a quick fix|need a quick fix} and {warn:can be improved|can be improved}.",
   "report.diagnosis.plan": "{n:fix|fixes}, about {minutes:minute|minutes} in all, are enough to reach grade {grade}.",
   "report.diagnosis.clean": "Out of {total:check evaluated|checks evaluated}, {ok:is compliant|are compliant} and none needs an urgent fix. {warn:point|points} can still be improved.",
-
   "report.who.you": "yourself",
   "report.who.you_dns": "yourself, at your domain name host",
   "report.who.provider": "your provider",
-
   "status.na": "Not applicable",
   "check.na.internal": "This check is about public domains on the Internet: it does not apply to an internal audit.",
   "error.domain_internal": "{domain} is followed in an internal perimeter: it cannot be scanned from the Internet under the same name. An administrator has access to it.",
@@ -461,7 +427,6 @@
   "audit.action.scan.internal": "Internal scan",
   "audit.action.scan.recheck": "Check run again",
   "audit.action.scan.internal.recheck": "Internal check run again",
-
   "score.not_evaluated": "Not evaluated",
   "score.partial_short": "partial evaluation",
   "score.coverage": "Coverage {percent}%: {evaluated:check evaluated|checks evaluated} out of {applicable}.",
@@ -489,5 +454,16 @@
   "report.restricted_text": "audit of an internal network, not to be shared outside the organisation",
   "report.perimeter_internet": "Perimeter: Internet · public mail, website, certificates and DNS",
   "report.perimeter_internal": "Internal perimeter: {name} · websites and certificates",
-  "report.points_under_one": "< 1 pt"
+  "report.points_under_one": "< 1 pt",
+  "history.count": "{n} saved scans",
+  "history.actions": "Actions",
+  "history.view": "View",
+  "history.pdf": "Download PDF",
+  "history.previous": "← Previous",
+  "history.next": "Next →",
+  "history.page": "Page {page} of {pages}",
+  "history.all": "View all history →",
+  "history.read_only": "Historical scan · read-only",
+  "history.pdf_notice": "Historical report · Scan engine {scan_version} · PDF generated with {generator_version}",
+  "history.recalculated": "Historical score recalculated using current coverage rules; it may differ from the score originally shown."
 }
