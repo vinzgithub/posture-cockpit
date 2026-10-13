@@ -125,6 +125,19 @@ def test_mta_sts_testing_mode():
     assert f.status is Status.WARN and f.outcome.params["mode"] == "testing"
 
 
+@pytest.mark.parametrize("records, summary", [
+    ([], "mail.mta_sts.missing"),
+    (["v=STSv1; id=20261012-01"], "mail.mta_sts.bad_record"),
+    (["v=STSv1; id=2026101201", "v=STSv1; id=2026101202"], "mail.mta_sts.bad_record"),
+    (["v=STSv2; id=2026101201"], "mail.mta_sts.bad_record"),
+    (["unexpected TXT"], "mail.mta_sts.bad_record"),
+])
+def test_mta_sts_dns_distinguishes_absence_from_invalid_records(records, summary):
+    data = changed(healthy(), dns={f"_mta-sts.{DOMAIN} TXT": records})
+    f = one(data, "mail.mta_sts")
+    assert f.outcome.summary == summary
+
+
 def test_mta_sts_record_without_policy_file():
     data = healthy()
     del data["http"][f"https://mta-sts.{DOMAIN}/.well-known/mta-sts.txt"]
