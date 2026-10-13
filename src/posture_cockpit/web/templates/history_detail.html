@@ -1,0 +1,49 @@
+{# Copyright © 2026 Vincent Fournet · SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 -#}
+{# Read-only technical details for a historic scan. #}
+{% extends "base.html" %}
+{% from "_macros.html" import status_icon %}
+{% block title %}{{ t('details.title') }} · {{ scan.domain }}{% endblock %}
+{% block content %}
+<p class="small"><a href="/domains/{{ scan.domain }}/history">← {{ t('details.history') }}</a></p>
+<div class="page-head">
+  {% if scan.perimeter %}<p class="eyebrow"><span class="tag-internal">{{ t('perimeter.internal_audit', name=scan.perimeter) }}</span></p>{% endif %}
+  <p class="eyebrow">{{ t("history.read_only") }}</p>
+  <h1>{{ t('details.title') }} <span class="muted">· {{ scan.domain }}</span></h1>
+  <p class="lead">{{ t('details.lead', date=date(scan.started_at), time=local_time(scan.started_at), seconds=(scan.duration_ms / 1000) | round(1), version=scan.version) }}</p>
+  <p class="small"><a href="/domains/{{ scan.domain }}/history/{{ scan.id }}/report.pdf">{{ t("history.pdf") }}</a></p>
+  {% if scan.version.startswith("0.1.") %}<p class="small muted">{{ t("history.recalculated") }}</p>{% endif %}
+  <p class="coverage {{ 'coverage-partial' if result.partial or result.score is none }}">
+    {% if result.score is not none %}{{ t('details.result', score=result.score, grade=result.grade) }}{% else %}{{ t('score.not_evaluated') }}{% endif %}
+    · {{ t('score.coverage', evaluated=result.evaluated, applicable=result.applicable, percent=result.coverage_percent) }}
+  </p>
+</div>
+
+{% for category, findings in categories.items() %}
+<section class="panel details" aria-labelledby="cat-{{ category }}">
+  <h2 id="cat-{{ category }}">{{ t('category.' ~ category) }}</h2>
+  <ul class="checks">
+    {% for f in findings %}
+    {% set check = registry.get(f.check_id) %}
+    <li class="check status-{{ f.status.value }}">
+      {{ status_icon(f.status.value) }}
+      <div class="check-body">
+        <p class="check-title"><strong>{{ t(f.check_id ~ '.title') }}</strong>
+          <span class="badge badge-{{ f.status.value }}">{{ t('status.' ~ f.status.value) }}</span>
+          {% if f.check_id in rechecks %}<span class="muted small">{{ t('details.rechecked', date=date(rechecks[f.check_id].checked_at)) }}</span>{% endif %}
+        </p>
+        <p>{{ t(f.outcome.summary, domain=scan.domain, **f.outcome.params) }}</p>
+        {% if f.outcome.evidence %}
+        <details>
+          <summary>{{ t('details.evidence') }}</summary>
+          <pre class="evidence">{{ f.outcome.evidence | tojson(indent=2) }}</pre>
+        </details>
+        {% endif %}
+      </div>
+      <code class="check-id muted small">{{ f.check_id }}{% if f.status.scored %} · {{ t('details.weight', n=f.weight) }}{% endif %}</code>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endfor %}
+
+{% endblock %}
