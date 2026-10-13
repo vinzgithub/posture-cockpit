@@ -181,6 +181,37 @@ async def details(request: Request, name: str, user: Row = Depends(require_user)
                   full_coverage=scoring.FULL_COVERAGE)
 
 
+@router.get("/{name}/history")
+async def history_page(request: Request, name: str, page: int = 1, user: Row = Depends(require_user)):
+    """Paginated scan history for one visible domain."""
+    s = services(request)
+    domain = visible_domain(request, name, user)
+    if page < 1 or page > 1000000:
+        raise HTTPException(404)
+    rows, total = s.scans.history_page(domain["id"], page=page)
+    pages = max(1, (total + 19) // 20)
+    if page > pages:
+        raise HTTPException(404)
+    return render(request, "history.html", domain=domain, history=rows, page=page,
+                  pages=pages, total=total, full_coverage=scoring.FULL_COVERAGE)
+
+
+@router.get("/{name}/history/{scan_id}")
+async def history_detail(request: Request, name: str, scan_id: int, user: Row = Depends(require_user)):
+    """Historic assessment: view only; never offer a recheck or another scan."""
+    s = services(request)
+    domain = visible_domain(request, name, user)
+    scan = s.scans.get(scan_id) if scan_id > 0 else None
+    if scan is None or scan.domain_id != domain["id"]:
+        raise HTTPException(404)
+    categories: dict[str, list] = {}
+    for finding in scan.current():
+        categories.setdefault(finding.category, []).append(finding)
+    return render(request, "history_detail.html", domain=domain, scan=scan, categories=categories,
+                  result=scan.assessment(), registry=s.registry, rechecks=scan.rechecks,
+                  full_coverage=scoring.FULL_COVERAGE)
+
+
 @router.post("/{name}/delete")
 async def delete(request: Request, name: str, user: Row = Depends(require_user),
                  form: FormData = Depends(checked_form)):
