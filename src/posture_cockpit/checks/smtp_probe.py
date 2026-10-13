@@ -7,6 +7,10 @@ import contextlib
 import ssl
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
+
+from cryptography import x509
+from cryptography.x509.oid import NameOID
 
 from .smtp import parse_ehlo_reply
 from .smtp_egress import allowed_smtp_mx_addresses
@@ -21,6 +25,19 @@ class SmtpObservation:
     tls_verified: bool | None = None  # None means TLS handshake not attempted
     tls_protocol: str = ""
     tls_error: str = ""
+    certificate_issuer: str = ""
+    certificate_not_after: datetime | None = None
+    certificate_days_remaining: int | None = None
+
+
+def _certificate_details(der: bytes) -> tuple[str, datetime, int]:
+    """Read a verified peer certificate; dates remain timezone-aware."""
+    certificate = x509.load_der_x509_certificate(der)
+    attrs = certificate.issuer.get_attributes_for_oid(NameOID.COMMON_NAME)
+    issuer = str(attrs[0].value) if attrs else certificate.issuer.rfc4514_string()
+    not_after = certificate.not_valid_after_utc
+    days = (not_after - datetime.now(UTC)).days
+    return issuer, not_after, days
 
 
 async def _reply(reader: asyncio.StreamReader) -> tuple[str, ...]:
@@ -80,7 +97,16 @@ async def probe_smtp_ehlo(mx: str, declared_mx: tuple[str, ...],
             try:
                 await writer.start_tls(context, server_hostname=mx, ssl_handshake_timeout=timeout)
                 tls = writer.get_extra_info("ssl_object")
-                return SmtpObservation(mx, ehlo, True, True, True, tls.version() if tls else "")
+                if tls is None:
+                    raise ValueError("STARTTLS completed without an SSL object")
+                der = tls.getpeercert(binary_form=True)
+                if not isinstance(der, bytes) or not der:
+                    raise ValueError("STARTTLS peer certificate missing")
+                issuer, not_after, days = _certificate_details(der)
+                return SmtpObservation(
+                    mx, ehlo, True, True, True, tls.version() or "", "",
+                    issuer, not_after, days,
+                )
             except (ssl.SSLError, OSError, TimeoutError) as exc:
                 return SmtpObservation(mx, ehlo, True, True, False, tls_error=str(exc))
         finally:
