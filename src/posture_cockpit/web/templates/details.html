@@ -55,8 +55,25 @@
         <p class="check-title"><strong>{{ t('smtp.details.starttls') }}</strong>
           <span class="badge badge-error">{{ t('status.error') }}</span>
         </p>
-        <p>{{ t('smtp.details.not_evaluated') }}</p>
+        {% if smtp_attempted | default(false) %}
+          {% if smtp_results %}
+            {% for mx in smtp_results %}
+            <p><strong>{{ mx.mx }}</strong> — {{ t('smtp.state.' ~ mx.state.value) }}</p>
+            {% if mx.tls_protocol %}<p class="small">{{ mx.tls_protocol }} · {{ mx.certificate_issuer }}</p>{% endif %}
+            {% endfor %}
+          {% else %}
+            <p>{{ t('smtp.details.unavailable') }}</p>
+          {% endif %}
+        {% else %}
+          <p>{{ t('smtp.details.not_evaluated') }}</p>
+        {% endif %}
         <p class="muted small">{{ t('smtp.details.score_note') }}</p>
+        {% if user.is_admin and not (smtp_attempted | default(false)) %}
+        <form method="post" action="/domains/{{ scan.domain }}/smtp-observations">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <button type="submit" class="btn btn-secondary">{{ t('smtp.details.run') }}</button>
+        </form>
+        {% endif %}
       </div>
       <code class="check-id muted small">smtp.starttls</code>
     </li>
