@@ -51,6 +51,7 @@
   "mail.dmarc.missing": "No DMARC policy: anyone can send e-mail in the domain's name.",
   "mail.dmarc.how": "Safe: with p=none no e-mail is blocked, you only get reports at the address given (create it if it does not exist). Once the reports are clean, move to p=quarantine.",
   "mail.dmarc.multiple": "Several DMARC policies on {name}: receiving services ignore all of them.",
+  "mail.dmarc.multiple_inherited": "Multiple DMARC policies at {name} are ignored; the policy at {parent} (p={policy}) applies. Remove the local duplicates.",
   "mail.dmarc.multiple.action": "Keep a single DMARC policy",
   "mail.dmarc.multiple.how": "Delete the extra _dmarc records so that only one is left.",
   "mail.dmarc.monitoring": "DMARC is in monitoring mode (p=none): fake e-mails are still delivered.",
