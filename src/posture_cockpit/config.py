@@ -5,11 +5,17 @@
 from __future__ import annotations
 
 import os
+import re
 import secrets
 from dataclasses import dataclass, field
+from datetime import tzinfo
 from pathlib import Path
 
+from .timezones import UTC, instance_zone
+
 ENV_PREFIX = "POSTURE_COCKPIT_"
+DEFAULT_SESSION_COOKIE = "posture_cockpit"
+_COOKIE_NAME = re.compile(r"[A-Za-z0-9_-]{1,64}")
 
 
 def _env(name: str, default: str) -> str:
@@ -41,6 +47,14 @@ class Config:
     # Scans running at the same time on the instance, and scans per account and per hour.
     max_concurrent_scans: int = 4
     scans_per_hour: int = 30
+    # Time zone of pages and reports. Stored times and the API stay in UTC (see timezones.py).
+    timezone: tzinfo = UTC
+    # Name of the session cookie. Browsers share cookies between the ports of one address:
+    # two instances reached at the same address need two names (see docs/user/INSTALLATION.md).
+    session_cookie: str = DEFAULT_SESSION_COOKIE
+
+    def __post_init__(self) -> None:
+        check_cookie_name(self.session_cookie, secure=self.cookie_secure)
 
     @property
     def db_path(self) -> Path:
@@ -61,7 +75,22 @@ class Config:
             internal_scans=_env_bool("INTERNAL_SCANS", False),
             max_concurrent_scans=max(1, int(_env("MAX_CONCURRENT_SCANS", "4"))),
             scans_per_hour=max(1, int(_env("SCANS_PER_HOUR", "30"))),
+            timezone=instance_zone(os.environ.get(ENV_PREFIX + "TIMEZONE"), os.environ.get("TZ")),
+            session_cookie=_env("SESSION_COOKIE", DEFAULT_SESSION_COOKIE).strip(),
         )
+
+
+def check_cookie_name(name: str, *, secure: bool) -> None:
+    """Raises ValueError for a cookie name browsers would refuse or mangle.
+
+    Letters, digits, ``_`` and ``-`` only. The ``__Host-`` and ``__Secure-`` prefixes
+    make browsers drop the cookie unless it is sent over HTTPS only, so they need
+    ``POSTURE_COCKPIT_COOKIE_SECURE=true``."""
+    if not _COOKIE_NAME.fullmatch(name):
+        raise ValueError(f"POSTURE_COCKPIT_SESSION_COOKIE: {name!r} is not a valid cookie name "
+                         "(letters, digits, _ and -, at most 64)")
+    if name.lower().startswith(("__host-", "__secure-")) and not secure:
+        raise ValueError(f"POSTURE_COCKPIT_SESSION_COOKIE: {name!r} needs POSTURE_COCKPIT_COOKIE_SECURE=true")
 
 
 def secret_key(data_dir: Path) -> str:

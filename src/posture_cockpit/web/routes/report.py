@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response
@@ -25,12 +25,13 @@ async def report(request: Request, name: str, user: Row = Depends(require_user))
     if scan is None:
         return redirect("/domains")
     try:
-        pdf = build_pdf(s.catalog, lang_of(request), scan, author=s.settings.report_author())
+        pdf = build_pdf(s.catalog, lang_of(request), scan, author=s.settings.report_author(),
+                        tz=s.config.timezone)
     except ReportUnavailable:
         flash(request, "error", "error.pdf_unavailable")
         return redirect(f"/domains/{name}")
     if domain["perimeter_id"] is not None:
         audit(request, "report.internal", user=user, target=name, perimeter=domain["perimeter"])
-    filename = f"posture-{name}-{date.today().isoformat()}.pdf"
+    filename = f"posture-{name}-{datetime.now(s.config.timezone).date().isoformat()}.pdf"
     return Response(pdf, media_type="application/pdf",
                     headers={"Content-Disposition": f'attachment; filename="{filename}"'})

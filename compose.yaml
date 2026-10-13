@@ -18,6 +18,8 @@ services:
       # POSTURE_COCKPIT_INTERNAL_SCANS: "true"          # allow internal perimeters (administrators only)
       # POSTURE_COCKPIT_MAX_CONCURRENT_SCANS: "4"       # scans at the same time
       # POSTURE_COCKPIT_SCANS_PER_HOUR: "30"            # scans per account and per hour
+      # POSTURE_COCKPIT_TIMEZONE: "Europe/Paris"       # time zone of pages and PDF (default: TZ, else UTC)
+      # POSTURE_COCKPIT_SESSION_COOKIE: "posture_cockpit_validation"  # a second instance at the same address
     read_only: true
     tmpfs:
       - /tmp

@@ -66,7 +66,24 @@ Les analyses ne passent **pas** par un proxy HTTP : les variables `HTTP_PROXY` e
 | `POSTURE_COCKPIT_INTERNAL_SCANS` | `false` | `true` pour permettre aux administrateurs de créer des périmètres internes |
 | `POSTURE_COCKPIT_MAX_CONCURRENT_SCANS` | `4` | Analyses simultanées sur l'instance |
 | `POSTURE_COCKPIT_SCANS_PER_HOUR` | `30` | Analyses par compte et par heure (une revérification n'en consomme pas) |
+| `POSTURE_COCKPIT_TIMEZONE` | `TZ`, sinon UTC | Fuseau des pages et des rapports PDF (nom IANA, par exemple `Europe/Paris`). La base et l'API restent en UTC |
+| `POSTURE_COCKPIT_SESSION_COOKIE` | `posture_cockpit` | Nom du cookie de session : à changer pour une deuxième instance à la même adresse (ci-dessous) |
 | `FORWARDED_ALLOW_IPS` | – | Adresse du proxy inverse, pour que les essais limités comptent la vraie adresse du client |
+
+### Heures affichées
+
+Les heures sont enregistrées et transmises par l'API en UTC (`2026-10-13T07:19:05+00:00`). Les pages et les rapports PDF les affichent dans le fuseau de l'instance : `POSTURE_COCKPIT_TIMEZONE`, sinon la variable `TZ` du conteneur (celle de l'exemple ci-dessus), sinon UTC. Le PDF indique le décalage (« 09:19 UTC+2 »). Un nom de fuseau inconnu dans `POSTURE_COCKPIT_TIMEZONE` empêche le démarrage ; une variable `TZ` au format POSIX (`CET-1CEST,…`) est ignorée, avec un avertissement dans le journal.
+
+### Deux instances à la même adresse
+
+Un navigateur envoie les cookies d'une adresse à tous ses ports : une instance de test sur `192.168.2.15:8081` et l'instance en service sur `192.168.2.15:8080` se déconnectent alors l'une l'autre. Donnez un autre nom au cookie de l'instance de test :
+
+```yaml
+    environment:
+      POSTURE_COCKPIT_SESSION_COOKIE: posture_cockpit_validation
+```
+
+Lettres, chiffres, `_` et `-` seulement. Les préfixes `__Host-` et `__Secure-` exigent `POSTURE_COCKPIT_COOKIE_SECURE: "true"`. Changer le nom d'une instance existante déconnecte ses utilisateurs une fois.
 
 ## Audits de réseaux internes
 

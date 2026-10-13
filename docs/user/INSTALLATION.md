@@ -66,7 +66,24 @@ Scans do **not** go through an HTTP proxy: the `HTTP_PROXY` and `HTTPS_PROXY` va
 | `POSTURE_COCKPIT_INTERNAL_SCANS` | `false` | `true` to let administrators create internal perimeters |
 | `POSTURE_COCKPIT_MAX_CONCURRENT_SCANS` | `4` | Scans running at the same time on the instance |
 | `POSTURE_COCKPIT_SCANS_PER_HOUR` | `30` | Scans per account and per hour (checking one fix again does not count) |
+| `POSTURE_COCKPIT_TIMEZONE` | `TZ`, else UTC | Time zone of pages and PDF reports (IANA name, e.g. `Europe/Paris`). The database and the API stay in UTC |
+| `POSTURE_COCKPIT_SESSION_COOKIE` | `posture_cockpit` | Name of the session cookie: change it for a second instance at the same address (below) |
 | `FORWARDED_ALLOW_IPS` | – | Address of the reverse proxy, so the attempt limit counts the real client address |
+
+### Times shown
+
+Times are stored and returned by the API in UTC (`2026-10-13T07:19:05+00:00`). Pages and PDF reports show them in the time zone of the instance: `POSTURE_COCKPIT_TIMEZONE`, else the `TZ` variable of the container (the one in the example above), else UTC. The PDF states the offset ("09:19 UTC+2"). An unknown zone name in `POSTURE_COCKPIT_TIMEZONE` stops the start; a POSIX-style `TZ` (`CET-1CEST,…`) is ignored, with a warning in the log.
+
+### Two instances at the same address
+
+A browser sends the cookies of an address to all its ports: a test instance at `192.168.2.15:8081` and the production one at `192.168.2.15:8080` then sign each other out. Give the cookie of the test instance another name:
+
+```yaml
+    environment:
+      POSTURE_COCKPIT_SESSION_COOKIE: posture_cockpit_validation
+```
+
+Letters, digits, `_` and `-` only. The `__Host-` and `__Secure-` prefixes need `POSTURE_COCKPIT_COOKIE_SECURE: "true"`. Renaming the cookie of an existing instance signs its users out once.
 
 ## Audits of internal networks
 

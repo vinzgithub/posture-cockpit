@@ -258,15 +258,22 @@ def _tell_the_story(catalog: Catalog, lang: str, view: PlanView) -> None:
         view.subline = (text("plan.subline.clean_improvements", n=len(view.improvements)) if view.improvements
                         else text("plan.subline.clean"))
     elif done == 0:
+        # The scan itself may have had no score (too little evaluated) and gained one through
+        # rechecks: then there is no starting point to quote, and no projection either.
         start_grade, end_grade = view.start.grade, view.target_grade
-        target, start = view.target_score or 0, view.start.score or 0
-        view.headline = (text("plan.headline.start", n=total, start=start_grade, end=end_grade)
-                         if start_grade != end_grade else text("plan.headline.start_points", n=total,
-                                                               points=target - start))
+        target, start = view.target_score, view.start.score
+        if start_grade and end_grade and start_grade != end_grade:
+            view.headline = text("plan.headline.start", n=total, start=start_grade, end=end_grade)
+        elif start is not None and target is not None and target > start:
+            view.headline = text("plan.headline.start_points", n=total, points=target - start)
+        else:
+            view.headline = text("plan.headline.start_plain", n=total)
         view.subline = text("plan.subline.start", minutes=minutes)
     elif remaining:
-        view.headline = text("plan.headline.progress", n=remaining, grade=view.target_grade)
-        view.subline = text("plan.subline.progress", start=view.start.score or 0, score=now.score)
+        view.headline = (text("plan.headline.progress", n=remaining, grade=view.target_grade) if view.target_grade
+                         else text("plan.headline.progress_plain", n=remaining))
+        view.subline = (text("plan.subline.progress", start=view.start.score, score=now.score)
+                        if view.start.score is not None else text("plan.subline.progress_plain", score=now.score))
     else:
         view.headline = text("plan.headline.done")
         view.subline = text("plan.subline.done")

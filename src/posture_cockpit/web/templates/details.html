@@ -8,7 +8,7 @@
 <div class="page-head">
   {% if scan.perimeter %}<p class="eyebrow"><span class="tag-internal">{{ t('perimeter.internal_audit', name=scan.perimeter) }}</span></p>{% endif %}
   <h1>{{ t('details.title') }} <span class="muted">· {{ scan.domain }}</span></h1>
-  <p class="lead">{{ t('details.lead', date=date(scan.started_at), time=scan.started_at[11:16], seconds=(scan.duration_ms / 1000) | round(1), version=scan.version) }}</p>
+  <p class="lead">{{ t('details.lead', date=date(scan.started_at), time=local_time(scan.started_at), seconds=(scan.duration_ms / 1000) | round(1), version=scan.version) }}</p>
   <p class="coverage {{ 'coverage-partial' if result.partial or result.score is none }}">
     {% if result.score is not none %}{{ t('details.result', score=result.score, grade=result.grade) }}{% else %}{{ t('score.not_evaluated') }}{% endif %}
     · {{ t('score.coverage', evaluated=result.evaluated, applicable=result.applicable, percent=result.coverage_percent) }}
@@ -52,7 +52,7 @@
     <tbody>
     {% for h in history %}
     <tr{% if h.id == scan.id %} aria-current="true"{% endif %}>
-      <td>{{ date(h.started_at) }} {{ h.started_at[11:16] }}</td>
+      <td>{{ date(h.started_at) }} {{ local_time(h.started_at) }}</td>
       <td>{% if h.score is not none %}<span class="grade grade-{{ h.grade }}">{{ h.grade }}</span> {{ h.score }}/100{% else %}<span class="muted">{{ t('score.not_evaluated') }}</span>{% endif %}</td>
       <td class="{{ 'coverage-partial' if h.coverage < full_coverage }}">{{ (h.coverage * 100 + 0.000001) | int }}&nbsp;%</td>
       <td class="muted small">{{ h.version }}</td>

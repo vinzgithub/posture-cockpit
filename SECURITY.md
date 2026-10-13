@@ -47,7 +47,7 @@ Internet scans use the system's resolvers unless `POSTURE_COCKPIT_NAMESERVERS` i
 - **Administration**: pages ask for the password again every 10 minutes; an account is deleted only after typing its name.
 - **Audit log**: sign-ins (successful, failed, blocked), password, two-factor and API key changes, administration changes, perimeters, and every scan with its perimeter and origin (page or API), with the client address. No secret is ever written. Administrators read it in the administration; the most recent 20,000 entries are kept.
 - **Scans**: at most `POSTURE_COCKPIT_MAX_CONCURRENT_SCANS` (4) at once on the instance and `POSTURE_COCKPIT_SCANS_PER_HOUR` (30) per account; beyond, the page says so and the API answers 429.
-- **Sessions**: signed cookie, `HttpOnly`, `SameSite=Lax`, `Secure` when `POSTURE_COCKPIT_COOKIE_SECURE=true`.
+- **Sessions**: signed cookie, `HttpOnly`, `SameSite=Lax`, `Secure` when `POSTURE_COCKPIT_COOKIE_SECURE=true`. Its name (`POSTURE_COCKPIT_SESSION_COOKIE`, default `posture_cockpit`) must differ between two instances reached at the same address: browsers do not separate cookies by port.
 - **Forms**: a CSRF token on every form and every state-changing request; redirections after a form only go to paths of the application.
 - **Browser**: strict Content Security Policy (no inline script or style, nothing from other origins), `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`, `Cross-Origin-Opener-Policy` and `Cross-Origin-Resource-Policy: same-origin`, `Cache-Control: no-store`, and HSTS when served over HTTPS.
 - **API keys**: shown once, stored as SHA-256 hashes, revocable; a key has the rights of its owner.

@@ -17,7 +17,7 @@
     <header class="masthead">
       <div>
         {% if perimeter %}<p class="restricted">{{ t('report.restricted') }} — {{ t('report.restricted_text') }}</p>{% endif %}
-        <p class="kicker">{{ t('report.file_number', number=file_number) }} · {{ t('report.passive_scan', date=date) }} · {{ time }} UTC</p>
+        <p class="kicker"><span class="nowrap">{{ t('report.file_number', number=file_number) }}</span> · <span class="nowrap">{{ t('report.passive_scan', date=date) }}</span> · <span class="nowrap">{{ time }} {{ zone }}</span></p>
         <h1>{{ domain }}</h1>
         <p class="scope">{{ t('report.perimeter_internal', name=perimeter) if perimeter else t('report.perimeter_internet') }}</p>
         <p class="scope">{{ coverage }}</p>
@@ -52,7 +52,7 @@
           <p class="p-meta">{{ t('report.who', who=p.who) }} · {{ t('report.minutes', n=p.minutes) }}</p>
         </div>
         <div class="p-side">
-          {% if result.score is not none %}<span class="p-gain">{{ t('report.points', n=p.gain) }}</span>{% endif %}
+          {% if result.score is not none %}<span class="p-gain">{{ t('report.points', n=p.gain) if p.gain > 0 else t('report.points_under_one') }}</span>{% endif %}
           {% if p.deadline %}<span class="badge badge-urgent">{{ p.deadline }}</span>{% else %}<span class="badge">{{ t('status.fail') }}</span>{% endif %}
         </div>
       </li>
@@ -63,8 +63,9 @@
     <p class="signature">{{ t('report.signed_by', author=author) if author else t('report.signed_tool') }}</p>
   </section>
 
-  <!-- Page 2: area by area, and what comes next -->
-  <section class="sheet">
+  <!-- Page 2: area by area, and what comes next. The annex follows on the same page when there
+       is room, rather than leaving the end of this page blank. -->
+  <section class="sheet sheet-flow">
     <p class="section-label">{{ t('report.areas') }}</p>
     <table class="areas">
       {% for c in categories %}
@@ -81,7 +82,7 @@
     <p class="section-label">{{ t('report.improvements') }}</p>
     <ul class="improvements">
       {% for i in improvements %}
-      <li><strong>{{ i.title }}</strong> — {{ i.summary }}{% if i.gain > 0 and result.score is not none %} <span class="gain">({{ t('report.points', n=i.gain) }})</span>{% endif %}</li>
+      <li><strong>{{ i.title }}</strong> — {{ i.summary }}{% if result.score is not none %} <span class="gain">({{ t('report.points', n=i.gain) if i.gain > 0 else t('report.points_under_one') }})</span>{% endif %}</li>
       {% endfor %}
     </ul>
     {% endif %}
