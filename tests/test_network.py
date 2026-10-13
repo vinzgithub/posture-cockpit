@@ -143,3 +143,12 @@ def test_dns_answers(monkeypatch):
     assert asyncio.run(net.dns("missing.example.org", "TXT")).exists is False
     with pytest.raises(NetworkError):
         asyncio.run(LiveNetwork(nameservers=["192.0.2.53"]).dns("slow.example.org", "TXT"))
+
+
+def test_external_probe_shares_live_network_connection_budget():
+    from posture_cockpit.core.network import Limits
+
+    net = LiveNetwork(limits=Limits(connections=1))
+    net.reserve_connection()
+    with pytest.raises(NetworkError, match="limit of 1 connections"):
+        net.reserve_connection()
