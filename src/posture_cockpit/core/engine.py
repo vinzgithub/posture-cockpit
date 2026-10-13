@@ -18,10 +18,10 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from ..checks.smtp_probe import SmtpObservation
 from .egress import DestinationBlocked
 from .extension import Check, CheckContext
 from .model import Finding, Outcome, Status
-from ..checks.smtp_probe import SmtpObservation
 from .network import LiveNetwork, Network, NetworkError
 
 log = logging.getLogger(__name__)
