@@ -465,5 +465,11 @@
   "history.all": "View all history →",
   "history.read_only": "Historical scan · read-only",
   "history.pdf_notice": "Historical report · Scan engine {scan_version} · PDF generated with {generator_version}",
-  "history.recalculated": "Historical score recalculated using current coverage rules; it may differ from the score originally shown."
+  "history.recalculated": "Historical score recalculated using current coverage rules; it may differ from the score originally shown.",
+  "history.legacy_dns.nameservers_ok": "Name servers were observed for this domain.",
+  "history.legacy_dns.nameservers_single": "Only one name server was observed: {host}.",
+  "history.legacy_dns.dnssec_on": "A DNSSEC signature was observed during this scan.",
+  "history.legacy_dns.dnssec_off": "No DNSSEC signature was observed during this scan.",
+  "history.legacy_dns.dnssec_broken": "The observed DNSSEC configuration was inconsistent: DS record without a DNSKEY.",
+  "history.legacy_dns.caa_inherited": "Inherited CAA records were observed for this domain."
 }
