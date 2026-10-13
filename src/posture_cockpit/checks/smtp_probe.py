@@ -107,7 +107,7 @@ async def probe_smtp_ehlo(mx: str, declared_mx: tuple[str, ...],
                     mx, ehlo, True, True, True, tls.version() or "", "",
                     issuer, not_after, days,
                 )
-            except (ssl.SSLError, OSError, TimeoutError) as exc:
+            except (ssl.SSLError, OSError, TimeoutError, ValueError) as exc:
                 return SmtpObservation(mx, ehlo, True, True, False, tls_error=str(exc))
         finally:
             writer.close()
