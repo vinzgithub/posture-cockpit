@@ -278,3 +278,37 @@ def test_certificate_details_from_der():
     assert name == "MX Test Authority"
     assert expires.tzinfo is not None
     assert 29 <= remaining <= 31
+
+
+@pytest.mark.asyncio
+async def test_live_network_verified_tls_is_explicit_opt_in(monkeypatch):
+    net = LiveNetwork()
+    writer = FakeWriter()
+    tls_calls = []
+
+    async def fake_dns(name, rtype):
+        return DnsAnswer(("8.8.8.8",)) if rtype == "A" else DnsAnswer(())
+
+    async def fake_open(ip, port):
+        return reader_with("220 mx.example.org ready", "250-mx.example.org",
+                           "250 STARTTLS", "220 Ready to start TLS"), writer
+
+    async def start_tls(context, *, server_hostname, ssl_handshake_timeout):
+        tls_calls.append(server_hostname)
+
+    class TLS:
+        def version(self):
+            return "TLSv1.3"
+
+        def getpeercert(self, binary_form=False):
+            return b"DER"
+
+    writer.start_tls = start_tls
+    writer.get_extra_info = lambda name: TLS() if name == "ssl_object" else None
+    monkeypatch.setattr(net, "dns", fake_dns)
+    monkeypatch.setattr(asyncio, "open_connection", fake_open)
+    monkeypatch.setattr("posture_cockpit.checks.smtp_probe._certificate_details",
+                        lambda der: ("Test CA", datetime.now(UTC), 0))
+    observation = await net.smtp_ehlo("mx.example.org", ("mx.example.org",), verify_tls=True)
+    assert observation.tls_verified is True
+    assert tls_calls == ["mx.example.org"]
