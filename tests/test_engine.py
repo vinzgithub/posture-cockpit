@@ -21,6 +21,11 @@ from worlds import NOW
     ("  example.org.  ", "example.org"),
     ("https://www.example.org/contact?x=1", "example.org"),
     ("www.example.org:8443", "example.org"),
+    ("www.example.org", "www.example.org"),
+    ("WWW.Example.ORG.", "www.example.org"),
+    ("www.sub.example.org", "www.sub.example.org"),
+    ("https://www.example.org/", "example.org"),
+    ("http://www.example.org:8080/", "example.org"),
     ("mail.example.co.uk", "mail.example.co.uk"),
     ("café.fr", "xn--caf-dma.fr"),
 ])
