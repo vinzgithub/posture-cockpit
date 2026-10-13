@@ -280,8 +280,8 @@ async def test_smtp_engine_observations_are_explicitly_disabled_by_default():
 
 @pytest.mark.asyncio
 async def test_smtp_engine_observations_respect_dns_mx_and_host_limit():
-    from posture_cockpit.core.network import DnsAnswer
     from posture_cockpit.checks.smtp_probe import SmtpObservation
+    from posture_cockpit.core.network import DnsAnswer
 
     class FakeNetwork:
         def __init__(self):
