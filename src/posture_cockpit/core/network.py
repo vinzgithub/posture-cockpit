@@ -238,8 +238,6 @@ class LiveNetwork:
         Do not rely on caller-supplied declared MX names. The ordinary scan
         engine does not invoke this method.
         """
-        from ..checks.smtp_egress import allowed_smtp_mx_addresses
-
         if self.policy.internal:
             raise NetworkError("SMTP probing is disabled for internal perimeters")
         answer = await self.dns(domain, "MX")
@@ -247,8 +245,10 @@ class LiveNetwork:
             fields[1].rstrip(".") for record in answer.records
             if len(fields := record.split()) == 2 and fields[0].isdigit()
         )
-        # Validate eligibility before resolving MX addresses or opening a socket.
-        allowed_smtp_mx_addresses(mx, declared, ("8.8.8.8",))
+        # Reject undeclared names before any MX address lookup; smtp_ehlo
+        # independently validates hostname syntax and all resolved addresses.
+        if mx.lower().rstrip(".") not in {name.lower() for name in declared}:
+            raise NetworkError("SMTP target is not a declared MX of the audited domain")
         return await self.smtp_ehlo(mx, declared, verify_tls=verify_tls)
 
     # ---------------------------------------------------------- destinations
