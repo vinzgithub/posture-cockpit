@@ -338,7 +338,8 @@ async def mta_sts(ctx: CheckContext) -> Outcome:
     mx_hosts = await _mx_hosts(ctx)
     if not mx_hosts:
         return na("mail.no_inbound")
-    records = [r for r in await ctx.txt(f"_mta-sts.{ctx.domain}") if r.lower().startswith("v=stsv1")]
+    # Inspect every TXT at this dedicated name: malformed markers must not vanish.
+    records = await ctx.txt(f"_mta-sts.{ctx.domain}")
     remedy = Remedy(30, Effort.DELEGATE, message="mail.mta_sts.message")
     if not records:
         return warn("mail.mta_sts.missing", remedy)

@@ -267,7 +267,8 @@ def mta_sts_record_ok(record: str) -> bool:
     """``v=STSv1; id=…`` with an id of 1 to 32 letters and digits."""
     pairs = tags(record)
     values = dict(pairs)
-    return (bool(pairs) and pairs[0] == ("v", "STSv1")
+    return (len(pairs) == 2 and pairs[0] == ("v", "STSv1")
+            and pairs[1][0] == "id"
             and bool(re.fullmatch(r"[A-Za-z0-9]{1,32}", values.get("id", ""))))
 
 
@@ -299,7 +300,10 @@ def parse_mta_sts_policy(body: str) -> MtaStsPolicy:
     else:
         errors.append("max_age")
     mx = tuple(p.lower().rstrip(".") for p in fields.get("mx", []))
-    if mode in ("enforce", "testing") and not mx:
+    hostname = r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+"
+    if (mode in ("enforce", "testing") and not mx) or any(
+        not re.fullmatch(r"(?:\*\.)?" + hostname, pattern) for pattern in mx
+    ):
         errors.append("mx")
     return MtaStsPolicy(mode, mx, max_age, tuple(errors))
 

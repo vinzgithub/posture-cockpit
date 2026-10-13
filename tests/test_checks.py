@@ -125,6 +125,71 @@ def test_mta_sts_testing_mode():
     assert f.status is Status.WARN and f.outcome.params["mode"] == "testing"
 
 
+@pytest.mark.parametrize("records, summary", [
+    ([], "mail.mta_sts.missing"),
+    (["v=STSv1; id=20261012-01"], "mail.mta_sts.bad_record"),
+    (["v=STSv1; id=2026101201", "v=STSv1; id=2026101202"], "mail.mta_sts.bad_record"),
+    (["v=STSv2; id=2026101201"], "mail.mta_sts.bad_record"),
+    (["unexpected TXT"], "mail.mta_sts.bad_record"),
+    (["v=STSv1; id=2026101201; id=2026101202"], "mail.mta_sts.bad_record"),
+    (["v=STSv1; id=2026101201; extra=yes"], "mail.mta_sts.bad_record"),
+])
+def test_mta_sts_dns_distinguishes_absence_from_invalid_records(records, summary):
+    data = changed(healthy(), dns={f"_mta-sts.{DOMAIN} TXT": records})
+    f = one(data, "mail.mta_sts")
+    assert f.outcome.summary == summary
+
+
+@pytest.mark.parametrize("mx_line", [
+    "mx: *example.net",
+    "mx: mx.*.example.net",
+    "mx: https://mx.example.net",
+    "mx: mx.example.net:25",
+    "mx: *.example.net/path",
+])
+def test_mta_sts_rejects_invalid_https_policy_mx_patterns(mx_line):
+    url = f"https://mta-sts.{DOMAIN}/.well-known/mta-sts.txt"
+    body = f"version: STSv1\nmode: testing\n{mx_line}\nmax_age: 604800\n"
+    data = changed(healthy(), http={url: {"status": 200, "body": body}})
+    finding = one(data, "mail.mta_sts")
+    assert finding.outcome.summary == "mail.mta_sts.bad_policy"
+    assert "mx" in finding.outcome.params["fields"]
+
+
+@pytest.mark.parametrize("mode, expected", [
+    ("testing", ("warn", "mail.mta_sts.mx_mismatch")),
+    ("enforce", ("fail", "mail.mta_sts.mx_mismatch")),
+])
+def test_mta_sts_requires_all_live_mx_to_match_https_policy(mode, expected):
+    url = f"https://mta-sts.{DOMAIN}/.well-known/mta-sts.txt"
+    body = f"version: STSv1\nmode: {mode}\nmx: other.example.net\nmax_age: 604800\n"
+    data = changed(healthy(), http={url: {"status": 200, "body": body}})
+    finding = one(data, "mail.mta_sts")
+    assert (finding.status.value, finding.outcome.summary) == expected
+    assert finding.outcome.evidence["uncovered"]
+
+
+def test_mta_sts_invalid_dns_takes_precedence_over_https_testing():
+    data = changed(healthy(), dns={f"_mta-sts.{DOMAIN} TXT": ["v=STSv1; id=20261012-01"]})
+    finding = one(data, "mail.mta_sts")
+    assert finding.outcome.summary == "mail.mta_sts.bad_record"
+    assert finding.outcome.remedy.message != "mail.mta_sts.enforce_message"
+
+
+def test_mta_sts_invalid_dns_overrides_enforce_https_policy():
+    url = f"https://mta-sts.{DOMAIN}/.well-known/mta-sts.txt"
+    body = "version: STSv1\nmode: enforce\nmx: mx.example.net\nmax_age: 604800\n"
+    data = changed(
+        healthy(),
+        dns={f"_mta-sts.{DOMAIN} TXT": ["v=STSv1; id=20261012-01"]},
+        http={url: {"status": 200, "body": body}},
+    )
+    finding = one(data, "mail.mta_sts")
+    assert finding.status is Status.WARN
+    assert finding.outcome.summary == "mail.mta_sts.bad_record"
+    assert finding.outcome.remedy.message != "mail.mta_sts.enforce_message"
+
+
 def test_mta_sts_record_without_policy_file():
     data = healthy()
     del data["http"][f"https://mta-sts.{DOMAIN}/.well-known/mta-sts.txt"]
