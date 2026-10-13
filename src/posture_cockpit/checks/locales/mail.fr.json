@@ -1,9 +1,7 @@
 {
   "mail.extension.name": "Messagerie",
   "mail.extension.description": "MX, SPF, DKIM, DMARC, MTA-STS et rapports TLS.",
-
   "mail.no_inbound": "Le domaine ne reçoit pas de courrier : ce contrôle ne s'applique pas.",
-
   "mail.mx.title": "Serveurs de messagerie",
   "mail.mx.why": "Les enregistrements MX indiquent où arrive le courrier du domaine. C'est une information, sauf quand un serveur indiqué ne peut pas être joint.",
   "mail.mx.none": "Aucun serveur de messagerie : le domaine ne reçoit pas de courrier.",
@@ -16,7 +14,6 @@
   "mail.mx.unresolved": "{n:serveur de messagerie n'a|serveurs de messagerie n'ont} pas d'adresse dans le DNS ({hosts}) : le courrier qui leur est destiné ne peut pas être livré.",
   "mail.mx.unresolved.action": "Rendre joignables les serveurs de messagerie",
   "mail.mx.message": "Bonjour,\n\nL'enregistrement MX du domaine {domain} désigne des serveurs sans adresse dans le DNS ({hosts}) : le courrier qui leur est destiné ne peut pas être livré.\n\nPourriez-vous vérifier les enregistrements MX ?\n\nMerci d'avance.",
-
   "mail.spf.title": "Expéditeurs autorisés (SPF)",
   "mail.spf.action": "Publier la liste des expéditeurs autorisés (SPF)",
   "mail.spf.why": "SPF publie la liste des serveurs qui ont le droit d'envoyer des e-mails au nom du domaine. Les messageries des destinataires s'en servent pour écarter les faux.",
@@ -47,7 +44,6 @@
   "mail.spf.ptr": "L'enregistrement SPF utilise le mécanisme « ptr », que la norme déconseille : il est lent et certains destinataires l'ignorent.",
   "mail.spf.ptr.action": "Retirer le mécanisme ptr",
   "mail.spf.ptr.how": "Remplacez « ptr » par les adresses (ip4:, ip6:) ou les noms (a:) des serveurs qui envoient le courrier.",
-
   "mail.dmarc.title": "Protection contre l'usurpation (DMARC)",
   "mail.dmarc.action": "Publier une politique DMARC",
   "mail.dmarc.why": "Sans DMARC, n'importe qui peut envoyer un e-mail qui semble venir du domaine, par exemple une fausse facture avec un autre RIB. DMARC dit aux messageries quoi faire de ces faux, et vous envoie des rapports.",
@@ -77,7 +73,6 @@
   "mail.dmarc.subdomains_open.action": "Protéger aussi les sous-domaines",
   "mail.dmarc.subdomains_open.how": "Retirez « sp=none » de l'enregistrement _dmarc pour que les sous-domaines suivent la même politique, ou mettez sp=quarantine.",
   "mail.dmarc.enforced_inherited": "Le domaine est protégé par la politique DMARC de {parent} (p={policy} pour les sous-domaines).",
-
   "mail.dkim.title": "Signature des e-mails (DKIM)",
   "mail.dkim.action": "Allonger la clé DKIM",
   "mail.dkim.why": "DKIM signe chaque e-mail envoyé : le destinataire vérifie qu'il vient bien de vous et n'a pas été modifié en route.",
@@ -90,7 +85,6 @@
   "mail.dkim.unreadable": "Une clé DKIM publiée est illisible ({selectors}) : les e-mails signés avec elle échouent à la vérification.",
   "mail.dkim.unreadable.action": "Republier la clé DKIM",
   "mail.dkim.unreadable.message": "Bonjour,\n\nLa clé DKIM publiée pour le domaine {domain} (sélecteur {selectors}) ne peut pas être lue : elle est sans doute tronquée ou mal copiée. Les e-mails signés avec cette clé échouent à la vérification.\n\nPourriez-vous nous redonner l'enregistrement DNS exact à publier ?\n\nMerci d'avance.",
-
   "mail.mta_sts.title": "Chiffrement imposé à la réception (MTA-STS)",
   "mail.mta_sts.action": "Imposer le chiffrement du courrier entrant",
   "mail.mta_sts.why": "MTA-STS oblige les serveurs qui vous écrivent à chiffrer la connexion et à vérifier qu'ils parlent au bon serveur. Sans lui, un intermédiaire peut lire ou détourner le courrier.",
@@ -112,7 +106,6 @@
   "mail.mta_sts.short_max_age": "La politique MTA-STS n'est gardée en mémoire que {seconds:seconde|secondes} : la protection tient peu de temps entre deux visites.",
   "mail.mta_sts.short_max_age.action": "Allonger la durée de la politique MTA-STS",
   "mail.mta_sts.max_age_message": "Bonjour,\n\nLa politique MTA-STS du domaine {domain} a une durée (max_age) de {seconds} secondes. La norme recommande plusieurs semaines, par exemple max_age: 1209600. Pourriez-vous l'allonger ?\n\nMerci d'avance.",
-
   "mail.tls_rpt.title": "Rapports de chiffrement (TLS-RPT)",
   "mail.tls_rpt.action": "Recevoir les rapports de chiffrement du courrier",
   "mail.tls_rpt.why": "Ces rapports quotidiens signalent les e-mails qui n'ont pas pu vous parvenir de façon chiffrée. Ils montrent un problème avant qu'il ne coûte un message.",
@@ -122,5 +115,8 @@
   "mail.tls_rpt.how": "Créez l'adresse indiquée (ou remplacez-la par une adresse existante) : elle recevra un court rapport par jour et par expéditeur.",
   "mail.tls_rpt.invalid": "L'enregistrement TLS-RPT est invalide ({problems}) : aucun rapport ne sera envoyé.",
   "mail.tls_rpt.invalid.action": "Corriger l'enregistrement TLS-RPT",
-  "mail.tls_rpt.invalid.how": "Il faut un seul enregistrement _smtp._tls, de la forme « v=TLSRPTv1; rua=mailto:adresse@{domain} »."
+  "mail.tls_rpt.invalid.how": "Il faut un seul enregistrement _smtp._tls, de la forme « v=TLSRPTv1; rua=mailto:adresse@{domain} ».",
+  "mail.dmarc.testing": "DMARC demande un mode d'essai (t=y) : politique déclarée p={policy}, niveau effectif {effective}.",
+  "mail.dmarc.existence_unknown": "Impossible de confirmer si le domaine existe dans le DNS : la politique np de {parent} ne peut pas être évaluée avec certitude.",
+  "mail.dmarc.invalid_monitoring": "La politique DMARC de {name} contient une valeur de politique invalide : seule la collecte des rapports peut être retenue."
 }
