@@ -475,5 +475,12 @@
   "smtp.details.title": "SMTP / STARTTLS observations",
   "smtp.details.starttls": "MX server STARTTLS security",
   "smtp.details.not_evaluated": "Not evaluated: ordinary scans do not make SMTP connections. MX TLS compliance cannot be inferred from DNS records or the MTA-STS policy alone.",
-  "smtp.details.score_note": "Independent observation: does not contribute to the security score."
+  "smtp.details.score_note": "Independent observation: does not contribute to the security score.",
+  "smtp.details.run": "Check MX servers (SMTP/STARTTLS)",
+  "smtp.details.unavailable": "No usable SMTP measurements: check inconclusive.",
+  "smtp.state.verified": "TLS verified",
+  "smtp.state.tls_failed": "TLS verification failed",
+  "smtp.state.starttls_rejected": "STARTTLS rejected",
+  "smtp.state.starttls_missing": "STARTTLS missing",
+  "smtp.state.not_evaluated": "Not evaluated"
 }
