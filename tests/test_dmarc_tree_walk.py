@@ -56,12 +56,12 @@ def test_tld_psd_policy_can_be_inherited():
     assert f.outcome.evidence["found_at"] == "_dmarc.org"
 
 
-def test_removed_pct_tag_is_reported_as_syntax_issue():
+def test_removed_pct_tag_is_ignored():
     f = _check("example.org", {
         "_dmarc.example.org TXT": ["v=DMARC1; p=reject; pct=50"],
     })
-    assert f.status is Status.WARN
-    assert f.outcome.summary == "mail.dmarc.syntax"
+    assert f.status is Status.OK
+    assert f.outcome.summary == "mail.dmarc.enforced"
 
 
 def test_testing_mode_downgrades_enforcement():
