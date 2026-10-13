@@ -7,6 +7,7 @@ import asyncio
 import pytest
 
 from posture_cockpit.checks.smtp_probe import _reply, probe_smtp_ehlo
+from posture_cockpit.core.network import DnsAnswer, Limits, LiveNetwork, NetworkError
 
 
 class FakeWriter:
@@ -126,3 +127,46 @@ async def test_probe_refuses_exhausted_budget_before_socket(monkeypatch):
             "mail.example.org", ("mail.example.org",), ("8.8.8.8",),
             reserve_connection=exhausted,
         )
+
+
+@pytest.mark.asyncio
+async def test_live_network_smtp_reuses_dns_and_connection_budget(monkeypatch):
+    net = LiveNetwork(limits=Limits(connections=1))
+    queries = []
+    opened = []
+    writer = FakeWriter()
+
+    async def fake_dns(name, rtype):
+        queries.append((name, rtype))
+        return DnsAnswer(("8.8.8.8",)) if rtype == "A" else DnsAnswer(())
+
+    async def fake_open(ip, port):
+        opened.append((ip, port))
+        return reader_with("220 mx.example.org ready", "250-mx.example.org", "250 STARTTLS"), writer
+
+    monkeypatch.setattr(net, "dns", fake_dns)
+    monkeypatch.setattr(asyncio, "open_connection", fake_open)
+    result = await net.smtp_ehlo("mx.example.org", ("mx.example.org",))
+    assert result.starttls_advertised
+    assert queries == [("mx.example.org", "A"), ("mx.example.org", "AAAA")]
+    assert opened == [("8.8.8.8", 25)]
+    with pytest.raises(NetworkError, match="limit of 1 connections"):
+        await net.smtp_ehlo("mx.example.org", ("mx.example.org",))
+    assert opened == [("8.8.8.8", 25)]
+
+
+@pytest.mark.asyncio
+async def test_live_network_smtp_rejects_mixed_public_private_addresses(monkeypatch):
+    net = LiveNetwork(limits=Limits(connections=1))
+
+    async def fake_dns(name, rtype):
+        return DnsAnswer(("8.8.8.8", "192.168.1.1")) if rtype == "A" else DnsAnswer(())
+
+    async def must_not_connect(*args, **kwargs):
+        pytest.fail("socket opened with a private MX address")
+
+    monkeypatch.setattr(net, "dns", fake_dns)
+    monkeypatch.setattr(asyncio, "open_connection", must_not_connect)
+    with pytest.raises(ValueError, match="non-public"):
+        await net.smtp_ehlo("mx.example.org", ("mx.example.org",))
+    assert net._spent["connections"] == 0
