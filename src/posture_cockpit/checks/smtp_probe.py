@@ -21,9 +21,11 @@ async def _reply(reader: asyncio.StreamReader) -> tuple[str, ...]:
     lines: list[str] = []
     for _ in range(32):
         raw = await reader.readline()
-        if not raw or len(raw) > 1024 or not raw.endswith(b"\n"):
+        if not raw or len(raw) > 1024 or not raw.endswith(b"\r\n"):
             raise ValueError("SMTP reply incomplete or oversized")
-        line = raw.decode("ascii").rstrip("\r\n")
+        line = raw[:-2].decode("ascii")
+        if any(ord(char) < 32 or ord(char) == 127 for char in line):
+            raise ValueError("SMTP reply contains control characters")
         if len(line) < 4 or not line[:3].isdigit() or line[3] not in "- ":
             raise ValueError("SMTP framing invalid")
         if lines and line[:3] != lines[0][:3]:
