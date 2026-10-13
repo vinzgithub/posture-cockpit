@@ -47,14 +47,17 @@ async def test_probe_pins_public_ip_and_only_sends_ehlo(monkeypatch, capability,
 
     async def fake_open(ip, port):
         called.append((ip, port))
-        return reader_with("220 mail.example.org ready", "250-mail.example.org", capability), writer
+        return reader_with("220 mail.example.org ready", "250-mail.example.org", capability,
+                           *(( "220 Ready to start TLS",) if expected else ())), writer
 
     monkeypatch.setattr(asyncio, "open_connection", fake_open)
     result = await probe_smtp_ehlo(
         "mail.example.org", ("mail.example.org",), ("8.8.8.8",), reserve_connection=lambda: None,
     )
     assert called == [("8.8.8.8", 25)]
-    assert writer.sent == [b"EHLO posture-cockpit.invalid\r\n"]
+    assert writer.sent == ([b"EHLO posture-cockpit.invalid\r\n", b"STARTTLS\r\n"] if expected
+                           else [b"EHLO posture-cockpit.invalid\r\n"])
+    assert result.starttls_accepted is (True if expected else None)
     assert writer.closed
     assert result.starttls_advertised is expected
 
@@ -142,7 +145,8 @@ async def test_live_network_smtp_reuses_dns_and_connection_budget(monkeypatch):
 
     async def fake_open(ip, port):
         opened.append((ip, port))
-        return reader_with("220 mx.example.org ready", "250-mx.example.org", "250 STARTTLS"), writer
+        return reader_with("220 mx.example.org ready", "250-mx.example.org", "250 STARTTLS",
+                           "220 Ready to start TLS"), writer
 
     monkeypatch.setattr(net, "dns", fake_dns)
     monkeypatch.setattr(asyncio, "open_connection", fake_open)
@@ -170,3 +174,20 @@ async def test_live_network_smtp_rejects_mixed_public_private_addresses(monkeypa
     with pytest.raises(ValueError, match="non-public"):
         await net.smtp_ehlo("mx.example.org", ("mx.example.org",))
     assert net._spent["connections"] == 0
+
+
+@pytest.mark.asyncio
+async def test_smtp_starttls_refusal_is_not_a_success(monkeypatch):
+    writer = FakeWriter()
+
+    async def fake_open(ip, port):
+        return reader_with("220 mx.example.org ready", "250-mx.example.org", "250 STARTTLS",
+                           "454 TLS temporarily unavailable"), writer
+
+    monkeypatch.setattr(asyncio, "open_connection", fake_open)
+    result = await probe_smtp_ehlo(
+        "mx.example.org", ("mx.example.org",), ("8.8.8.8",), reserve_connection=lambda: None,
+    )
+    assert result.starttls_advertised is True
+    assert result.starttls_accepted is False
+    assert writer.sent == [b"EHLO posture-cockpit.invalid\r\n", b"STARTTLS\r\n"]
