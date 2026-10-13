@@ -146,9 +146,9 @@ _URI = re.compile(r"[a-z][a-z0-9+.-]*:\S+", re.IGNORECASE)
 class Dmarc:
     tags: dict[str, str]
     starts_right: bool                    # the record begins with v=DMARC1 (otherwise it is discarded)
-    policy: str | None                    # p: none, quarantine, reject; None when missing or invalid
+    policy: str | None                    # p: none, quarantine, reject; absent defaults to none
     subdomain_policy: str | None          # sp, or p when sp is absent
-    pct: int                              # 100 when absent or invalid (the value receivers then use)
+    pct: int                              # legacy compatibility; RFC 9989 does not use pct
     rua: tuple[str, ...]
     errors: tuple[tuple[str, str], ...]   # (tag, value) that do not follow the RFC
     psd: str = "u"                        # y: public suffix; n: explicitly organizational; u: unspecified
@@ -181,9 +181,8 @@ def parse_dmarc(record: str) -> Dmarc:
         errors.append((name, value))
         return None
 
-    policy = policy_tag("p")
-    if "p" not in values:
-        errors.append(("p", ""))
+    # RFC 9989 §4.7: an omitted p tag means monitoring, not invalid syntax.
+    policy = policy_tag("p") if "p" in values else "none"
     subdomain_policy = policy_tag("sp") if "sp" in values else policy
     non_existent_policy = policy_tag("np") if "np" in values else None
     psd = values.get("psd", "u").lower()
