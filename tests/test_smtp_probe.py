@@ -343,3 +343,18 @@ async def test_starttls_missing_or_invalid_certificate_is_not_verified(monkeypat
     )
     assert result.tls_verified is False
     assert result.tls_error
+
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("payload", [
+    b"250 " + b"A" * 70000 + b"\r\n",
+    b"250 " + b"A" * 1020 + b"\r\n",
+    b"250 incomplete",
+])
+async def test_smtp_reply_rejects_oversized_or_incomplete_data(payload):
+    reader = asyncio.StreamReader()
+    reader.feed_data(payload)
+    reader.feed_eof()
+    with pytest.raises(ValueError, match="incomplete or oversized"):
+        await _reply(reader)
