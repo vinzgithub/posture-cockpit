@@ -267,7 +267,7 @@ def test_certificate_details_from_der():
     now = datetime.now(UTC)
     cert = (
         x509.CertificateBuilder()
-        .subject(issuer).issuer(issuer).public_key(key.public_key())
+        .subject_name(issuer).issuer_name(issuer).public_key(key.public_key())
         .serial_number(x509.random_serial_number())
         .not_valid_before(now - timedelta(days=1))
         .not_valid_after(now + timedelta(days=31))
