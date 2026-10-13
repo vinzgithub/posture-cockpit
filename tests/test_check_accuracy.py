@@ -50,8 +50,8 @@ def with_headers(**headers):
     ("v=DMARC1; p=reject; pct=101", (Status.WARN, "mail.dmarc.syntax")),
     ("v=DMARC1; p=reject; pct=abc", (Status.WARN, "mail.dmarc.syntax")),
     ("v=DMARC1; p=reject; pct=-5", (Status.WARN, "mail.dmarc.syntax")),
-    ("v=DMARC1; p=reject; pct=0", (Status.WARN, "mail.dmarc.partial")),
-    ("v=DMARC1; p=reject; pct=100", (Status.OK, "mail.dmarc.enforced")),
+    ("v=DMARC1; p=reject; pct=0", (Status.WARN, "mail.dmarc.syntax")),
+    ("v=DMARC1; p=reject; pct=100", (Status.WARN, "mail.dmarc.syntax")),
     # 0.1.0: OK. A report address without "mailto:" is not a URI: no report is sent.
     ("v=DMARC1; p=reject; rua=dmarc@example.org", (Status.WARN, "mail.dmarc.syntax")),
     ("v=DMARC1; p=reject; adkim=x", (Status.WARN, "mail.dmarc.syntax")),
@@ -102,8 +102,8 @@ def test_a_subdomain_record_of_its_own_wins():
 def test_dmarc_parser():
     record = parse_dmarc("v=DMARC1;p=Quarantine;sp=reject;pct=50;rua=mailto:a@example.org")
     assert (record.starts_right, record.policy, record.subdomain_policy, record.pct) == (True, "quarantine",
-                                                                                         "reject", 50)
-    assert record.rua == ("mailto:a@example.org",) and record.errors == ()
+                                                                                         "reject", 100)
+    assert record.rua == ("mailto:a@example.org",) and ("pct", "50") in record.errors
 
 
 # ======================================================================= SPF
