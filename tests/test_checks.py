@@ -156,6 +156,26 @@ def test_mta_sts_rejects_invalid_https_policy_mx_patterns(mx_line):
     assert "mx" in finding.outcome.params["fields"]
 
 
+@pytest.mark.parametrize("mode, expected", [
+    ("testing", ("warn", "mail.mta_sts.mx_mismatch")),
+    ("enforce", ("fail", "mail.mta_sts.mx_mismatch")),
+])
+def test_mta_sts_requires_all_live_mx_to_match_https_policy(mode, expected):
+    url = f"https://mta-sts.{DOMAIN}/.well-known/mta-sts.txt"
+    body = f"version: STSv1\nmode: {mode}\nmx: other.example.net\nmax_age: 604800\n"
+    data = changed(healthy(), http={url: {"status": 200, "body": body}})
+    finding = one(data, "mail.mta_sts")
+    assert (finding.status.value, finding.outcome.summary) == expected
+    assert finding.outcome.evidence["uncovered"]
+
+
+def test_mta_sts_invalid_dns_takes_precedence_over_https_testing():
+    data = changed(healthy(), dns={f"_mta-sts.{DOMAIN} TXT": ["v=STSv1; id=20261012-01"]})
+    finding = one(data, "mail.mta_sts")
+    assert finding.outcome.summary == "mail.mta_sts.bad_record"
+    assert finding.outcome.remedy.message != "mail.mta_sts.enforce_message"
+
+
 def test_mta_sts_record_without_policy_file():
     data = healthy()
     del data["http"][f"https://mta-sts.{DOMAIN}/.well-known/mta-sts.txt"]
