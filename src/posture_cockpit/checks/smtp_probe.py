@@ -16,6 +16,7 @@ class SmtpObservation:
     mx: str
     ehlo: tuple[str, ...]
     starttls_advertised: bool
+    starttls_accepted: bool | None = None  # SMTP 220 readiness, not a completed TLS handshake
 
 
 async def _reply(reader: asyncio.StreamReader) -> tuple[str, ...]:
@@ -61,7 +62,13 @@ async def probe_smtp_ehlo(mx: str, declared_mx: tuple[str, ...],
             ehlo = await _reply(reader)
             if not ehlo[0].startswith("250"):
                 raise ValueError("SMTP EHLO rejected")
-            return SmtpObservation(mx, ehlo, parse_ehlo_reply(ehlo).starttls_advertised)
+            advertised = parse_ehlo_reply(ehlo).starttls_advertised
+            if not advertised:
+                return SmtpObservation(mx, ehlo, False)
+            writer.write(b"STARTTLS\r\n")
+            await writer.drain()
+            reply = await _reply(reader)
+            return SmtpObservation(mx, ehlo, True, reply[0].startswith("220"))
         finally:
             writer.close()
             with contextlib.suppress(OSError, TimeoutError):
