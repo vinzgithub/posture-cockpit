@@ -3,6 +3,7 @@
 """SMTP probe tests use fake streams, never real network."""
 
 import asyncio
+import ssl
 
 import pytest
 
@@ -191,3 +192,55 @@ async def test_smtp_starttls_refusal_is_not_a_success(monkeypatch):
     assert result.starttls_advertised is True
     assert result.starttls_accepted is False
     assert writer.sent == [b"EHLO posture-cockpit.invalid\r\n", b"STARTTLS\r\n"]
+
+
+@pytest.mark.asyncio
+async def test_verified_starttls_handshake_uses_mx_hostname(monkeypatch):
+    writer = FakeWriter()
+    handshakes = []
+
+    async def start_tls(context, *, server_hostname, ssl_handshake_timeout):
+        handshakes.append((context.verify_mode, context.check_hostname, server_hostname, ssl_handshake_timeout))
+
+    class TLS:
+        def version(self):
+            return "TLSv1.3"
+
+    writer.start_tls = start_tls
+    writer.get_extra_info = lambda name: TLS() if name == "ssl_object" else None
+
+    async def fake_open(ip, port):
+        return reader_with("220 mx.example.org ready", "250-mx.example.org", "250 STARTTLS",
+                           "220 Ready to start TLS"), writer
+
+    monkeypatch.setattr(asyncio, "open_connection", fake_open)
+    result = await probe_smtp_ehlo(
+        "mx.example.org", ("mx.example.org",), ("8.8.8.8",),
+        reserve_connection=lambda: None, verify_tls=True,
+    )
+    assert result.tls_verified is True
+    assert result.tls_protocol == "TLSv1.3"
+    assert handshakes == [(ssl.CERT_REQUIRED, True, "mx.example.org", 5.0)]
+
+
+@pytest.mark.asyncio
+async def test_verified_starttls_reports_certificate_failure(monkeypatch):
+    writer = FakeWriter()
+
+    async def start_tls(context, *, server_hostname, ssl_handshake_timeout):
+        raise ssl.SSLCertVerificationError("certificate verify failed")
+
+    writer.start_tls = start_tls
+
+    async def fake_open(ip, port):
+        return reader_with("220 mx.example.org ready", "250-mx.example.org", "250 STARTTLS",
+                           "220 Ready to start TLS"), writer
+
+    monkeypatch.setattr(asyncio, "open_connection", fake_open)
+    result = await probe_smtp_ehlo(
+        "mx.example.org", ("mx.example.org",), ("8.8.8.8",),
+        reserve_connection=lambda: None, verify_tls=True,
+    )
+    assert result.starttls_accepted is True
+    assert result.tls_verified is False
+    assert "certificate verify failed" in result.tls_error
