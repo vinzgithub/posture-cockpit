@@ -267,7 +267,8 @@ def mta_sts_record_ok(record: str) -> bool:
     """``v=STSv1; id=…`` with an id of 1 to 32 letters and digits."""
     pairs = tags(record)
     values = dict(pairs)
-    return (bool(pairs) and pairs[0] == ("v", "STSv1")
+    return (len(pairs) == 2 and pairs[0] == ("v", "STSv1")
+            and pairs[1][0] == "id"
             and bool(re.fullmatch(r"[A-Za-z0-9]{1,32}", values.get("id", ""))))
 
 
