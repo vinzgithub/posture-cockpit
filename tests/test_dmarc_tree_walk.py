@@ -62,3 +62,31 @@ def test_removed_pct_tag_is_reported_as_syntax_issue():
     })
     assert f.status is Status.WARN
     assert f.outcome.summary == "mail.dmarc.syntax"
+
+
+def test_testing_mode_downgrades_enforcement():
+    f = _check("example.org", {"_dmarc.example.org TXT": ["v=DMARC1; p=reject; t=y"]})
+    assert f.status is Status.WARN
+    assert f.outcome.summary == "mail.dmarc.testing"
+    assert f.outcome.params["effective"] == "quarantine"
+
+
+def test_non_existent_domain_uses_np():
+    f = _check("missing.example.org", {
+        "_dmarc.missing.example.org TXT": None,
+        "_dmarc.example.org TXT": ["v=DMARC1; p=reject; sp=reject; np=none; psd=n"],
+        "missing.example.org A": None,
+    })
+    assert f.status is Status.WARN
+    assert f.outcome.summary == "mail.dmarc.monitoring_inherited"
+    assert f.outcome.evidence["existence"] == "nxdomain"
+
+
+def test_existing_domain_uses_sp_not_np():
+    f = _check("active.example.org", {
+        "_dmarc.active.example.org TXT": None,
+        "_dmarc.example.org TXT": ["v=DMARC1; p=reject; sp=reject; np=none; psd=n"],
+        "active.example.org A": [],
+    })
+    assert f.status is Status.OK
+    assert f.outcome.evidence["existence"] == "existing"
