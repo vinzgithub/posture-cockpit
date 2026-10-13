@@ -193,11 +193,9 @@ def parse_dmarc(record: str) -> Dmarc:
     if values.get("t", "n").lower() not in ("y", "n"):
         errors.append(("t", values["t"]))
 
-    # RFC 9989 has removed pct/rf/ri. Never report partial enforcement from pct.
+    # RFC 9989 §4.7: unregistered tags (including legacy pct/rf/ri)
+    # MUST be ignored, not treated as syntax errors or partial enforcement.
     pct = 100
-    for obsolete in ("pct", "rf", "ri"):
-        if obsolete in values:
-            errors.append((obsolete, values[obsolete]))
 
     for name, allowed in (("adkim", ("r", "s")), ("aspf", ("r", "s"))):
         if name in values and values[name].lower() not in allowed:
