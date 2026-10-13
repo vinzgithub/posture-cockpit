@@ -21,7 +21,8 @@ def test_advertised_or_accepted_is_not_proof_of_tls():
 
 def test_refused_and_failed_are_not_verified():
     assert assess_smtp("mx.example.org", observation(starttls_accepted=False)).state is SmtpState.STARTTLS_REJECTED
-    assert assess_smtp("mx.example.org", observation(starttls_accepted=True, tls_verified=False)).state is SmtpState.TLS_FAILED
+    failed = assess_smtp("mx.example.org", observation(starttls_accepted=True, tls_verified=False))
+    assert failed.state is SmtpState.TLS_FAILED
 
 
 def test_no_starttls_is_distinct_from_network_error():
