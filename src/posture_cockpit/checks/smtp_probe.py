@@ -4,6 +4,7 @@
 
 import asyncio
 import contextlib
+import ssl
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -17,6 +18,9 @@ class SmtpObservation:
     ehlo: tuple[str, ...]
     starttls_advertised: bool
     starttls_accepted: bool | None = None  # SMTP 220 readiness, not a completed TLS handshake
+    tls_verified: bool | None = None  # None means TLS handshake not attempted
+    tls_protocol: str = ""
+    tls_error: str = ""
 
 
 async def _reply(reader: asyncio.StreamReader) -> tuple[str, ...]:
@@ -41,7 +45,8 @@ async def _reply(reader: asyncio.StreamReader) -> tuple[str, ...]:
 async def probe_smtp_ehlo(mx: str, declared_mx: tuple[str, ...],
                           addresses: tuple[str, ...], *, internal: bool = False,
                           reserve_connection: Callable[[], None],
-                          timeout: float = 5.0) -> SmtpObservation:
+                          timeout: float = 5.0,
+                          verify_tls: bool = False) -> SmtpObservation:
     """One connection to a prevalidated, pinned MX IP, no retry or mail delivery.
 
     The caller must supply a per-scan connection budget reservation callback.
@@ -68,7 +73,16 @@ async def probe_smtp_ehlo(mx: str, declared_mx: tuple[str, ...],
             writer.write(b"STARTTLS\r\n")
             await writer.drain()
             reply = await _reply(reader)
-            return SmtpObservation(mx, ehlo, True, reply[0].startswith("220"))
+            accepted = reply[0].startswith("220")
+            if not accepted or not verify_tls:
+                return SmtpObservation(mx, ehlo, True, accepted)
+            context = ssl.create_default_context()
+            try:
+                await writer.start_tls(context, server_hostname=mx, ssl_handshake_timeout=timeout)
+                tls = writer.get_extra_info("ssl_object")
+                return SmtpObservation(mx, ehlo, True, True, True, tls.version() if tls else "")
+            except (ssl.SSLError, OSError, TimeoutError) as exc:
+                return SmtpObservation(mx, ehlo, True, True, False, tls_error=str(exc))
         finally:
             writer.close()
             with contextlib.suppress(OSError, TimeoutError):
