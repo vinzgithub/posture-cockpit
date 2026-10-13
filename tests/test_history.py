@@ -6,6 +6,8 @@ import pytest
 
 from helpers import DEMO, post, setup_account
 from posture_cockpit.report import render_html
+from posture_cockpit.i18n import finding_summary
+from posture_cockpit.core.model import Finding, Outcome, Status
 
 
 @pytest.fixture
@@ -76,3 +78,13 @@ def test_scans_cannot_be_cross_read_between_domains(signed_in, world):
 
 def test_history_requires_authentication(client):
     assert client.get(f"/domains/{DEMO}/history", follow_redirects=False).status_code in (303, 307)
+
+
+def test_legacy_dns_zone_placeholder_never_leaks(signed_in):
+    s = signed_in.app.state.services
+    legacy = Finding("dns.dnssec", "dns", 4, Outcome(Status.OK, "dns.dnssec.on"))
+    assert "{zone}" not in finding_summary(s.catalog, "fr", legacy, DEMO)
+    assert "{zone}" not in finding_summary(s.catalog, "en", legacy, DEMO)
+    with_zone = Finding("dns.dnssec", "dns", 4,
+                        Outcome(Status.OK, "dns.dnssec.on", evidence={"zone": "other.example"}))
+    assert "other.example" in finding_summary(s.catalog, "fr", with_zone, DEMO)
