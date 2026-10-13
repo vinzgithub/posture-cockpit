@@ -232,6 +232,25 @@ class LiveNetwork:
             verify_tls=verify_tls,
         )
 
+    async def smtp_ehlo_for_domain(self, domain: str, mx: str, *, verify_tls: bool = False):
+        """Explicit opt-in SMTP probe, bound to the audited domain MX DNS answer.
+
+        Do not rely on caller-supplied declared MX names. The ordinary scan
+        engine does not invoke this method.
+        """
+        from ..checks.smtp_egress import allowed_smtp_mx_addresses
+
+        if self.policy.internal:
+            raise NetworkError("SMTP probing is disabled for internal perimeters")
+        answer = await self.dns(domain, "MX")
+        declared = tuple(
+            fields[1].rstrip(".") for record in answer.records
+            if len(fields := record.split()) == 2 and fields[0].isdigit()
+        )
+        # Validate eligibility before resolving MX addresses or opening a socket.
+        allowed_smtp_mx_addresses(mx, declared, ("8.8.8.8",))
+        return await self.smtp_ehlo(mx, declared, verify_tls=verify_tls)
+
     # ---------------------------------------------------------- destinations
     async def _destinations(self, host: str, port: int) -> list[Address]:
         """Addresses to connect to for ``host:port``, all allowed by the policy.
