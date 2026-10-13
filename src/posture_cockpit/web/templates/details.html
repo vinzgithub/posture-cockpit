@@ -46,7 +46,7 @@
 
 {# Ordinary scans never invoke the opt-in SMTP probe. No live or stored TLS proof exists here. #}
 {% if not scan.perimeter %}
-<section class="panel details" aria-labelledby="smtp-observations-title">
+<section id="smtp-observations" class="panel details" aria-labelledby="smtp-observations-title">
   <h2 id="smtp-observations-title">{{ t('smtp.details.title') }}</h2>
   <ul class="checks">
     <li class="check smtp-observation status-error">
@@ -69,7 +69,7 @@
         {% endif %}
         <p class="muted small">{{ t('smtp.details.score_note') }}</p>
         {% if user['is_admin'] and not (smtp_attempted | default(false)) %}
-        <form method="post" action="/domains/{{ scan.domain }}/smtp-observations">
+        <form method="post" action="/domains/{{ scan.domain }}/smtp-observations#smtp-observations">
           <input type="hidden" name="csrf" value="{{ csrf }}">
           <button type="submit" class="btn btn-secondary">{{ t('smtp.details.run') }}</button>
         </form>
