@@ -178,16 +178,32 @@ async def spf(ctx: CheckContext) -> Outcome:
 
 # ------------------------------------------------------------------ DMARC
 async def _dmarc_records(ctx: CheckContext) -> tuple[str, list[str]]:
-    """The name holding the DMARC policy that applies, and its records.
+    """RFC 9989 DNS Tree Walk, bounded to the DNS name's parents.
 
-    A domain without its own record follows the one of its parent domain
-    (RFC 7489 §6.6.3: the organizational domain; the DMARC revision walks up
-    the DNS tree the same way)."""
-    labels = ctx.domain.split(".")
-    for start in range(min(len(labels) - 1, DMARC_TREE_WALK)):
+    An exact record wins. Otherwise a record with psd=n identifies an
+    organizational domain, while psd=y identifies a public-suffix policy.
+    With no explicit markers, the nearest ancestor is used as a conservative
+    legacy-compatible fallback. Never inspect the TLD itself.
+    """
+    labels = ctx.domain.lower().rstrip(".").split(".")
+    candidates: list[tuple[str, list[str], str]] = []
+    for start in range(len(labels) - 1):
         name = ".".join(labels[start:])
         records = [r for r in await ctx.txt(f"_dmarc.{name}") if is_dmarc_candidate(r)]
-        if records:
+        if not records:
+            continue
+        parsed = parse_dmarc(records[0]) if len(records) == 1 else None
+        marker = parsed.psd if parsed is not None and parsed.starts_right else "u"
+        candidates.append((name, records, marker))
+        if start == 0:
+            return name, records  # exact-domain policy, even when invalid/multiple
+        if marker == "n":
+            return name, records
+    for name, records, marker in candidates:
+        if marker != "y":
+            return name, records
+    for name, records, marker in candidates:
+        if marker == "y":
             return name, records
     return ctx.domain, []
 
@@ -213,6 +229,8 @@ async def dmarc(ctx: CheckContext) -> Outcome:
     record = parse_dmarc(valid[0])
     evidence["tags"] = record.tags
     policy = record.subdomain_policy if inherited else record.policy
+    if inherited and record.psd == "y":
+        policy = record.tags.get("sp", record.tags.get("p", "none")).lower()
     params: dict[str, str | int] = {"policy": policy or "", "parent": owner}
     if policy is None:
         evidence["errors"] = [list(e) for e in record.errors]
