@@ -268,7 +268,7 @@ async def dmarc(ctx: CheckContext) -> Outcome:
         effective = "quarantine" if policy == "reject" else "none"
         evidence["effective_policy"] = effective
         return warn("mail.dmarc.testing", Remedy(5, Effort.MEDIUM), evidence,
-                    policy=policy, effective=effective, parent=owner)
+                    policy=policy or "", effective=effective, parent=owner)
     if policy == "none":
         if inherited:
             return warn("mail.dmarc.monitoring_inherited", Remedy(10, Effort.MEDIUM, how="mail.dmarc.monitoring.how"),
