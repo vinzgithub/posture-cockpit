@@ -414,3 +414,44 @@ async def test_smtp_rejects_invalid_timeout_without_reserving_socket(timeout, mo
             reserve_connection=lambda: pytest.fail("budget spent despite invalid timeout"),
             timeout=timeout,
         )
+
+
+
+@pytest.mark.asyncio
+async def test_smtp_domain_probe_refuses_undeclared_mx_before_address_dns(monkeypatch):
+    net = LiveNetwork()
+    queries = []
+
+    async def fake_dns(name, rtype):
+        queries.append((name, rtype))
+        assert (name, rtype) == ("example.org", "MX")
+        return DnsAnswer(("10 mail.example.org.",))
+
+    monkeypatch.setattr(net, "dns", fake_dns)
+    with pytest.raises(NetworkError, match="not a declared MX"):
+        await net.smtp_ehlo_for_domain("example.org", "other.example.org")
+    assert queries == [("example.org", "MX")]
+    assert net._spent["connections"] == 0
+
+
+@pytest.mark.asyncio
+async def test_smtp_domain_probe_uses_dns_declared_mx(monkeypatch):
+    net = LiveNetwork()
+    writer = FakeWriter()
+    queries = []
+
+    async def fake_dns(name, rtype):
+        queries.append((name, rtype))
+        if rtype == "MX":
+            return DnsAnswer(("10 mx.example.org.",))
+        return DnsAnswer(("8.8.8.8",)) if rtype == "A" else DnsAnswer(())
+
+    async def fake_open(ip, port):
+        return reader_with("220 mx.example.org ready", "250 mx.example.org"), writer
+
+    monkeypatch.setattr(net, "dns", fake_dns)
+    monkeypatch.setattr(asyncio, "open_connection", fake_open)
+    result = await net.smtp_ehlo_for_domain("example.org", "mx.example.org")
+    assert result.mx == "mx.example.org"
+    assert queries == [("example.org", "MX"), ("mx.example.org", "A"), ("mx.example.org", "AAAA")]
+    assert net._spent["connections"] == 1
