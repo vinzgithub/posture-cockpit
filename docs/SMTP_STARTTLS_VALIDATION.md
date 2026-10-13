@@ -46,14 +46,14 @@ Les tests cités utilisent des flux simulés. « Couvert » signifie que le comp
 | V06 | Couvert | `test_no_tls_handshake_without_starttls_advertisement` |
 | V07 | Couvert | `test_smtp_starttls_refusal_is_not_a_success` |
 | V08 | Couvert (simulation) | `test_verified_starttls_handshake_uses_mx_hostname`, `test_certificate_details_from_der` ; vrai serveur à vérifier |
-| V09 | Partiel | `test_verified_starttls_reports_certificate_failure`, `test_starttls_missing_or_invalid_certificate_is_not_verified`, `test_verified_starttls_missing_ssl_object_is_failure` ; ajouter un échec de vérification du nom MX spécifiquement simulé |
+| V09 | Couvert (simulation) | `test_starttls_certificate_hostname_mismatch_is_not_verified`, `test_verified_starttls_reports_certificate_failure`, `test_starttls_missing_or_invalid_certificate_is_not_verified`, `test_verified_starttls_missing_ssl_object_is_failure` ; vraie chaîne TLS à contrôler sur validation |
 | V10 | Couvert | `test_smtp_reply_rejects_oversized_or_incomplete_data`, `test_smtp_reply_rejects_noncanonical_or_control_bytes` |
 | V11 | Couvert | `test_smtp_reply_timeout_closes_writer`, `test_smtp_connection_timeout_consumes_one_budget_and_never_retries` |
 | V12 | Couvert | `test_probe_refuses_exhausted_budget_before_socket`, `test_live_network_smtp_reuses_dns_and_connection_budget` |
 | V13 | Couvert | `test_smtp_engine_observations_respect_dns_mx_and_host_limit`, `test_smtp_engine_caps_observations_at_five_mx` |
-| V14 | Partiel | `test_standard_scan_does_not_invoke_smtp_probe` ; absence d'impact réel sur score, rapport et réseau à confirmer sur validation |
+| V14 | Partiel (simulation) | `test_standard_scan_does_not_invoke_smtp_probe`, `test_smtp_opt_in_does_not_mutate_standard_scan_result` ; rapports, score et absence de trafic réels à confirmer sur validation |
 
-**Bilan : 12 scénarios couverts en simulation et 2 partiellement couverts.** Aucun des 14 scénarios n'a été validé par un essai réseau réel depuis :8081.
+**Bilan : 13 scénarios couverts en simulation et 1 partiellement couvert (V14).** CI du commit `408d4d3` : 593 tests Python réussis et construction Docker réussie. Aucun des 14 scénarios n'a été validé par un essai réseau réel depuis :8081.
 
 ## Séquence
 
