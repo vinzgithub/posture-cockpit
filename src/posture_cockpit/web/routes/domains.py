@@ -18,6 +18,7 @@ from starlette.datastructures import FormData
 from starlette.exceptions import HTTPException
 
 from ...core import providers, scoring
+from ...i18n import finding_summary
 from ...core.engine import normalize_domain
 from ...core.model import Status
 from ...core.network import NetworkError
@@ -208,6 +209,7 @@ async def history_detail(request: Request, name: str, scan_id: int, user: Row = 
     for finding in scan.current():
         categories.setdefault(finding.category, []).append(finding)
     return render(request, "history_detail.html", domain=domain, scan=scan, categories=categories,
+                  finding_summary=lambda f, d: finding_summary(s.catalog, lang_of(request), f, d),
                   result=scan.assessment(), registry=s.registry, rechecks=scan.rechecks,
                   full_coverage=scoring.FULL_COVERAGE)
 
