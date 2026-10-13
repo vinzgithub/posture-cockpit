@@ -13,8 +13,10 @@
       <span class="chip">{{ task.category }}</span>
     </span>
   </span>
+  {% if plan.score is not none %}{# without a score, points would refer to nothing #}
   <span class="task-gain">
     {% if task.gain > 0 %}<strong>+{{ task.gain }}</strong>{% else %}<strong>+</strong>{% endif %}
     <small>{{ t('plan.gained') if task.done else t('plan.points') }}</small>
   </span>
+  {% endif %}
 </a>

@@ -34,7 +34,7 @@ from .scanner import Scanner
 from .security import MIN_PASSWORD_LENGTH, hash_password
 from .storage import Accounts, Database
 
-SYMBOLS = {"ok": "✓", "warn": "!", "fail": "✗", "info": "i", "error": "?"}
+SYMBOLS = {"ok": "✓", "warn": "!", "fail": "✗", "na": "–", "info": "i", "error": "?"}
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -82,21 +82,27 @@ def _scan(typed: str, as_json: bool, lang: str) -> int:
                         "(POSTURE_COCKPIT_NAMESERVERS)."}.get(problem, problem), file=sys.stderr)
         return 1
     result = asyncio.run(scanner.scan(domain))
+    assessment = scoring.assess(result.findings)
     if as_json:
-        print(json.dumps({"domain": domain, "score": scoring.score(result.findings),
+        print(json.dumps({"domain": domain, "score": assessment.score, "grade": assessment.grade,
+                          "coverage": round(assessment.coverage, 3),
                           "findings": [{"check": f.check_id, "status": f.status.value, **f.outcome_json()}
                                        for f in result.findings]}, ensure_ascii=False, indent=2))
         return 0
     catalog = Catalog(registry.messages)
-    value = scoring.score(result.findings)
-    print(f"{domain} — {value}/100 ({scoring.grade(value)}) — "
-          f"{len(result.findings)} checks in {result.duration_ms} ms\n")
+    verdict = (f"{assessment.score}/100 ({assessment.grade})" if assessment.score is not None
+               else catalog.text(lang, "score.not_evaluated"))
+    coverage = catalog.text(lang, "score.coverage", {"evaluated": assessment.evaluated,
+                                                     "applicable": assessment.applicable,
+                                                     "percent": assessment.coverage_percent})
+    print(f"{domain} — {verdict} — {coverage} — {result.duration_ms} ms\n")
     for f in result.findings:
         summary = catalog.text(lang, f.outcome.summary, {"domain": domain, **f.outcome.params})
         print(f"  {SYMBOLS[f.status.value]} {f.check_id:<22} {summary}")
     plan = scoring.plan(result.findings)
     if plan.priorities:
-        print(f"\nPriorities (score {plan.score} → {plan.target}):")
+        projected = f" (score {plan.now.score} → {plan.target.score})" if plan.now.score is not None else ""
+        print(f"\nPriorities{projected}:")
         for item in plan.priorities:
             print(f"  +{item.gain:<3} {item.finding.check_id}")
     return 0

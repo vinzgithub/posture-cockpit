@@ -26,11 +26,29 @@ rest:
         unit_of_measurement: "/100"
         value_template: >-
           {{ (value_json.domains | selectattr('domain', 'eq', 'mon-domaine.fr') | first).score }}
+        # Pas de note quand le domaine n'a pas pu être évalué : le capteur est alors « indisponible ».
+        availability: >-
+          {{ (value_json.domains | selectattr('domain', 'eq', 'mon-domaine.fr') | first).score is not none }}
         json_attributes_path: "$.domains[?(@.domain == 'mon-domaine.fr')]"
-        json_attributes: [grade, critical, to_improve, certificate_days_left, scanned_at]
+        json_attributes: [grade, evaluation, coverage, critical, to_improve, not_evaluated, certificate_days_left, scanned_at]
 ```
 
-Chaque domaine donne : `score` (0 à 100), `grade` (A à F), `critical` (points critiques), `to_improve`, `certificate_days_left` et `scanned_at`.
+Chaque domaine donne :
+
+| Champ | Sens |
+|---|---|
+| `score` | 0 à 100, ou `null` quand le domaine n'est **pas évalué** (moins de la moitié des contrôles applicables ont pu être faits, voir [SCORING.fr.md](SCORING.fr.md)) |
+| `grade` | A à F, ou `null` |
+| `evaluation` | `complete`, `partial` (couverture sous 90 % : la lettre ne peut pas dépasser B) ou `not_evaluated` |
+| `coverage` | Part des contrôles applicables qui ont pu être faits, de 0 à 1 |
+| `checks_evaluated`, `checks_applicable` | La même chose, en nombre de contrôles |
+| `critical`, `to_improve` | Contrôles à corriger, à améliorer |
+| `not_evaluated` | Contrôles qui n'ont pas pu être faits (serveur muet, délai dépassé, destination refusée) |
+| `certificate_days_left` | Jours avant l'expiration du certificat du site |
+| `perimeter` | Nom du périmètre interne, `null` sur Internet |
+| `scanned_at` | Heure de l'analyse (UTC) |
+
+Depuis la 0.2.0, `score` peut valoir `null` : une automatisation qui le compare à un nombre doit d'abord regarder `evaluation`. Les domaines des périmètres internes ne sont listés que pour la clé d'un administrateur.
 
 ## Une analyse chaque mois
 
@@ -70,6 +88,8 @@ automation:
         data:
           message: "Le certificat de mon-domaine.fr expire dans moins de 15 jours."
 ```
+
+L'analyse répond `429` avec un en-tête `Retry-After` quand l'instance fait déjà son maximum d'analyses, ou quand le compte de la clé a utilisé sa part horaire (`POSTURE_COCKPIT_SCANS_PER_HOUR`).
 
 Sans Home Assistant, la même analyse mensuelle se lance avec cron :
 

@@ -187,7 +187,22 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 0;
 .badge-ok { background: var(--ok-soft); color: var(--ok-text); }
 .badge-warn { background: var(--warn-soft); color: var(--warn-text); }
 .badge-fail { background: var(--fail-soft); color: var(--fail-text); }
-.badge-info, .badge-error { background: var(--line-soft); color: var(--muted); }
+.badge-info, .badge-error, .badge-na { background: var(--line-soft); color: var(--muted); }
+/* Internal perimeter: a violet tag on every page that shows an internal domain. */
+.tag-internal { display: inline-block; padding: 1px 8px; border-radius: 6px; background: var(--violet-soft); color: var(--violet-text); font: 700 12px var(--font); letter-spacing: .02em; text-transform: none; vertical-align: middle; }
+textarea { padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); font: 500 14px var(--mono); resize: vertical; min-width: 0; }
+textarea:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: var(--accent); }
+input:disabled, textarea:disabled { background: var(--surface-2); color: var(--muted); }
+.plain-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.table-scroll { overflow-x: auto; }
+.audit-alert td:nth-child(3) { color: var(--fail-text); font-weight: 700; }
+/* Coverage of a scan, and the checks that could not be evaluated. */
+.coverage { margin: 0; font-size: 13.5px; color: var(--ink-2); font-weight: 600; }
+.coverage-partial { color: var(--warn-text); }
+.scorecard-score.scorecard-none strong { font-size: 30px; letter-spacing: -.01em; }
+.gaps { font-size: 13.5px; color: var(--ink-2); }
+.gaps summary { font-weight: 700; color: var(--muted); }
+.gaps ul { margin: 8px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
 
 .grade { display: inline-grid; place-items: center; min-width: 34px; height: 30px; padding: 0 8px; border-radius: 8px; font-weight: 800; }
 .grade-big { min-width: 48px; height: 48px; border-radius: 14px; font-size: 22px; }
@@ -237,6 +252,7 @@ details > summary { cursor: pointer; }
 .domain-card-body strong { font-family: var(--mono); font-weight: 500; font-size: 15px; overflow-wrap: anywhere; }
 .domain-card-score { color: var(--muted); font-size: 14px; }
 .domain-card-score strong { color: var(--ink); font-size: 20px; }
+.domain-card-score small { display: block; text-align: right; font-size: 12px; font-weight: 700; }
 .chevron { width: 18px; height: 18px; fill: none; stroke: var(--faint); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
 .empty-state { max-width: 640px; align-items: flex-start; }
 
@@ -382,7 +398,7 @@ span.side-link-icon svg { width: 13px; height: 13px; }
 .check-title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .check-id { flex: none; }
 .icon-ok { color: var(--ok); } .icon-warn { color: var(--warn); } .icon-fail { color: var(--fail); }
-.icon-info, .icon-error { color: var(--faint); }
+.icon-info, .icon-error, .icon-na { color: var(--faint); }
 .evidence { margin: 8px 0 0; padding: 12px 14px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--line-soft); overflow-x: auto; font-size: 12.5px; }
 
 /* ------------------------------------------------------------------ 5e. settings and admin */

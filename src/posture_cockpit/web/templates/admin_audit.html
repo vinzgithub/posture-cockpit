@@ -1,0 +1,17 @@
+{# Copyright © 2026 Vincent Fournet · SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 -#}
+{# The audit log: who did what, newest first. #}
+{% extends "base.html" %}
+{% from "_macros.html" import audit_rows with context %}
+{% block title %}{{ t('audit.title') }} · {{ t('admin.title') }}{% endblock %}
+{% block content %}
+<p class="small"><a href="/admin#audit">← {{ t('admin.back') }}</a></p>
+<div class="page-head"><h1>{{ t('audit.title') }}</h1><p class="lead">{{ t('audit.intro') }}</p></div>
+<nav class="chips" aria-label="{{ t('audit.filter') }}">
+  {% for prefix in ['', 'login', 'scan', 'perimeter', 'user', 'totp', 'token'] %}
+  <a class="chip {{ 'chip-gain' if action == prefix }}" href="/admin/audit{{ '?action=' ~ prefix if prefix }}">{{ t('audit.filter.' ~ (prefix or 'all')) }}</a>
+  {% endfor %}
+</nav>
+<section class="panel">
+  {% if entries %}{{ audit_rows(entries) }}{% else %}<p class="muted">{{ t('audit.empty') }}</p>{% endif %}
+</section>
+{% endblock %}

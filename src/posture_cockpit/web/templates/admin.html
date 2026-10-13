@@ -1,6 +1,7 @@
 {# Copyright © 2026 Vincent Fournet · SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 -#}
 {# Administration: accounts, extensions, report signature. #}
 {% extends "base.html" %}
+{% from "_macros.html" import audit_rows with context %}
 {% block title %}{{ t('admin.title') }}{% endblock %}
 {% block content %}
 <div class="page-head"><h1>{{ t('admin.title') }}</h1><p class="lead">{{ t('admin.intro') }}</p></div>
@@ -8,6 +9,7 @@
 
 <section class="panel" id="users">
   <h2>{{ t('admin.users') }}</h2>
+  <div class="table-scroll">
   <table class="table">
     <thead><tr><th>{{ t('login.username') }}</th><th>{{ t('admin.role') }}</th><th>{{ t('mfa.title') }}</th><th>{{ t('admin.created') }}</th></tr></thead>
     <tbody>
@@ -21,6 +23,7 @@
     {% endfor %}
     </tbody>
   </table>
+  </div>
 
   <details class="add-user" {% if draft %}open{% endif %}>
     <summary class="btn btn-secondary">{{ t('admin.add_user') }}</summary>
@@ -41,6 +44,26 @@
       <div class="span2"><button class="btn btn-primary" type="submit">{{ t('admin.create') }}</button></div>
     </form>
   </details>
+</section>
+
+<section class="panel" id="perimeters">
+  <h2>{{ t('perimeter.title') }}</h2>
+  <p class="muted">{{ t('perimeter.admin_help') }}</p>
+  {% if not internal_enabled %}<p class="flash flash-info" role="status">{{ t('perimeter.disabled') }} <code>POSTURE_COCKPIT_INTERNAL_SCANS=1</code></p>{% endif %}
+  {% if perimeters %}
+  <div class="table-scroll">
+  <table class="table">
+    <thead><tr><th>{{ t('perimeter.name') }}</th><th>{{ t('perimeter.networks') }}</th><th>{{ t('perimeter.domains') }}</th></tr></thead>
+    <tbody>
+    {% for p, count in perimeters %}
+    <tr><td><a href="/admin/perimeters/{{ p.id }}">{{ p.name }}</a></td>
+        <td><code class="small">{{ p.networks | join(', ') }}</code></td><td>{{ count }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+  {% if internal_enabled %}<div><a class="btn btn-secondary" href="/admin/perimeters/new">{{ t('perimeter.new') }}</a></div>{% endif %}
 </section>
 
 <section class="panel" id="extensions">
@@ -65,6 +88,13 @@
   {% for error in load_errors %}
   <p class="flash flash-error">{{ t('admin.extension_error', source=error.source) }} <code>{{ error.error }}</code></p>
   {% endfor %}
+</section>
+
+<section class="panel" id="audit">
+  <h2>{{ t('audit.title') }}</h2>
+  <p class="muted">{{ t('audit.intro') }}</p>
+  {% if audit_entries %}{{ audit_rows(audit_entries) }}{% endif %}
+  <div><a class="btn btn-secondary" href="/admin/audit">{{ t('audit.see_all') }}</a></div>
 </section>
 
 <section class="panel" id="report">

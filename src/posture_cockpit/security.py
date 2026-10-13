@@ -6,7 +6,8 @@
 - two-factor authentication: TOTP codes (RFC 6238) and single-use recovery codes;
 - API keys: random tokens stored as SHA-256 hashes;
 - CSRF tokens kept in the signed session cookie;
-- a login throttle shared by wrong passwords and wrong codes.
+- a login throttle shared by wrong passwords and wrong codes, counted by
+  client address and by account name.
 
 Nothing here knows about the database or the web framework, so each piece can be
 tested on its own (see tests/test_security.py).
@@ -15,6 +16,7 @@ tested on its own (see tests/test_security.py).
 from __future__ import annotations
 
 import base64
+import functools
 import hashlib
 import hmac
 import re
@@ -43,6 +45,13 @@ def hash_password(password: str) -> str:
     salt = secrets.token_bytes(16)
     digest = hashlib.scrypt(password.encode(), salt=salt, dklen=32, **_SCRYPT)
     return f"scrypt${_SCRYPT['n']}${_SCRYPT['r']}${_SCRYPT['p']}${salt.hex()}${digest.hex()}"
+
+
+@functools.cache
+def dummy_password_hash() -> str:
+    """A hash no password matches, for unknown account names: checking it takes as long as a real
+    check, so the response time does not tell which accounts exist."""
+    return hash_password(secrets.token_urlsafe(32))
 
 
 def verify_password(password: str, stored: str) -> bool:
@@ -151,10 +160,14 @@ def csrf_valid(session: dict, provided: str | None) -> bool:
 
 # ----------------------------------------------------------------- throttle
 class LoginThrottle:
-    """After ``max_failures`` failures from one address, refuse attempts for ``lock_seconds``.
+    """After ``max_failures`` failures for one key, refuse attempts for ``lock_seconds``.
 
-    Kept in memory: a restart clears it. Wrong passwords and wrong codes share
-    the same counter, so typing the right password again gives no extra tries."""
+    The web interface keeps two: one by client address, one by account name
+    (so that guesses spread over many addresses still stop). Kept in memory: a
+    restart clears it. Wrong passwords and wrong codes share the same
+    counters, so typing the right password again gives no extra tries."""
+
+    MAX_KEYS = 10_000  # beyond, expired entries are dropped (names typed at random must not fill memory)
 
     def __init__(self, max_failures: int = 5, lock_seconds: int = 300):
         self.max_failures = max_failures
@@ -174,6 +187,9 @@ class LoginThrottle:
                 failures = 0  # the previous lock has expired: start counting again
             failures += 1
             self._state[key] = (failures, time.monotonic() + self.lock_seconds)
+            if len(self._state) > self.MAX_KEYS:
+                now = time.monotonic()
+                self._state = {k: v for k, v in self._state.items() if v[1] > now}
 
     def success(self, key: str) -> None:
         with self._lock:

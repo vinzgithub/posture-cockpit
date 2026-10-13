@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "posture-cockpit"
-version = "0.1.0"
+version = "0.2.0"
 description = "Self-hosted passive security check of a domain (mail, TLS, web, DNS) with a guided plan of fixes and a PDF report."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -75,7 +75,7 @@ ignore = ["S101", "RUF001", "RUF002", "RUF003"]  # French text uses typographic 
 extend-immutable-calls = ["fastapi.Depends"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["S105", "S106"]
+"tests/*" = ["S104", "S105", "S106"]  # test passwords; addresses as data
 
 [tool.mypy]
 python_version = "3.11"

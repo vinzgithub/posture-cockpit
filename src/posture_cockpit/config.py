@@ -36,6 +36,11 @@ class Config:
     check_timeout: float = 15.0
     # DNS resolvers to query (IP addresses). Empty: those of the system.
     nameservers: list[str] = field(default_factory=list)
+    # Internal perimeters (scans of private networks). Off unless the operator turns them on.
+    internal_scans: bool = False
+    # Scans running at the same time on the instance, and scans per account and per hour.
+    max_concurrent_scans: int = 4
+    scans_per_hour: int = 30
 
     @property
     def db_path(self) -> Path:
@@ -53,12 +58,15 @@ class Config:
             session_max_age=int(_env("SESSION_MAX_AGE", str(7 * 24 * 3600))),
             check_timeout=float(_env("CHECK_TIMEOUT", "15")),
             nameservers=nameservers,
+            internal_scans=_env_bool("INTERNAL_SCANS", False),
+            max_concurrent_scans=max(1, int(_env("MAX_CONCURRENT_SCANS", "4"))),
+            scans_per_hour=max(1, int(_env("SCANS_PER_HOUR", "30"))),
         )
 
 
 def secret_key(data_dir: Path) -> str:
     """Key that signs the session cookie, created on first start and kept in the data folder."""
-    data_dir.mkdir(parents=True, exist_ok=True)
+    data_dir.mkdir(mode=0o700, parents=True, exist_ok=True)  # an existing folder keeps its rights
     path = data_dir / ".secret_key"
     if path.exists():
         return path.read_text().strip()

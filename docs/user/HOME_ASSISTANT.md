@@ -26,11 +26,29 @@ rest:
         unit_of_measurement: "/100"
         value_template: >-
           {{ (value_json.domains | selectattr('domain', 'eq', 'my-domain.com') | first).score }}
+        # No score when the domain could not be evaluated: the sensor is then "unavailable".
+        availability: >-
+          {{ (value_json.domains | selectattr('domain', 'eq', 'my-domain.com') | first).score is not none }}
         json_attributes_path: "$.domains[?(@.domain == 'my-domain.com')]"
-        json_attributes: [grade, critical, to_improve, certificate_days_left, scanned_at]
+        json_attributes: [grade, evaluation, coverage, critical, to_improve, not_evaluated, certificate_days_left, scanned_at]
 ```
 
-Each domain gives: `score` (0 to 100), `grade` (A to F), `critical` (critical points), `to_improve`, `certificate_days_left` and `scanned_at`.
+Each domain gives:
+
+| Field | Meaning |
+|---|---|
+| `score` | 0 to 100, or `null` when the domain is **not evaluated** (less than half of the applicable checks could run, see [SCORING.md](SCORING.md)) |
+| `grade` | A to F, or `null` |
+| `evaluation` | `complete`, `partial` (coverage under 90 %: the grade cannot be better than B) or `not_evaluated` |
+| `coverage` | Share of the applicable checks that could run, 0 to 1 |
+| `checks_evaluated`, `checks_applicable` | The same, in number of checks |
+| `critical`, `to_improve` | Checks to fix, to improve |
+| `not_evaluated` | Checks that could not run (server silent, timeout, destination refused) |
+| `certificate_days_left` | Days before the website certificate expires |
+| `perimeter` | Name of the internal perimeter, `null` on the Internet |
+| `scanned_at` | Time of the scan (UTC) |
+
+Since 0.2.0, `score` can be `null`: an automation that compares it with a number should first check `evaluation`. Domains of internal perimeters are only listed for an administrator's key.
 
 ## A scan every month
 
@@ -70,6 +88,8 @@ automation:
         data:
           message: "The certificate of my-domain.com expires in less than 15 days."
 ```
+
+The scan answers `429` with a `Retry-After` header when the instance already runs its maximum of scans, or when the key's account used its hourly share (`POSTURE_COCKPIT_SCANS_PER_HOUR`).
 
 Without Home Assistant, the same monthly scan runs from cron:
 

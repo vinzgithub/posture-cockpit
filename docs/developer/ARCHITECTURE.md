@@ -13,8 +13,11 @@ This document is the map of the code: where things are, how a scan flows, and ho
               │                                     │
               │                                     ▼
               │                               core/network.py  (DNS, TLS, HTTP — passive)
+              │                                     │  every connection goes through
+              │                                     ▼
+              │                               core/egress.py   (where a scan may connect)
               │
-              ├─► storage/  (SQLite: accounts, domains, scans)
+              ├─► storage/  (SQLite: accounts, domains, perimeters, scans, audit log)
               └─► report/   (PDF)
 ```
 
@@ -28,19 +31,23 @@ This document is the map of the code: where things are, how a scan flows, and ho
 | `core/model.py` | `Status`, `Outcome`, `Finding`, `Remedy`, `DnsChange`: the data that flows everywhere |
 | `core/extension.py` | The extension API: `Extension`, the `@extension.check` decorator, `CheckContext` |
 | `core/registry.py` | Finds extensions (built-in + entry points); a broken extension is reported, never fatal |
-| `core/network.py` | The four questions a check may ask (`dns`, `certificate`, `accepts_tls`, `http_get`) and their real implementation, `LiveNetwork` |
+| `core/network.py` | The four questions a check may ask (`dns`, `certificate`, `accepts_tls`, `http_get`) and their real implementation, `LiveNetwork` (cache, limits, deadlines per scan) |
+| `core/egress.py` | **The single rule for outgoing connections**: address zones (public, internal, forbidden), `EgressPolicy`, `DestinationBlocked` |
+| `core/errors.py` | `NetworkError` and `Refused` (nothing listens: a definite answer, unlike a timeout) |
 | `core/fixture.py` | `FixtureNetwork`: the same questions, answered from recorded data (tests, demo) |
 | `core/engine.py` | Runs checks concurrently, each with its own time limit; normalizes domain names; preflight |
-| `core/scoring.py` | Score, grade, score per area, plan of fixes |
+| `core/scoring.py` | Coverage, score, grade (or "not evaluated"), assessment per area, plan of fixes |
 | `core/providers.py` | Known DNS hosts and their detection |
 | `checks/` | The built-in extensions (`mail`, `tls`, `web`, `dns`) and their texts in `checks/locales/` |
-| `scanner.py` | Chooses the network (real or demo), leaves out disabled extensions, reruns a single check |
-| `storage/` | One SQLite connection (`database.py`), the schema (`schema.py`), one repository per subject (`accounts.py`, `scans.py`, `settings.py`) |
+| `checks/records.py` | Parsing of SPF, DMARC, DKIM, MTA-STS and TLS-RPT records against their RFCs (pure functions) |
+| `scanner.py` | Chooses the network (real or demo) with the rule of the perimeter, leaves out disabled extensions, reruns a single check |
+| `storage/` | One SQLite connection (`database.py`), the schema (`schema.py`), one repository per subject (`accounts.py`, `scans.py`, `perimeters.py`, `audit.py`, `settings.py`) |
 | `web/app.py` | Builds the application: services, security headers, session, routes, error pages |
 | `web/deps.py` | What routes share: signed-in user, access rules, CSRF-checked forms, rendering |
-| `web/credentials.py` | Password and code checks used by several pages |
+| `web/credentials.py` | Password and code checks used by several pages, and the sign-in throttles |
+| `web/scanning.py`, `web/limits.py` | Start a scan (limits, audit log, perimeter) and the limits themselves |
 | `web/views.py` | Turns a scan into what the plan page shows (texts, gains, steps) |
-| `web/routes/` | One module per area: `auth`, `account`, `admin`, `domains`, `report`, `api` |
+| `web/routes/` | One module per area: `auth`, `account`, `admin`, `perimeters`, `domains`, `report`, `api` |
 | `web/templates/`, `web/static/` | Jinja templates, one stylesheet, one small script, the fonts |
 | `report/` | The PDF report: context, template, style and fonts |
 | `locales/` | Texts of the interface and the report (`fr.json`, `en.json`) |
@@ -49,28 +56,37 @@ This document is the map of the code: where things are, how a scan flows, and ho
 
 ## 3. How a scan flows
 
-1. **`POST /domains`** (`web/routes/domains.py`) receives what the user typed.
+1. **`POST /domains`** (`web/routes/domains.py`) receives what the user typed. (A domain of an internal perimeter is added from its page in the administration, `web/routes/perimeters.py`.)
 2. `engine.normalize_domain` turns it into a clean name (`https://www.Example.com/contact` → `example.com`).
 3. `scanner.preflight` checks that the DNS answers something for that name. Otherwise: "does not exist" or "the DNS returns nothing", and nothing is saved.
-4. `scanner.scan` takes the checks of the enabled extensions and a **fresh network** (its cache only serves this scan).
-5. `engine.scan` runs **all checks at once**. Each receives a `CheckContext` (domain, network, time) and returns an `Outcome`. A check that times out, raises a network error or crashes becomes an `Outcome` with status `ERROR`: the others carry on.
-6. `Scans.save` stores the scan and its `Finding`s (the score is computed then).
-7. The plan page (`GET /domains/<name>`) calls `views.plan_view`, which produces ready-worded objects for the `plan.html` template.
-8. **"Check"** (`POST /domains/<name>/verify/<check>`) reruns that single check. The result is saved as a *recheck* of the same scan: the original scan does not change (the order of the plan stays stable), the current score takes the recheck into account.
+4. `scanning.scan_and_save` takes a slot of the **scan limiter** (concurrent scans, scans per account and per hour).
+5. `scanner.scan` takes the checks of the enabled extensions and a **fresh network** (its cache only serves this scan) built with the **rule of the perimeter**: the Internet (public addresses, ports 80 and 443), or an internal perimeter (its networks, DNS servers, ports and CA).
+6. `engine.scan` runs **all checks at once**. Each receives a `CheckContext` (domain, network, time, internal or not) and returns an `Outcome`. Checks made for the Internet only are "not applicable" in an internal scan. A check that times out, raises a network error, hits the egress rule or crashes becomes an `Outcome` with status `ERROR` ("not evaluated", with the reason): the others carry on. Work left running is cancelled at the end.
+7. `Scans.save` stores the scan, its `Finding`s and its assessment (score, grade, coverage, perimeter); the scan is written to the audit log.
+8. The plan page (`GET /domains/<name>`) calls `views.plan_view`, which produces ready-worded objects for the `plan.html` template.
+9. **"Check"** (`POST /domains/<name>/verify/<check>`) reruns that single check. The result is saved as a *recheck* of the same scan: the original scan does not change (the order of the plan stays stable), the current score takes the recheck into account.
 
 ## 4. Data model
 
-- **`Outcome`**: what a check returns. A status (`ok`, `warn`, `fail`, `info`, `error`), a **text key** (never a sentence), parameters for that text, the raw values found (`evidence`) and, when something must change, a **`Remedy`**.
+- **`Outcome`**: what a check returns. A status (`ok`, `warn`, `fail`, `na`, `info`, `error`), a **text key** (never a sentence), parameters for that text, the raw values found (`evidence`) and, when something must change, a **`Remedy`**.
 - **`Remedy`**: estimated time, effort (`easy`, `medium`, `delegate`) and the shape of the fix: **`DnsChange`s** (add or delete a record), a **message** to send, or an explanation (`how`).
 - **`Finding`**: an `Outcome` with the identity of its check (`mail.dmarc`), its category and its weight. This is what the database stores (as JSON) and what pages show.
 
-**Score** (`core/scoring.py`): the share of the weight earned. `ok` earns the full weight, `warn` half, `fail` nothing; `info` and `error` are left out. **Plan**: `fail`s first (priorities), then `warn`s (improvements), each sorted by effect on the score, then by speed. Displayed gains are cumulative so they add up exactly.
+**Statuses**: `ok`, `warn` and `fail` are *evaluated*; `error` ("not evaluated": timeout, unreachable, destination refused, bug) is *applicable but not evaluated*; `na` (does not apply: no website, no inbound mail, internal audit) and `info` are left out.
+
+**Assessment** (`core/scoring.py`, rules written at the top of the module and explained to users in [`docs/user/SCORING.md`](../user/SCORING.md)): the **coverage** is the weight evaluated over the weight applicable; the **score** is the share of the evaluated weight earned (`ok` the full weight, `warn` half, `fail` nothing). Below 50 % coverage there is no score ("not evaluated"); below 90 % the grade cannot be better than B. `Scan.assessment()` is the only function the pages, the API, the PDF and the history use. **Plan**: `fail`s first (priorities), then `warn`s (improvements), each sorted by effect on the score, then by speed. Displayed gains are cumulative so they add up exactly.
 
 ## 5. Database
 
-One SQLite file in the data folder, in WAL mode. Tables: `users`, `totp`, `recovery_codes`, `api_tokens`, `domains`, `scans`, `findings`, `rechecks`, `meta`.
+One SQLite file in the data folder, in WAL mode, readable by its owner only. Tables: `users`, `totp`, `recovery_codes`, `api_tokens`, `perimeters`, `domains` (with `perimeter_id`), `scans` (score, grade, coverage, perimeter), `findings`, `rechecks`, `audit_log`, `meta`.
 
-**Migrations**: `storage/schema.py` holds a list of scripts. The database remembers how many it applied (`meta.schema_version`) and applies the next ones at start-up, each in a transaction. To change the schema, **append a script to the list**; never edit one that has been released.
+**Migrations**: `storage/schema.py` holds a list of SQL scripts or Python functions. The database remembers how many it applied (`meta.schema_version`) and applies the next ones at start-up, each in a transaction, with foreign keys switched off and checked (`PRAGMA foreign_key_check`) before the commit, as SQLite documents for rebuilding a table. Before migrating a database that holds data, a copy is written to `backups/`. To change the schema, **append a migration to the list**; never edit one that has been released.
+
+| Version | Migration |
+|---|---|
+| 1 (0.1.0) | Initial schema |
+| 2 (0.2.0) | `perimeters`, `domains.perimeter_id`, `audit_log` |
+| 3 (0.2.0) | `scans` rebuilt (score and grade nullable, `coverage`, `perimeter`), scores of stored scans recomputed |
 
 ## 6. Texts and languages
 
@@ -98,15 +114,18 @@ Parameters: `{name}`. A parameter whose name ends with `_on` is an ISO date, wri
 - **Session**: signed cookie (`SessionMiddleware`). It holds the user id and an "epoch": changing the password or two-factor settings changes the epoch and signs other browsers out (`deps.current_user`).
 - **Access**: FastAPI dependencies (`require_user`, `require_admin`…) raise an exception that `app.py` turns into a redirect (`/setup`, `/login`, `/account/password`, `/admin/confirm`).
 - **CSRF**: every form goes through the `checked_form` dependency, which refuses a missing or wrong token.
-- **Sign-in**: password, then TOTP code when enabled (two steps, 5 minutes at most). Password and code failures share the same counter (`LoginThrottle`).
-- **Headers**: strict Content Security Policy (`script-src 'self'`, `style-src 'self'`, no external resource), `nosniff`, `no-store`. Consequence: **no `style="…"` and no script in templates** (a test checks it); score bars are drawn in SVG.
+- **Sign-in**: password, then TOTP code when enabled (two steps, 5 minutes at most). Password and code failures share the same counters (`LoginThrottle`): by address (5 failures, 5 minutes) and by account name (10 failures, 15 minutes). An unknown name costs the same scrypt check as a known one.
+- **Internal perimeters**: their domains are visible to administrators only (`deps.visible_domain`: 404 for anyone else, pages and API alike).
+- **Scans**: limited at once and per account per hour (`web/limits.py`); every scan and every sensitive change is written to the audit log (`storage/audit.py`), never with a secret.
+- **Network**: see `core/egress.py` and [SECURITY.md](../../SECURITY.md).
+- **Headers**: strict Content Security Policy (`script-src 'self'`, `style-src 'self'`, no external resource), `nosniff`, `no-store`, `Cross-Origin-Opener-Policy`, `Cross-Origin-Resource-Policy`, and HSTS when served over HTTPS. Consequence: **no `style="…"` and no script in templates** (a test checks it); score bars are drawn in SVG.
 
 ## 8. Common tasks
 
 **Add a built-in check**
-1. In `checks/<extension>.py`, an `async def` function decorated with `@extension.check("name", category=…, weight=…)` that returns `ok(…)`, `warn(…)`, `fail(…)` or `info(…)`.
+1. In `checks/<extension>.py`, an `async def` function decorated with `@extension.check("name", category=…, weight=…)` (add `internal=False` if it only makes sense on the Internet) that returns `ok(…)`, `warn(…)`, `fail(…)`, `na(…)`, `info(…)` or `not_evaluated(…)`.
 2. Its texts in `checks/locales/<extension>.fr.json` and `.en.json` (see the table above).
-3. Tests in `tests/test_checks.py`, starting from `worlds.healthy()` changed with `changed(...)`.
+3. Tests in `tests/test_checks.py` or `tests/test_check_accuracy.py`, starting from `worlds.healthy()` changed with `changed(...)`. A verdict that follows an RFC deserves a test that names the RFC section.
 
 **Add a DNS host**: a `DnsHost` in `core/providers.py` (suffixes of its name servers) and its six `dnshost.<id>.*` texts in both `locales/` files. The test `test_every_dns_host_has_its_texts` lists the missing ones.
 
@@ -116,11 +135,15 @@ Parameters: `{name}`. A parameter whose name ends with `_on` is an ISO date, wri
 
 ## 9. Tests
 
-`pytest` runs more than 130 tests, **without any network access**:
+`pytest` runs more than 400 tests, **without reaching any other machine**:
 
 - `tests/worlds.py` describes a healthy domain (`healthy()`); each test changes part of it with `changed(...)` and runs a check with `one(...)`;
 - `tests/conftest.py` provides an application whose network is a dictionary (`world`) that a test can change between a scan and a recheck;
-- `tests/test_network.py` tests the real network code against TLS and HTTP servers started on the machine for the occasion.
+- `tests/local_servers.py` starts a DNS server, web and TLS servers and a test certificate authority on the loopback address: `tests/test_network.py` and `tests/test_egress.py` run the real network code against them (SSRF, IPv4/IPv6, redirections, DNS rebinding, internal DNS and CA, limits);
+- `tests/test_check_accuracy.py` holds one non-regression test per wrong verdict found by the 0.2.0 audit;
+- `tests/test_perimeters.py` and `tests/test_app_security.py` cover access rights, the audit log, sign-in protections and scan limits.
+
+One test needs an IPv6 loopback address and is skipped on machines without one.
 
 ## 10. Conventions
 

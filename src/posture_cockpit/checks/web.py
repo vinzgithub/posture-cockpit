@@ -3,16 +3,20 @@
 """The website's answers: redirection to HTTPS and the protection headers browsers obey.
 
 Only the home page is read (plus security.txt), following at most a few
-redirects inside the domain.
+redirects inside the domain. Each header is judged on what browsers actually
+do with it, not only on its presence: a Content-Security-Policy that does not
+restrict scripts, or ``frame-ancestors *``, protects nothing.
 
 References: ANSSI, « Recommandations pour la sécurisation des sites web »;
-RFC 6797 (HSTS), RFC 7034 (X-Frame-Options), RFC 9116 (security.txt).
+RFC 6797 (HSTS), RFC 7034 (X-Frame-Options), W3C CSP Level 3 (frame-ancestors
+replaces X-Frame-Options when both are sent), W3C Referrer Policy, RFC 9116
+(security.txt).
 """
 
 from __future__ import annotations
 
 import re
-from collections.abc import Callable
+from datetime import datetime
 from urllib.parse import urljoin, urlsplit
 
 from .. import __version__
@@ -25,12 +29,12 @@ from ..core import (
     Outcome,
     Remedy,
     fail,
-    info,
     load_messages,
+    na,
     ok,
     warn,
 )
-from ..core.extension import CheckFunction
+from ..core.egress import DestinationBlocked
 from . import LOCALES
 
 extension = Extension("web", name="Website", version=__version__,
@@ -39,6 +43,10 @@ extension = Extension("web", name="Website", version=__version__,
 
 HSTS_MIN_SECONDS = 180 * 24 * 3600  # six months
 MAX_REDIRECTS = 4
+# CSP sources that allow any origin (or any page) to provide the resource.
+OPEN_SOURCES = frozenset({"*", "http:", "https:", "data:", "blob:", "filesystem:"})
+REFERRER_POLICIES = frozenset({"no-referrer", "no-referrer-when-downgrade", "origin", "origin-when-cross-origin",
+                               "same-origin", "strict-origin", "strict-origin-when-cross-origin", "unsafe-url"})
 
 
 def _delegate(check: str, minutes: int = 15) -> Remedy:
@@ -50,55 +58,121 @@ def _same_site(ctx: CheckContext, url: str) -> bool:
     return host == ctx.domain or host.endswith("." + ctx.domain)
 
 
+def _host(page: HttpReply) -> str:
+    return urlsplit(page.url).hostname or ""
+
+
+async def _follow(ctx: CheckContext, url: str) -> HttpReply:
+    """GET ``url``, then follow HTTPS redirects inside the domain, MAX_REDIRECTS at most."""
+    reply = await ctx.net.http_get(url)
+    for _ in range(MAX_REDIRECTS):
+        location = reply.header("location")
+        if not (300 <= reply.status < 400 and location):
+            break
+        url = urljoin(url, location)
+        if not url.startswith("https://") or not _same_site(ctx, url):
+            break
+        reply = await ctx.net.http_get(url)
+    return reply
+
+
 async def _pages(ctx: CheckContext) -> list[HttpReply]:
     """The home page of each web host over HTTPS, after redirects inside the domain.
 
-    Two hosts that end on the same page count once."""
+    Two hosts that end on the same page count once. Raises the error of the
+    first host when none answers (so the checks are "not evaluated", with the
+    reason, rather than wrongly judged)."""
 
     async def fetch() -> list[HttpReply]:
         pages: dict[str, HttpReply] = {}
+        errors: list[NetworkError] = []
         for host in await ctx.web_hosts():
-            url = f"https://{host}/"
             try:
-                reply = await ctx.net.http_get(url)
-                for _ in range(MAX_REDIRECTS):
-                    location = reply.header("location")
-                    if not (300 <= reply.status < 400 and location):
-                        break
-                    url = urljoin(url, location)
-                    if not url.startswith("https://") or not _same_site(ctx, url):
-                        break
-                    reply = await ctx.net.http_get(url)
-            except NetworkError:
+                reply = await _follow(ctx, f"https://{host}/")
+            except NetworkError as e:
+                errors.append(e)
                 continue
-            pages.setdefault(urlsplit(reply.url).hostname or host, reply)
-        if await ctx.web_hosts() and not pages:
-            raise NetworkError("no web host answered over HTTPS")
+            pages.setdefault(_host(reply) or host, reply)
+        if errors and not pages:
+            raise next((e for e in errors if isinstance(e, DestinationBlocked)), errors[0])
         return list(pages.values())
 
     return await ctx.shared("pages", fetch)
 
 
+def _csp_policies(page: HttpReply) -> list[dict[str, list[str]]]:
+    """The enforced CSP policies of a page (Report-Only ones enforce nothing), as directive → sources.
+
+    Several policies may arrive (several headers, or commas): browsers enforce all of them."""
+    policies = []
+    for text in page.header("content-security-policy").split(","):
+        directives: dict[str, list[str]] = {}
+        for part in text.split(";"):
+            words = part.split()
+            if words and words[0].lower() not in directives:  # the first occurrence wins
+                directives[words[0].lower()] = [w.lower() for w in words[1:]]
+        if directives:
+            policies.append(directives)
+    return policies
+
+
+# ------------------------------------------------------------------ HTTPS
 @extension.check("https_redirect", category="web", weight=8)
 async def https_redirect(ctx: CheckContext) -> Outcome:
-    """A visitor who types the address without https:// must be sent to the encrypted site."""
+    """A visitor who types the address without https:// must end up on the encrypted site.
+
+    Redirects over plain HTTP inside the domain (http://www → http://domain →
+    https://) are followed: what matters is that HTTPS is reached before any
+    page is served in clear."""
     hosts = await ctx.web_hosts()
     if not hosts:
-        return info("web.no_website")
+        return na("web.no_website")
     evidence: dict[str, str] = {}
     for host in hosts:
+        url = f"http://{host}/"
+        steps: list[str] = []
         try:
-            reply = await ctx.net.http_get(f"http://{host}/")
+            reply = await ctx.net.http_get(url)
+        except DestinationBlocked:
+            raise  # the rule of the scan forbids it: not evaluated, not "closed"
         except NetworkError:
             evidence[host] = "closed"  # nothing served without encryption: fine
             continue
-        location = reply.header("location")
-        if 300 <= reply.status < 400 and location.startswith("https://"):
-            evidence[host] = f"{reply.status} → {location}"
-            continue
-        evidence[host] = f"{reply.status} {location}".strip()
-        return fail("web.https_redirect.missing", _delegate("https_redirect"), evidence, host=host)
+        for _ in range(MAX_REDIRECTS + 1):
+            location = reply.header("location")
+            steps.append(f"{reply.status} {url}")
+            if not (300 <= reply.status < 400 and location):
+                evidence[host] = " → ".join(steps)
+                return fail("web.https_redirect.missing", _delegate("https_redirect"), evidence, host=host)
+            url = urljoin(url, location)
+            if url.startswith("https://"):
+                evidence[host] = " → ".join([*steps, url])
+                break
+            if not _same_site(ctx, url):
+                evidence[host] = " → ".join([*steps, url])
+                return fail("web.https_redirect.missing", _delegate("https_redirect"), evidence, host=host)
+            try:
+                reply = await ctx.net.http_get(url)
+            except DestinationBlocked:
+                raise
+            except NetworkError:
+                evidence[host] = " → ".join([*steps, f"{url} closed"])
+                break
+        else:
+            evidence[host] = " → ".join(steps)
+            return fail("web.https_redirect.missing", _delegate("https_redirect"), evidence, host=host)
     return ok("web.https_redirect.ok", evidence)
+
+
+def _hsts_max_age(header: str) -> int | None:
+    """The max-age of an HSTS header, None when absent or invalid. With several headers,
+    browsers only use the first (RFC 6797 §8.1)."""
+    for directive in header.split(",")[0].split(";"):
+        name, _, value = directive.strip().partition("=")
+        if name.strip().lower() == "max-age":
+            value = value.strip().strip('"')
+            return int(value) if value.isdigit() else None
+    return None
 
 
 @extension.check("hsts", category="web", weight=6)
@@ -106,50 +180,128 @@ async def hsts(ctx: CheckContext) -> Outcome:
     """HSTS makes browsers remember to use HTTPS only, even if a link says http://."""
     pages = await _pages(ctx)
     if not pages:
-        return info("web.no_website")
+        return na("web.no_website")
     for page in pages:
         header = page.header("strict-transport-security")
-        match = re.search(r"max-age\s*=\s*\"?(\d+)", header, re.IGNORECASE)
-        host = urlsplit(page.url).hostname or ""
         evidence = {"url": page.url, "header": header}
-        if not match:
-            return warn("web.hsts.missing", _delegate("hsts"), evidence, host=host)
-        if int(match.group(1)) < HSTS_MIN_SECONDS:
-            return warn("web.hsts.short", _delegate("hsts"), evidence, host=host, days=int(match.group(1)) // 86400)
+        if not header:
+            return warn("web.hsts.missing", _delegate("hsts"), evidence, host=_host(page))
+        max_age = _hsts_max_age(header)
+        if max_age is None:
+            return warn("web.hsts.invalid", _delegate("hsts"), evidence, host=_host(page))
+        if max_age == 0:  # RFC 6797 §6.1.1: tells browsers to forget the site's HSTS
+            return warn("web.hsts.disabled", _delegate("hsts"), evidence, host=_host(page))
+        if max_age < HSTS_MIN_SECONDS:
+            return warn("web.hsts.short", _delegate("hsts"), evidence, host=_host(page), days=max_age // 86400)
     return ok("web.hsts.ok", {"headers": {p.url: p.header("strict-transport-security") for p in pages}})
 
 
-def _header_check(name: str, header: str, accept: Callable[[HttpReply], bool]) -> CheckFunction:
-    """Declares a check that passes when ``accept(page)`` is true on every page."""
+# -------------------------------------------------------------------- CSP
+def _script_weakness(page: HttpReply) -> str | None:
+    """Why the page's CSP does not restrict scripts ("missing", "no_script", "unsafe_inline",
+    "open"), or None when one of its policies does."""
+    policies = _csp_policies(page)
+    if not policies:
+        return "missing"
+    weaknesses = []
+    for policy in policies:
+        sources = policy.get("script-src", policy.get("default-src"))
+        if sources is None:
+            weaknesses.append("no_script")
+        elif any(s in OPEN_SOURCES for s in sources):
+            weaknesses.append("open")
+        elif "'unsafe-inline'" in sources and not any(
+                s.startswith(("'nonce-", "'sha256-", "'sha384-", "'sha512-")) or s == "'strict-dynamic'"
+                for s in sources):
+            weaknesses.append("unsafe_inline")  # nonces, hashes or strict-dynamic make browsers ignore it
+        else:
+            return None  # this policy restricts scripts, and browsers enforce every policy
+    return weaknesses[0]
 
-    async def run(ctx: CheckContext) -> Outcome:
-        pages = await _pages(ctx)
-        if not pages:
-            return info("web.no_website")
-        evidence = {p.url: p.header(header) for p in pages}
-        for page in pages:
-            if not accept(page):
-                return warn(f"web.{name}.missing", _delegate(name), evidence, host=urlsplit(page.url).hostname or "")
-        return ok(f"web.{name}.ok", evidence)
 
-    run.__doc__ = f"Header {header} on the home page."
-    return run
-
-
-def _frame_protected(page: HttpReply) -> bool:
-    xfo = page.header("x-frame-options").lower()
-    return xfo in ("deny", "sameorigin") or "frame-ancestors" in page.header("content-security-policy").lower()
+@extension.check("csp", category="web", weight=4)
+async def csp(ctx: CheckContext) -> Outcome:
+    """A Content-Security-Policy that limits where scripts may come from."""
+    pages = await _pages(ctx)
+    if not pages:
+        return na("web.no_website")
+    evidence = {p.url: p.header("content-security-policy") for p in pages}
+    for page in pages:
+        weakness = _script_weakness(page)
+        if weakness is not None:
+            return warn(f"web.csp.{weakness}", _delegate("csp"), evidence, host=_host(page))
+    return ok("web.csp.ok", evidence)
 
 
-extension.check("csp", category="web", weight=4)(
-    _header_check("csp", "content-security-policy", lambda p: bool(p.header("content-security-policy"))))
-extension.check("framing", category="web", weight=3)(
-    _header_check("framing", "x-frame-options", _frame_protected))
-extension.check("nosniff", category="web", weight=2)(
-    _header_check("nosniff", "x-content-type-options",
-                  lambda p: p.header("x-content-type-options").lower() == "nosniff"))
-extension.check("referrer", category="web", weight=1)(
-    _header_check("referrer", "referrer-policy", lambda p: bool(p.header("referrer-policy"))))
+# --------------------------------------------------------------- framing
+def _framing(page: HttpReply) -> str:
+    """"protected", "permissive" (frame-ancestors open to any site), "obsolete" (ALLOW-FROM)
+    or "missing".
+
+    When a CSP has frame-ancestors, browsers ignore X-Frame-Options: the CSP alone decides."""
+    with_directive = [p["frame-ancestors"] for p in _csp_policies(page) if "frame-ancestors" in p]
+    if with_directive:
+        # No source at all means 'none'. Any enforced policy that restricts framing protects.
+        restricting = [s for s in with_directive if not any(source in OPEN_SOURCES for source in s)]
+        return "protected" if restricting else "permissive"
+    values = {v.strip().lower() for v in page.header("x-frame-options").split(",") if v.strip()}
+    if values and values <= {"deny", "sameorigin"}:
+        return "protected"
+    if any(v.startswith("allow-from") for v in values):
+        return "obsolete"  # no longer understood by current browsers
+    return "missing"
+
+
+@extension.check("framing", category="web", weight=3)
+async def framing(ctx: CheckContext) -> Outcome:
+    """Other sites must not be able to show the site in a frame (clickjacking)."""
+    pages = await _pages(ctx)
+    if not pages:
+        return na("web.no_website")
+    evidence = {p.url: {"x-frame-options": p.header("x-frame-options"),
+                        "content-security-policy": p.header("content-security-policy")} for p in pages}
+    for page in pages:
+        state = _framing(page)
+        if state != "protected":
+            return warn(f"web.framing.{state}", _delegate("framing"), evidence, host=_host(page))
+    return ok("web.framing.ok", evidence)
+
+
+# ------------------------------------------------------- the other headers
+@extension.check("nosniff", category="web", weight=2)
+async def nosniff(ctx: CheckContext) -> Outcome:
+    """X-Content-Type-Options: nosniff, so the browser does not guess file types."""
+    pages = await _pages(ctx)
+    if not pages:
+        return na("web.no_website")
+    evidence = {p.url: p.header("x-content-type-options") for p in pages}
+    for page in pages:
+        if page.header("x-content-type-options").split(",")[0].strip().lower() != "nosniff":
+            return warn("web.nosniff.missing", _delegate("nosniff"), evidence, host=_host(page))
+    return ok("web.nosniff.ok", evidence)
+
+
+def _referrer_policy(page: HttpReply) -> str | None:
+    """The policy browsers apply: the last value they know (W3C Referrer Policy §11.1)."""
+    known = [v.strip().lower() for v in page.header("referrer-policy").split(",")
+             if v.strip().lower() in REFERRER_POLICIES]
+    return known[-1] if known else None
+
+
+@extension.check("referrer", category="web", weight=1)
+async def referrer(ctx: CheckContext) -> Outcome:
+    """Referrer-Policy limits the address sent to the sites a visitor goes to next."""
+    pages = await _pages(ctx)
+    if not pages:
+        return na("web.no_website")
+    evidence = {p.url: p.header("referrer-policy") for p in pages}
+    for page in pages:
+        policy = _referrer_policy(page)
+        if policy is None:
+            return warn("web.referrer.missing", _delegate("referrer"), evidence, host=_host(page))
+        if policy == "unsafe-url":  # the full address, query string included, to every site, even over HTTP
+            return warn("web.referrer.unsafe", _delegate("referrer"), evidence, host=_host(page))
+    return ok("web.referrer.ok", evidence)
 
 
 @extension.check("server_banner", category="web", weight=2)
@@ -157,7 +309,7 @@ async def server_banner(ctx: CheckContext) -> Outcome:
     """Software versions in the headers tell attackers which known flaws to try."""
     pages = await _pages(ctx)
     if not pages:
-        return info("web.no_website")
+        return na("web.no_website")
     for page in pages:
         for header in ("server", "x-powered-by", "x-aspnet-version", "x-generator"):
             value = page.header(header)
@@ -167,17 +319,58 @@ async def server_banner(ctx: CheckContext) -> Outcome:
     return ok("web.server_banner.ok")
 
 
-@extension.check("security_txt", category="web", weight=1)
+# ----------------------------------------------------------- security.txt
+def _security_txt_fields(body: str) -> dict[str, list[str]]:
+    fields: dict[str, list[str]] = {}
+    for line in body.splitlines():
+        if line.lstrip().startswith("#"):
+            continue
+        name, sep, value = line.partition(":")
+        if sep and name.strip() and " " not in name.strip():
+            fields.setdefault(name.strip().lower(), []).append(value.strip())
+    return fields
+
+
+def _expiry(value: str) -> datetime | None:
+    try:
+        moment = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return moment if moment.tzinfo else None  # RFC 9116 §2.5.5: a date with its time zone
+
+
+@extension.check("security_txt", category="web", weight=1, internal=False)
 async def security_txt(ctx: CheckContext) -> Outcome:
     """security.txt tells whoever finds a flaw how to report it (RFC 9116)."""
     hosts = await ctx.web_hosts()
     if not hosts:
-        return info("web.no_website")
-    url = f"https://{hosts[0]}/.well-known/security.txt"
-    try:
-        reply = await ctx.net.http_get(url)
-    except NetworkError:
-        reply = None
-    if reply and reply.status == 200 and re.search(r"^contact:", reply.body, re.IGNORECASE | re.MULTILINE):
-        return ok("web.security_txt.ok", {"url": url})
-    return warn("web.security_txt.missing", _delegate("security_txt", 10), {"url": url}, url=url)
+        return na("web.no_website")
+    reply, url, failure = None, "", None
+    for host in hosts:  # the first web host that answers over HTTPS
+        url = f"https://{host}/.well-known/security.txt"
+        try:
+            reply = await _follow(ctx, url)
+            break
+        except DestinationBlocked:
+            raise
+        except NetworkError as e:
+            failure = e
+    if reply is None:
+        assert failure is not None
+        raise failure
+    evidence = {"url": reply.url, "status": reply.status}
+    remedy = _delegate("security_txt", 10)
+    # A site answering every address with its home page is not publishing a security.txt.
+    if reply.status != 200 or "<html" in reply.body[:2000].lower():
+        return warn("web.security_txt.missing", remedy, evidence, url=url)
+    fields = _security_txt_fields(reply.body)
+    expires = fields.get("expires", [])
+    problems = [name for name, ok_ in (("Contact", bool(fields.get("contact"))),
+                                       ("Expires", len(expires) == 1 and _expiry(expires[0]) is not None)) if not ok_]
+    if problems:  # §2.5.3 and §2.5.5: both are required, Expires exactly once
+        return warn("web.security_txt.invalid", remedy, evidence, url=url, fields=", ".join(problems))
+    expiry = _expiry(expires[0])
+    assert expiry is not None
+    if expiry < ctx.now:
+        return warn("web.security_txt.expired", remedy, evidence, url=url, expires_on=expiry.date().isoformat())
+    return ok("web.security_txt.ok", evidence)

@@ -27,6 +27,7 @@
   "tls.protocols.no_tls13.action": "Turn on TLS 1.3",
   "tls.protocols.tls13_message": "Hello,\n\nThe web server of {domain} does not offer TLS 1.3. Could you turn it on, alongside TLS 1.2?\n\nThank you.",
   "tls.protocols.ok": "Only recent TLS versions are accepted.",
+  "tls.protocols.untestable": "Not evaluated: the TLS library of this machine no longer speaks {versions}, so whether the server still accepts them is unknown.",
 
   "tls.key.title": "Certificate key",
   "tls.key.action": "Use a longer key",

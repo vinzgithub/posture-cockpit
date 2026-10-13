@@ -23,9 +23,10 @@ from ..core.registry import Registry
 from ..i18n import Catalog
 from ..scanner import Scanner
 from ..security import LoginThrottle
-from ..storage import Accounts, Database, InstanceSettings, Scans
+from ..storage import Accounts, AuditLog, Database, InstanceSettings, Perimeters, Scans
 from . import deps
-from .routes import account, admin, api, auth, domains, report
+from .limits import ScanLimiter
+from .routes import account, admin, api, auth, domains, perimeters, report
 from .services import STATIC_DIR, TEMPLATES_DIR, Services
 
 # Strict policy: no inline script or style, nothing loaded from elsewhere.
@@ -41,10 +42,13 @@ def create_app(config: Config | None = None, registry: Registry | None = None,
     db = Database(config.db_path)
     settings = InstanceSettings(db)
     services = Services(
-        config=config, db=db, accounts=Accounts(db), scans=Scans(db), settings=settings, registry=registry,
+        config=config, db=db, accounts=Accounts(db), scans=Scans(db), perimeters=Perimeters(db), audit=AuditLog(db),
+        settings=settings, registry=registry,
         catalog=Catalog(registry.messages),
         scanner=Scanner(registry, config, disabled=settings.disabled_extensions, network_factory=network_factory),
-        throttle=LoginThrottle(), templates=Jinja2Templates(directory=TEMPLATES_DIR),
+        throttle=LoginThrottle(), account_throttle=LoginThrottle(max_failures=10, lock_seconds=900),
+        scan_limiter=ScanLimiter(config.max_concurrent_scans, config.scans_per_hour),
+        templates=Jinja2Templates(directory=TEMPLATES_DIR),
     )
 
     app = FastAPI(title="Posture Cockpit", version=__version__, docs_url=None, redoc_url=None, openapi_url=None)
@@ -58,6 +62,10 @@ def create_app(config: Config | None = None, registry: Registry | None = None,
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "same-origin"
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+        response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+        if config.cookie_secure:  # served over HTTPS: browsers must not come back over HTTP
+            response.headers["Strict-Transport-Security"] = "max-age=31536000"
         if not request.url.path.startswith("/static/"):
             response.headers["Cache-Control"] = "no-store"
         return response
@@ -66,7 +74,7 @@ def create_app(config: Config | None = None, registry: Registry | None = None,
                        max_age=config.session_max_age, same_site="lax", https_only=config.cookie_secure)
 
     _add_error_pages(app)
-    for module in (auth, account, admin, domains, report, api):
+    for module in (auth, account, admin, perimeters, domains, report, api):
         app.include_router(module.router)
 
     @app.get("/healthz")

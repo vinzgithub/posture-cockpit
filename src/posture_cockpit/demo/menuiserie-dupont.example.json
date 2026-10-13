@@ -6,6 +6,8 @@
     "menuiserie-dupont.example A": ["203.0.113.10"],
     "www.menuiserie-dupont.example A": ["203.0.113.10"],
     "menuiserie-dupont.example MX": ["1 mx1.mail.ovh.net.", "5 mx2.mail.ovh.net."],
+    "mx1.mail.ovh.net A": ["198.51.100.25"],
+    "mx2.mail.ovh.net A": ["198.51.100.26"],
     "menuiserie-dupont.example TXT": ["v=spf1 include:mx.ovh.com ~all"],
     "mx.ovh.com TXT": ["v=spf1 ip4:198.51.100.0/24 ip4:192.0.2.0/24 ~all"],
     "_dmarc.menuiserie-dupont.example TXT": null,

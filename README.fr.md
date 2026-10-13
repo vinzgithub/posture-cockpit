@@ -92,12 +92,12 @@ Page 1 pour la personne qui décide : la note, le diagnostic en français couran
 
 | Domaine | Contrôles |
 |---|---|
-| **Messagerie** | SPF (avec le compte des requêtes DNS, limite de 10), DMARC (politique, pourcentage), DKIM (sélecteurs courants, longueur de clé), MTA-STS, rapports TLS (TLS-RPT), serveurs MX |
+| **Messagerie** | SPF (syntaxe RFC 7208, inclusions, limite de 10 requêtes DNS), DMARC (politique, syntaxe RFC 7489, sous-domaines, politique héritée du domaine parent), DKIM (sélecteurs courants, clés lisibles, longueur), MTA-STS (politique lue en HTTPS valide, champs, serveurs MX couverts), rapports TLS (TLS-RPT), serveurs MX joignables |
 | **Certificats et TLS** | Validité et échéance du certificat (domaine et www), versions de TLS acceptées (1.0 et 1.1 obsolètes, 1.3 recommandé), longueur de clé |
-| **Site web** | Redirection vers HTTPS, HSTS, Content-Security-Policy, protection contre l'intégration, nosniff, Referrer-Policy, versions de logiciels affichées, security.txt |
-| **DNS** | Nombre de serveurs de noms, signature DNSSEC, enregistrements CAA (avec la valeur adaptée à l'autorité du certificat actuel) |
+| **Site web** | Redirection vers HTTPS, HSTS, Content-Security-Policy (qui restreint vraiment les scripts), protection contre l'intégration (valeur de frame-ancestors et X-Frame-Options), nosniff, Referrer-Policy, versions de logiciels affichées, security.txt (RFC 9116) |
+| **DNS** | Serveurs de noms et DNSSEC de la zone, enregistrements CAA (y compris hérités, et compatibles avec l'autorité du certificat actuel) |
 
-La note va de 0 à 100. Chaque contrôle a un poids selon son importance ; un point à améliorer compte pour moitié, un point critique pour zéro. **Un contrôle qui n'a pas pu être vérifié ne compte pas** : une panne réseau ne fait jamais baisser la note.
+La note va de 0 à 100. Chaque contrôle a un poids selon son importance ; un point à améliorer compte pour moitié, un point critique pour zéro. Elle est toujours donnée avec sa **couverture** : la part des contrôles applicables qui ont pu être réalisés. Un contrôle qui n'a pas pu être fait (serveur muet, délai dépassé) n'est ni une réussite ni un échec : il fait baisser la couverture. **Sous 50 % de couverture, le domaine est « Non évalué »** ; sous 90 %, la lettre ne peut pas dépasser B. Le détail : [docs/user/SCORING.fr.md](docs/user/SCORING.fr.md).
 
 <img src="docs/images/fr/details.png" alt="Détail technique des contrôles">
 
@@ -109,13 +109,29 @@ Posture Cockpit ne fait que ce que fait n'importe quel visiteur : des requêtes 
 
 Si le serveur DNS utilisé ne répond pas correctement (certains résolveurs filtrants renvoient des réponses vides), l'analyse est refusée plutôt que de signaler à tort des enregistrements « manquants ».
 
+Chaque connexion passe par une **règle de sortie** : sur Internet, seules les adresses publiques sont contactées, sur les ports 80 et 443, après une seule résolution DNS par analyse et une vérification de l'adresse réellement contactée (IPv4 et IPv6), redirections comprises. Posture Cockpit ne peut donc pas servir à sonder le réseau local ou les services de métadonnées du serveur qui l'héberge.
+
+---
+
+## 🏢 Réseaux internes
+
+Posture Cockpit sait aussi auditer des sites de votre réseau privé (intranet, applications internes en HTTPS), dans un **périmètre interne** :
+
+- désactivé par défaut, il faut le permettre au démarrage (`POSTURE_COCKPIT_INTERNAL_SCANS=true`), puis un administrateur décrit chaque périmètre : réseaux autorisés, serveurs DNS internes, ports, autorité de certification interne ;
+- l'analyse ne joint que ces réseaux ; la vérification des certificats reste active, l'AC interne s'ajoute aux autorités reconnues ;
+- seuls les administrateurs voient ces domaines ; chaque analyse est inscrite au journal d'audit et le rapport PDF est marqué « Diffusion restreinte ».
+
+Mise en place : [docs/user/INSTALLATION.fr.md](docs/user/INSTALLATION.fr.md#audits-de-réseaux-internes).
+
 ---
 
 ## 🔐 Sécurité de l'application
 
 - **Double authentification** : code TOTP (RFC 6238) après le mot de passe, codes de secours à usage unique, les autres navigateurs déconnectés à chaque changement ;
 - **comptes multiples** : l'administrateur crée les comptes, chacun choisit son mot de passe à la première connexion ; les pages d'administration redemandent le mot de passe toutes les 10 minutes ;
-- mots de passe en **scrypt**, clés d'API et codes de secours stockés hachés, **jeton CSRF** sur chaque formulaire, essais limités ;
+- mots de passe en **scrypt**, clés d'API et codes de secours stockés hachés, **jeton CSRF** sur chaque formulaire, essais limités par adresse et par compte ;
+- **journal d'audit** : connexions, changements de comptes et de réglages, analyses et périmètre utilisé ;
+- **analyses limitées** en simultané et par compte, avec des délais et un nombre de requêtes bornés ;
 - **politique de sécurité du contenu stricte** : aucun script ni style en ligne, rien n'est chargé depuis l'extérieur (polices comprises) ;
 - image Docker sans privilèges, système de fichiers en lecture seule.
 
@@ -159,7 +175,7 @@ posture-cockpit disable-totp <identifiant>   # téléphone perdu et plus de code
 
 Une clé d'API (Réglages → Clés d'API) donne accès à :
 
-- `GET /api/v1/domains` : la note, la lettre, le nombre de points critiques et les jours restants avant l'échéance du certificat, pour chaque domaine ;
+- `GET /api/v1/domains` : la note (ou `null` si le domaine n'est pas évalué), la lettre, la couverture, le nombre de points critiques et les jours restants avant l'échéance du certificat, pour chaque domaine ;
 - `POST /api/v1/domains/<domaine>/scan` : relance l'analyse, par exemple chaque mois depuis une automatisation.
 
 Exemples de capteurs et d'automatisation : [docs/user/HOME_ASSISTANT.fr.md](docs/user/HOME_ASSISTANT.fr.md).
@@ -187,7 +203,7 @@ Un paquet Python qui déclare un point d'entrée `posture_cockpit.extensions` es
 
 ## 🏗️ Pour les développeurs
 
-Le code est découpé en couches qui ne se connaissent que dans un sens : le **moteur** (`core`) ne sait rien du web, les **contrôles** ne parlent au réseau qu'à travers quatre questions passives, le **stockage** n'a qu'une connexion SQLite et un dépôt par sujet, et chaque zone de l'**interface** a son module de routes. Tout est typé, vérifié par `ruff` et `mypy`, et couvert par plus de 130 tests qui tournent sans réseau.
+Le code est découpé en couches qui ne se connaissent que dans un sens : le **moteur** (`core`) ne sait rien du web, les **contrôles** ne parlent au réseau qu'à travers quatre questions passives, le **stockage** n'a qu'une connexion SQLite et un dépôt par sujet, et chaque zone de l'**interface** a son module de routes. Tout est typé, vérifié par `ruff` et `mypy`, et couvert par plus de 400 tests qui ne joignent aucune autre machine (les tests réseau tournent contre des serveurs DNS, web et TLS démarrés en local).
 
 Le plan détaillé : [docs/developer/ARCHITECTURE.fr.md](docs/developer/ARCHITECTURE.fr.md).
 
@@ -203,6 +219,8 @@ ruff check src tests examples && mypy && pytest
 - **DKIM** : les sélecteurs ne se listent pas. Posture Cockpit essaie les noms les plus courants ; s'il n'en trouve aucun, c'est une information, pas une faute.
 - **Instructions par hébergeur** : les menus des hébergeurs changent. Si une étape ne correspond plus, signalez-le : ce sont de simples textes dans `locales/`.
 - **Analyses programmées** : pas encore intégrées à l'application ; utilisez l'API depuis Home Assistant ou cron.
+- **Périmètres internes** : l'instance doit joindre elle-même le réseau interne. Un même nom ne peut pas être suivi à la fois depuis Internet et dans un périmètre interne. Une architecture à agents pour auditer plusieurs réseaux est à l'étude ([REMOTE_AGENT.fr.md](docs/developer/REMOTE_AGENT.fr.md)).
+- **Derrière un proxy HTTP obligatoire** : les analyses ne passent pas par un proxy (ce qui rendrait la règle de sortie inopérante).
 
 ---
 

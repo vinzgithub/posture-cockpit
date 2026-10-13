@@ -9,6 +9,7 @@
 
 <section class="plan-hero">
   <div class="plan-hero-text">
+    {% if domain.perimeter %}<p class="eyebrow"><span class="tag-internal">{{ t('perimeter.internal_audit', name=domain.perimeter) }}</span></p>{% endif %}
     <p class="eyebrow-muted">{{ t('plan.scanned', domain=plan.domain, date=date(plan.scan.started_at), time=plan.scan.started_at[11:16]) }}</p>
     <h1>{{ plan.headline }}</h1>
     <p class="lead">{{ plan.subline }}</p>
@@ -23,16 +24,37 @@
   </div>
 
   <div class="scorecard">
+    {% if plan.score is not none %}
     <div class="scorecard-top">
       <div>
         <span class="scorecard-label">{{ t('plan.your_score') }}</span>
         <span class="scorecard-score"><strong>{{ plan.score }}</strong><span>/100</span></span>
       </div>
       {{ grade_pill(plan.grade) }}
-      <span class="scorecard-target">{{ t('plan.target') }}<br><strong>{{ plan.target }} · {{ plan.target_grade }}</strong></span>
+      <span class="scorecard-target">{{ t('plan.target') }}<br><strong>{{ plan.target_score }} · {{ plan.target_grade }}</strong></span>
     </div>
-    {{ scorebar(plan.score, plan.target, t('plan.scorebar_label', score=plan.score, target=plan.target)) }}
+    {{ scorebar(plan.score, plan.target_score, t('plan.scorebar_label', score=plan.score, target=plan.target_score)) }}
+    {% else %}
+    <div class="scorecard-top">
+      <div>
+        <span class="scorecard-label">{{ t('plan.your_score') }}</span>
+        <span class="scorecard-score scorecard-none"><strong>{{ t('score.not_evaluated') }}</strong></span>
+      </div>
+      <span class="grade grade-none" aria-hidden="true">–</span>
+    </div>
+    {% endif %}
+    <p class="coverage {{ 'coverage-partial' if plan.now.partial or plan.score is none }}">
+      {{ t('score.coverage', evaluated=plan.now.evaluated, applicable=plan.now.applicable, percent=plan.now.coverage_percent) }}
+    </p>
     <p class="scorecard-note">{{ plan.score_note }}</p>
+    {% if plan.gaps %}
+    <details class="gaps">
+      <summary>{{ t('plan.gaps', n=plan.gaps | length) }}</summary>
+      <ul>
+        {% for gap in plan.gaps %}<li><strong>{{ gap.title }}</strong> — {{ gap.reason }}</li>{% endfor %}
+      </ul>
+    </details>
+    {% endif %}
   </div>
 </section>
 

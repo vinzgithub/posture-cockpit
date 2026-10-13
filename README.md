@@ -92,12 +92,12 @@ Page 1 is for the decision-maker: the grade, the diagnosis in plain words and **
 
 | Area | Checks |
 |---|---|
-| **Mail** | SPF (with the count of DNS lookups, limit 10), DMARC (policy, percentage), DKIM (usual selectors, key length), MTA-STS, TLS reports (TLS-RPT), MX servers |
+| **Mail** | SPF (RFC 7208 syntax, includes, limit of 10 DNS lookups), DMARC (policy, RFC 7489 syntax, subdomains, policy inherited from the parent domain), DKIM (usual selectors, readable keys, length), MTA-STS (policy read over valid HTTPS, fields, MX servers covered), TLS reports (TLS-RPT), reachable MX servers |
 | **Certificates and TLS** | Certificate validity and expiry (domain and www), accepted TLS versions (1.0 and 1.1 obsolete, 1.3 recommended), key length |
-| **Website** | Redirect to HTTPS, HSTS, Content-Security-Policy, framing protection, nosniff, Referrer-Policy, software versions shown, security.txt |
-| **DNS** | Number of name servers, DNSSEC signature, CAA records (with the value matching the authority of the current certificate) |
+| **Website** | Redirect to HTTPS, HSTS, Content-Security-Policy (that really restricts scripts), framing protection (value of frame-ancestors and X-Frame-Options), nosniff, Referrer-Policy, software versions shown, security.txt (RFC 9116) |
+| **DNS** | Name servers and DNSSEC of the zone, CAA records (inherited ones too, and compatible with the authority of the current certificate) |
 
-The score goes from 0 to 100. Each check has a weight according to its importance; a point to improve counts half, a critical point zero. **A check that could not run does not count**: a network failure never lowers the score.
+The score goes from 0 to 100. Each check has a weight according to its importance; a point to improve counts half, a critical point zero. It always comes with its **coverage**: the share of the applicable checks that could run. A check that could not be done (silent server, timeout) is neither a success nor a failure: it lowers the coverage. **Below 50% coverage the domain is "Not evaluated"**; below 90%, the grade cannot be better than B. The details: [docs/user/SCORING.md](docs/user/SCORING.md).
 
 <img src="docs/images/en/details.png" alt="Technical details of the checks">
 
@@ -109,13 +109,29 @@ Posture Cockpit only does what any visitor does: public DNS queries, a TLS hands
 
 If the DNS resolver in use does not answer properly (some filtering resolvers return empty answers), the scan is refused rather than reporting "missing" records by mistake.
 
+Every connection goes through an **egress rule**: on the Internet, only public addresses are contacted, on ports 80 and 443, after a single DNS resolution per scan and a check of the address actually contacted (IPv4 and IPv6), redirections included. Posture Cockpit therefore cannot be used to probe the local network or the metadata services of the server that hosts it.
+
+---
+
+## 🏢 Internal networks
+
+Posture Cockpit can also audit sites of your private network (intranet, internal applications over HTTPS), in an **internal perimeter**:
+
+- off by default, it must be allowed at start-up (`POSTURE_COCKPIT_INTERNAL_SCANS=true`), then an administrator describes each perimeter: allowed networks, internal DNS servers, ports, internal certificate authority;
+- the scan only reaches those networks; certificate verification stays on, the internal CA is added to the trusted authorities;
+- only administrators see these domains; every scan is written to the audit log and the PDF report is marked "Restricted distribution".
+
+Setting up: [docs/user/INSTALLATION.md](docs/user/INSTALLATION.md#audits-of-internal-networks).
+
 ---
 
 ## 🔐 Application security
 
 - **Two-factor authentication**: a TOTP code (RFC 6238) after the password, single-use recovery codes, other browsers signed out on every change;
 - **several accounts**: the administrator creates accounts, each person chooses their password at first sign-in; administration pages ask for the password again every 10 minutes;
-- **scrypt** password hashes, API keys and recovery codes stored hashed, a **CSRF token** on every form, limited attempts;
+- **scrypt** password hashes, API keys and recovery codes stored hashed, a **CSRF token** on every form, attempts limited by address and by account;
+- **audit log**: sign-ins, changes to accounts and settings, scans and the perimeter used;
+- **limited scans**, at once and per account, with bounded time and number of requests;
 - **strict Content Security Policy**: no inline script or style, nothing loaded from elsewhere (fonts included);
 - unprivileged Docker image, read-only file system.
 
@@ -159,7 +175,7 @@ posture-cockpit disable-totp <username>     # lost phone and no recovery code le
 
 An API key (Settings → API keys) gives access to:
 
-- `GET /api/v1/domains`: score, grade, number of critical points and days left before the certificate expires, for every domain;
+- `GET /api/v1/domains`: score (or `null` when the domain is not evaluated), grade, coverage, number of critical points and days left before the certificate expires, for every domain;
 - `POST /api/v1/domains/<domain>/scan`: runs the scan again, for instance every month from an automation.
 
 Sensor and automation examples: [docs/user/HOME_ASSISTANT.md](docs/user/HOME_ASSISTANT.md).
@@ -187,7 +203,7 @@ A Python package that declares a `posture_cockpit.extensions` entry point is loa
 
 ## 🏗️ For developers
 
-The code is split into layers that only know each other in one direction: the **engine** (`core`) knows nothing about the web, **checks** only reach the network through four passive questions, **storage** has one SQLite connection and one repository per subject, and each area of the **interface** has its own module of routes. Everything is typed, checked by `ruff` and `mypy`, and covered by more than 130 tests that run without network.
+The code is split into layers that only know each other in one direction: the **engine** (`core`) knows nothing about the web, **checks** only reach the network through four passive questions, **storage** has one SQLite connection and one repository per subject, and each area of the **interface** has its own module of routes. Everything is typed, checked by `ruff` and `mypy`, and covered by more than 400 tests that reach no other machine (the network tests run against DNS, web and TLS servers started locally).
 
 The detailed map: [docs/developer/ARCHITECTURE.md](docs/developer/ARCHITECTURE.md).
 
@@ -203,6 +219,8 @@ ruff check src tests examples && mypy && pytest
 - **DKIM**: selectors cannot be listed. Posture Cockpit tries the most common names; finding none is information, not a fault.
 - **DNS host steps**: hosts change their menus. If a step no longer matches, please report it: these are plain texts in `locales/`.
 - **Scheduled scans**: not built into the application yet; use the API from Home Assistant or cron.
+- **Internal perimeters**: the instance must reach the internal network itself. The same name cannot be followed both from the Internet and in an internal perimeter. An agent architecture to audit several networks is being studied ([REMOTE_AGENT.md](docs/developer/REMOTE_AGENT.md)).
+- **Behind a mandatory HTTP proxy**: scans do not go through a proxy (it would make the egress rule useless).
 
 ---
 

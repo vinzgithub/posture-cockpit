@@ -6,18 +6,21 @@
   "dns.nameservers.action": "Add a second name server",
   "dns.nameservers.why": "Name servers answer for the domain to the whole Internet. With only one, if it fails, the website and the mail disappear at the same time.",
   "dns.nameservers.ref": "RFC 2182 (at least two servers, on separate networks)",
-  "dns.nameservers.ok": "{count} name servers answer for the domain.",
-  "dns.nameservers.single": "Only one name server: {host}.",
-  "dns.nameservers.none": "No name server of its own: this is probably a subdomain. Check the main domain instead.",
+  "dns.nameservers.ok": "{count} name servers answer for the zone {zone}.",
+  "dns.nameservers.single": "A single name server for the zone {zone}: {host}.",
+  "dns.nameservers.none": "No name server found for this name or its parent domains: this check does not apply.",
   "dns.nameservers.message": "Hello,\n\nThe domain {domain} is served by a single name server ({host}). If it fails, the website and the mail become unreachable.\n\nCould you add at least a second name server, hosted on another network?\n\nThank you.",
 
   "dns.dnssec.title": "DNSSEC signature",
   "dns.dnssec.action": "Turn on DNSSEC",
   "dns.dnssec.why": "DNSSEC signs the answers of the DNS, so nobody can send visitors or e-mail to a fake server by forging them.",
   "dns.dnssec.ref": "RFC 4033 · ANSSI, « Bonnes pratiques pour l'acquisition et l'exploitation de noms de domaine »",
-  "dns.dnssec.on": "The domain is signed with DNSSEC.",
-  "dns.dnssec.off": "The domain is not signed with DNSSEC.",
+  "dns.dnssec.on": "The zone {zone} is signed with DNSSEC.",
+  "dns.dnssec.off": "The zone {zone} is not signed with DNSSEC.",
   "dns.dnssec.how": "At most DNS hosts, DNSSEC is one switch in the domain settings, with nothing to type. The host publishes the keys and keeps them up to date.",
+  "dns.dnssec.broken": "The zone {zone} is declared signed (DS record) but does not publish its keys: resolvers that check DNSSEC may refuse its answers.",
+  "dns.dnssec.broken.action": "Repair the DNSSEC signature",
+  "dns.dnssec.broken_message": "Hello,\n\nThe zone {zone} is declared signed with DNSSEC (a DS record is published) but publishes no DNSKEY key. Resolvers that check DNSSEC may stop resolving the domain.\n\nCould you publish the keys again, or remove the DS record at the registrar?\n\nThank you.",
 
   "dns.caa.title": "Allowed certificate authorities (CAA)",
   "dns.caa.action": "Restrict certificate authorities",
@@ -25,5 +28,9 @@
   "dns.caa.ref": "RFC 8659",
   "dns.caa.present": "CAA records name the allowed authorities.",
   "dns.caa.missing": "No CAA record: any authority may issue a certificate for the domain.",
-  "dns.caa.how": "The proposed value allows {ca}, the authority that issued the website's current certificate. If another service also gets certificates for the domain (mail, online shop), add a record for it too."
+  "dns.caa.how": "The proposed value allows {ca}, the authority that issued the website's current certificate. If another service also gets certificates for the domain (mail, online shop), add a record for it too.",
+  "dns.caa.present_inherited": "The CAA records of {zone} name the allowed authorities, for this name too.",
+  "dns.caa.excludes_current": "The CAA records do not allow {ca}, the authority that issued the current certificate ({issuer}): its next renewal will be refused.",
+  "dns.caa.excludes_current.action": "Allow the authority of the current certificate",
+  "dns.caa.excludes_current.how": "Add a CAA record \"0 issue \"{ca}\"\" next to the existing ones, or move to another authority before the certificate expires."
 }
