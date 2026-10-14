@@ -274,8 +274,8 @@ def test_tls_rpt_follows_rfc_8460(records, expected):
 
 
 @pytest.mark.parametrize(("records", "expected"), [
-    (["v=TLSRPTv2; rua=mailto:tls@example.org"], (Status.WARN, "mail.tls_rpt.invalid")),
-    (["random TXT"], (Status.WARN, "mail.tls_rpt.invalid")),
+    (["v=TLSRPTv2; rua=mailto:tls@example.org"], (Status.WARN, "mail.tls_rpt.missing")),
+    (["random TXT"], (Status.WARN, "mail.tls_rpt.missing")),
     (["v=TLSRPTv1; rua=mailto:one@example.org; rua=mailto:two@example.org"],
      (Status.OK, "mail.tls_rpt.present")),
     (["v=TLSRPTv1; rua=mailto:tls@example.org; bogus=value"],
@@ -283,6 +283,10 @@ def test_tls_rpt_follows_rfc_8460(records, expected):
     (["v=TLSRPTv1; rua=mailto:tls@example.org; v=TLSRPTv1"],
      (Status.WARN, "mail.tls_rpt.invalid")),
     (["v=TLSRPTv1; rua=mailto:"], (Status.WARN, "mail.tls_rpt.invalid")),
+    (["unrelated TXT", "v=TLSRPTv1; rua=mailto:tls@example.org"],
+     (Status.OK, "mail.tls_rpt.present")),
+    (["unrelated TXT", "v=TLSRPTv1; rua=mailto:"],
+     (Status.WARN, "mail.tls_rpt.invalid")),
     (["v=TLSRPTv1; rua=https://reports.example.org/a"],
      (Status.OK, "mail.tls_rpt.present")),
     (["v=TLSRPTv1; rua=https://[invalid/"],
