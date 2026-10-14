@@ -96,3 +96,18 @@ def test_missing_texts_and_parameters_do_not_break_pages(catalog):
     assert catalog.text("fr", "no.such.key") == "no.such.key"
     assert catalog.text("fr", "flash.user_created", {}) == "Compte {name} créé."
     assert catalog.text("de", "nav.domains") == "Domains"
+
+
+def test_external_https_redirect_uses_evidence_specific_explanation(catalog):
+    from posture_cockpit.web.views import task_view
+    from posture_cockpit.core.model import Finding, Outcome, Status, Remedy, Effort
+    from types import SimpleNamespace
+
+    finding = Finding("web.https_redirect", "web", 8,
+                      Outcome(Status.FAIL, "web.https_redirect.external", {"host": DOMAIN},
+                              remedy=Remedy(15, Effort.DELEGATE, message="web.https_redirect.external.message")))
+    scan = SimpleNamespace(domain=DOMAIN, rechecks={})
+    for language in ("fr", "en"):
+        view = task_view(catalog, language, scan, finding, 1, 18, [])
+        assert view.why == catalog.text(language, "web.https_redirect.external.why", {"host": DOMAIN})
+        assert view.message == catalog.text(language, "web.https_redirect.external.message", {"host": DOMAIN})
