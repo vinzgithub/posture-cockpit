@@ -99,9 +99,10 @@ def test_missing_texts_and_parameters_do_not_break_pages(catalog):
 
 
 def test_external_https_redirect_uses_evidence_specific_explanation(catalog):
-    from posture_cockpit.web.views import task_view
-    from posture_cockpit.core.model import Finding, Outcome, Status, Remedy, Effort
     from types import SimpleNamespace
+
+    from posture_cockpit.core.model import Effort, Finding, Outcome, Remedy, Status
+    from posture_cockpit.web.views import task_view
 
     finding = Finding("web.https_redirect", "web", 8,
                       Outcome(Status.FAIL, "web.https_redirect.external", {"host": DOMAIN},
