@@ -112,3 +112,14 @@ def test_external_https_redirect_uses_evidence_specific_explanation(catalog):
         view = task_view(catalog, language, scan, finding, 1, 18, [])
         assert view.why == catalog.text(language, "web.https_redirect.external.why", {"host": DOMAIN})
         assert view.message == catalog.text(language, "web.https_redirect.external.message", {"host": DOMAIN})
+
+
+def test_dkim_dns_evidence_does_not_claim_messages_were_signed(catalog):
+    for language in ("fr", "en"):
+        message = catalog.text(language, "mail.dkim.found", {"selectors": "dkim"})
+        assert "dkim" in message
+        if language == "fr":
+            assert "signature effective" in message
+            assert "n'a pas été vérifiée" in message
+        else:
+            assert "signatures were not verified" in message
