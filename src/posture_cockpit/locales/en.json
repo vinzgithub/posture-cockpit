@@ -484,5 +484,12 @@
   "smtp.state.starttls_missing": "STARTTLS missing",
   "smtp.state.not_evaluated": "Not evaluated",
   "audit.action.smtp.observations": "Manual MX server check (SMTP/STARTTLS)",
-  "smtp.details.observations": "Observations collected"
+  "smtp.details.observations": "Observations collected",
+  "smtp.reason.not_probed": "Server not tested (probe limit).",
+  "smtp.reason.timeout": "SMTP connection or response timed out.",
+  "smtp.reason.connection_refused": "SMTP connection refused on port 25.",
+  "smtp.reason.connection_failed": "SMTP connection unavailable from this instance.",
+  "smtp.reason.probe_failed": "SMTP check failed; no conclusion about server security.",
+  "smtp.reason.mx_mismatch": "Observed server does not match requested MX.",
+  "smtp.reason.tls_not_verified": "STARTTLS observed but TLS handshake was not verified."
 }
