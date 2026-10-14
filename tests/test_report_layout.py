@@ -95,3 +95,26 @@ def test_no_page_ends_with_a_heading_whatever_the_length(catalog):
         assert lonely_headings(document) == [], len(document.pages)
         lengths.append(len(document.pages))
     assert min(lengths) <= 3 and max(lengths) >= 10  # from a short file to a long one
+
+
+@pytest.mark.parametrize("language", ["fr", "en"])
+def test_partial_pdf_projection_is_conditional(catalog, language):
+    context = report_context(catalog, language, _scan(http_only_with_redirect_elsewhere()))
+    assert context["result"].partial
+    assert context["result"].coverage_percent < 90
+    assert context["conclusion"]
+    assert ("confirmer" in context["conclusion"] if language == "fr"
+            else "confirmed" in context["conclusion"])
+    assert str(context["result"].coverage_percent) in context["conclusion"]
+
+
+@pytest.mark.parametrize("language", ["fr", "en"])
+def test_unscored_web_area_preserves_critical_finding(catalog, language):
+    context = report_context(catalog, language, _scan(http_only_with_redirect_elsewhere()))
+    web_findings = [f for f in context["scan"].current() if f.category == "web"]
+    assert any(f.status.value == "fail" for f in web_findings)
+    web_area = next(c for c in context["categories"] if c["label"] == catalog.text(language, "category.web"))
+    assert web_area["score"] is None
+    assert ("Défaut détecté" in web_area["comment"] if language == "fr"
+            else "Detected issue" in web_area["comment"])
+    assert "redirect" in web_area["comment"].lower() or "redirection" in web_area["comment"].lower()
