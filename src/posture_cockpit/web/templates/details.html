@@ -53,7 +53,7 @@
       {{ status_icon('error') }}
       <div class="check-body">
         <p class="check-title"><strong>{{ t('smtp.details.starttls') }}</strong>
-          {% if smtp_attempted | default(false) and smtp_results %}
+          {% if smtp_attempted | default(false) and smtp_results and smtp_results | selectattr('state.value', 'ne', 'not_evaluated') | list %}
           <span class="badge badge-info">{{ t('smtp.details.observations' ) }}</span>
           {% else %}
           <span class="badge badge-error">{{ t('status.error') }}</span>
@@ -63,6 +63,7 @@
           {% if smtp_results %}
             {% for mx in smtp_results %}
             <p><strong>{{ mx.mx }}</strong> — {{ t('smtp.state.' ~ mx.state.value) }}</p>
+            {% if mx.state.value == 'not_evaluated' %}<p class="muted small">{{ t('smtp.reason.' ~ mx.reason) }}</p>{% endif %}
             {% if mx.tls_protocol %}<p class="small">{{ mx.tls_protocol }} · {{ mx.certificate_issuer }}</p>{% endif %}
             {% endfor %}
           {% else %}
