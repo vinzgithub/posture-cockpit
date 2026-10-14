@@ -174,7 +174,7 @@ def task_view(catalog: Catalog, lang: str, scan: Scan, finding: Finding, number:
         check_id=finding.check_id, number=number,
         title=catalog.first(lang, [f"{finding.outcome.summary}.action", f"{finding.check_id}.action"], params),
         summary=catalog.text(lang, summary_key, current_params),
-        why=text(f"{finding.check_id}.why"),
+        why=catalog.first(lang, [f"{finding.outcome.summary}.why", f"{finding.check_id}.why"], params),
         category=text(f"category.{finding.category}"),
         minutes=remedy.minutes, effort=remedy.effort.value, effort_label=text(EFFORT_KEYS[remedy.effort.value]),
         gain=gain,
