@@ -201,6 +201,12 @@ Un paquet Python qui déclare un point d'entrée `posture_cockpit.extensions` es
 
 ---
 
+## 🗺️ Feuille de route
+
+La [feuille de route de développement](docs/developer/ROADMAP.fr.md) distingue les versions en cours de consolidation (v0.3.0 / SMTP v0.4.0) des évolutions proposées pour les **administrations, collectivités, grandes entreprises et équipes RSSI** : inventaire multi-entités, SSO et habilitations, surveillance continue, rapports consolidés, agents autorisés et assistance IA facultative. Ces fonctionnalités futures ne sont pas présentées comme déjà livrées.
+
+---
+
 ## 🏗️ Pour les développeurs
 
 Le code est découpé en couches qui ne se connaissent que dans un sens : le **moteur** (`core`) ne sait rien du web, les **contrôles** ne parlent au réseau qu'à travers quatre questions passives, le **stockage** n'a qu'une connexion SQLite et un dépôt par sujet, et chaque zone de l'**interface** a son module de routes. Tout est typé, vérifié par `ruff` et `mypy`, et couvert par plus de 400 tests qui ne joignent aucune autre machine (les tests réseau tournent contre des serveurs DNS, web et TLS démarrés en local).
