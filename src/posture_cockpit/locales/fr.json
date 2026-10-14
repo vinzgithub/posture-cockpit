@@ -472,6 +472,7 @@
   "history.legacy_dns.dnssec_off": "Aucune signature DNSSEC n'a été relevée lors de cette analyse.",
   "history.legacy_dns.dnssec_broken": "La signature DNSSEC relevée était incohérente : enregistrement DS sans clé DNSKEY.",
   "history.legacy_dns.caa_inherited": "Des enregistrements CAA hérités ont été relevés pour ce domaine.",
+  "plan.quick_links": "Accès rapides au domaine",
   "smtp.details.title": "Observations SMTP / STARTTLS",
   "smtp.details.starttls": "Sécurité STARTTLS des serveurs MX",
   "smtp.details.not_evaluated": "Non évalué : les analyses standards ne réalisent pas de connexion SMTP. Aucune conformité TLS des MX ne peut être déduite des seuls enregistrements DNS ou de la politique MTA-STS.",
