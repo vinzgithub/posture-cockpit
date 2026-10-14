@@ -491,5 +491,8 @@
   "smtp.reason.connection_failed": "Connexion SMTP impossible depuis cette instance.",
   "smtp.reason.probe_failed": "Vérification SMTP impossible ; aucune conclusion sur le serveur.",
   "smtp.reason.mx_mismatch": "Le serveur observé ne correspond pas au MX demandé.",
-  "smtp.reason.tls_not_verified": "STARTTLS observé, mais la négociation TLS n'a pas été vérifiée."
+  "smtp.reason.tls_not_verified": "STARTTLS observé, mais la négociation TLS n'a pas été vérifiée.",
+  "smtp.reason.stage_dns": "Échec de résolution DNS du MX.",
+  "smtp.reason.stage_egress": "Adresse MX bloquée par la politique de sécurité réseau.",
+  "smtp.reason.stage_smtp_protocol": "Réponse ou dialogue SMTP invalide."
 }
