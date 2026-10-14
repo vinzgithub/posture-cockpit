@@ -398,6 +398,45 @@ def test_http_that_never_reaches_https_fails(http):
         (Status.FAIL, "web.https_redirect.missing")
 
 
+def test_external_https_redirect_is_not_a_verified_website():
+    """A third-party HTTPS page cannot prove HTTPS for the audited domain."""
+    data = changed(healthy(), http={
+        f"http://{DOMAIN}/": {"status": 301, "headers": {"Location": "https://elsewhere.example.net/"}},
+        f"http://www.{DOMAIN}/": {"status": 301, "headers": {"Location": "https://elsewhere.example.net/"}},
+    })
+    f = one(data, "web.https_redirect")
+    assert verdict(f) == (Status.FAIL, "web.https_redirect.external")
+
+
+def test_https_redirect_rejects_invalid_certificate():
+    data = changed(healthy(), http={
+        f"http://{DOMAIN}/": {"status": 301, "headers": {"Location": f"https://{DOMAIN}/"}},
+    })
+    data["certificates"][DOMAIN]["trusted"] = False
+    assert verdict(one(data, "web.https_redirect")) == (Status.FAIL, "web.https_redirect.bad_certificate")
+
+
+def test_https_redirect_timeout_does_not_create_compliance():
+    data = changed(healthy(), http={
+        f"http://{DOMAIN}/": "timeout",
+    })
+    assert one(data, "web.https_redirect").status is Status.ERROR
+
+
+def test_https_redirect_requires_reachable_https():
+    data = changed(healthy(), http={
+        f"http://{DOMAIN}/": {"status": 301, "headers": {"Location": f"https://{DOMAIN}/"}},
+    })
+    del data["http"][f"https://{DOMAIN}/"]
+    assert verdict(one(data, "web.https_redirect")) == (Status.FAIL, "web.https_redirect.https_unavailable")
+
+
+def test_closed_http_port_does_not_excuse_unreachable_https():
+    data = healthy()
+    del data["http"][f"http://{DOMAIN}/"]
+    del data["http"][f"https://{DOMAIN}/"]
+    assert verdict(one(data, "web.https_redirect")) == (Status.FAIL, "web.https_redirect.https_unavailable")
+
 class BlockingNetwork(FixtureNetwork):
     """Recorded answers, with some URLs refused by the egress policy."""
 
