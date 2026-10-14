@@ -230,4 +230,8 @@ Posture Cockpit est publié sous la **[PolyForm Noncommercial License 1.0.0](LIC
 
 Copyright © 2026 Vincent Fournet.
 
-Ce projet est développé avec l'assistance de Claude (Anthropic).
+**Conception, pilotage et validation : Vincent Fournet.**
+
+À l'origine du projet et de ses idées, il définit les besoins, les fonctionnalités et les orientations de conception. Il réalise également les tests en conditions réelles, identifie les anomalies et valide les corrections et les évolutions.
+
+**Développement :** réalisé avec l'assistance d'outils d'intelligence artificielle, sous son pilotage.
