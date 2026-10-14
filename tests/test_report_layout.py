@@ -121,8 +121,10 @@ def test_unscored_web_area_preserves_critical_finding(catalog, language):
             else "redirect" in web_area["comment"].lower())
 
 
-@pytest.mark.parametrize(("n", "expected"), [(1, "pourrait permettre"), (2, "pourraient permettre")])
+@pytest.mark.parametrize(("n", "expected"), [(1, "Après 1 correction"), (2, "Après 2 corrections")])
 def test_partial_projection_french_agreement(catalog, n, expected):
     sentence = catalog.text("fr", "report.diagnosis.plan_partial",
                             {"n": n, "minutes": 15 * n, "grade": "B", "coverage": 54})
     assert expected in sentence
+    assert "la note B pourrait être atteinte" in sentence
+    assert "1 pourrait" not in sentence and "2 pourraient" not in sentence
