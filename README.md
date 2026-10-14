@@ -201,6 +201,12 @@ A Python package that declares a `posture_cockpit.extensions` entry point is loa
 
 ---
 
+## 🗺️ Development roadmap
+
+The [development roadmap](docs/developer/ROADMAP.md) separates ongoing stabilization (v0.3.0 / SMTP v0.4.0) from proposed **public-sector, large-enterprise and CISO** capabilities: multi-entity inventories, SSO/access control, continuous monitoring, consolidated reports, bounded remote agents and optional AI assistance. Planned functionality is not advertised as shipped.
+
+---
+
 ## 🏗️ For developers
 
 The code is split into layers that only know each other in one direction: the **engine** (`core`) knows nothing about the web, **checks** only reach the network through four passive questions, **storage** has one SQLite connection and one repository per subject, and each area of the **interface** has its own module of routes. Everything is typed, checked by `ruff` and `mypy`, and covered by more than 400 tests that reach no other machine (the network tests run against DNS, web and TLS servers started locally).
