@@ -3,6 +3,7 @@
 """No real sockets: SMTP evidence must not be overstated."""
 from posture_cockpit.checks.smtp_probe import SmtpObservation
 from posture_cockpit.checks.smtp_status import SmtpState, all_mx_verified, assess_smtp
+from posture_cockpit.core.network import SmtpProbeStageError
 
 
 def observation(**kwargs):
@@ -49,3 +50,10 @@ def test_all_declared_mx_required_before_enforce_advice():
     assert not all_mx_verified(("mx.example.org", "mx2.example.org"), (first,))
     assert not all_mx_verified(("mx.example.org",), (first, first))
     assert not all_mx_verified((), ())
+
+
+def test_smtp_stage_errors_are_safe_and_not_evaluated():
+    for stage in ("dns", "egress", "smtp_protocol"):
+        assessment = assess_smtp("mx.example.org", error=SmtpProbeStageError(stage))
+        assert assessment.state is SmtpState.NOT_EVALUATED
+        assert assessment.reason == "stage_" + stage
