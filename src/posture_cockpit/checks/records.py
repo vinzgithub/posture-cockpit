@@ -367,7 +367,11 @@ def tls_rpt_problems(record: str) -> list[str]:
         if not uri or re.search(r"[\x00-\x20,!;]", uri):
             problems.append("rua")
             continue
-        parsed = urlsplit(uri)
+        try:
+            parsed = urlsplit(uri)
+        except ValueError:
+            problems.append("rua")
+            continue
         if parsed.scheme == "mailto":
             address = uri[len("mailto:"):]
             if not re.fullmatch(r"[^@/?#\s]+@[^@/?#\s]+", address):
