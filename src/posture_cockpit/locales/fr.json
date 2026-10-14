@@ -484,5 +484,12 @@
   "smtp.state.starttls_missing": "STARTTLS absent",
   "smtp.state.not_evaluated": "Non évalué",
   "audit.action.smtp.observations": "Vérification manuelle des serveurs MX (SMTP/STARTTLS)",
-  "smtp.details.observations": "Observations obtenues"
+  "smtp.details.observations": "Observations obtenues",
+  "smtp.reason.not_probed": "Serveur non testé (limite de vérification).",
+  "smtp.reason.timeout": "Délai de connexion ou de réponse SMTP dépassé.",
+  "smtp.reason.connection_refused": "Connexion SMTP refusée sur le port 25.",
+  "smtp.reason.connection_failed": "Connexion SMTP impossible depuis cette instance.",
+  "smtp.reason.probe_failed": "Vérification SMTP impossible ; aucune conclusion sur le serveur.",
+  "smtp.reason.mx_mismatch": "Le serveur observé ne correspond pas au MX demandé.",
+  "smtp.reason.tls_not_verified": "STARTTLS observé, mais la négociation TLS n'a pas été vérifiée."
 }
