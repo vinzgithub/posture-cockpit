@@ -39,7 +39,15 @@ def assess_smtp(mx: str, observation: SmtpObservation | None = None,
     unprobed MX is NOT_EVALUATED, never STARTTLS_MISSING or VERIFIED.
     """
     if observation is None:
-        reason = "probe_failed" if error is not None else "not_probed"
+        reason = "not_probed"
+        if isinstance(error, TimeoutError):
+            reason = "timeout"
+        elif isinstance(error, ConnectionRefusedError):
+            reason = "connection_refused"
+        elif isinstance(error, OSError):
+            reason = "connection_failed"
+        elif error is not None:
+            reason = "probe_failed"
         return SmtpAssessment(mx, SmtpState.NOT_EVALUATED, reason)
     if observation.mx.lower().rstrip(".") != mx.lower().rstrip("."):
         return SmtpAssessment(mx, SmtpState.NOT_EVALUATED, "mx_mismatch")
