@@ -40,8 +40,9 @@ def assess_smtp(mx: str, observation: SmtpObservation | None = None,
     """
     if observation is None:
         reason = "not_probed"
-        if error is not None and getattr(error, 'stage', '') in ('dns', 'egress', 'smtp_protocol'):
-            return SmtpAssessment(mx, SmtpState.NOT_EVALUATED, 'stage_' + error.stage)
+        stage = getattr(error, 'stage', None)
+        if stage in ('dns', 'egress', 'smtp_protocol'):
+            return SmtpAssessment(mx, SmtpState.NOT_EVALUATED, 'stage_' + stage)
         if isinstance(error, TimeoutError):
             reason = "timeout"
         elif isinstance(error, ConnectionRefusedError):
