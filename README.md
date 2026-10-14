@@ -232,6 +232,6 @@ Copyright © 2026 Vincent Fournet.
 
 **Concept, project direction and validation: Vincent Fournet.**
 
-As the originator of the project and its ideas, he defines its requirements, features and design direction. He also performs real-world testing, identifies issues, and validates fixes and improvements.
+As the originator of the project and its ideas, he defines its requirements, features and design direction. He also performs real-world testing, identifies issues, validates fixes and improvements, and reviews and checks selected parts of the code, particularly technical and security-related aspects within his expertise.
 
 **Development:** carried out with the assistance of artificial intelligence tools, under his direction.

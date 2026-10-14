@@ -232,6 +232,6 @@ Copyright © 2026 Vincent Fournet.
 
 **Conception, pilotage et validation : Vincent Fournet.**
 
-À l'origine du projet et de ses idées, il définit les besoins, les fonctionnalités et les orientations de conception. Il réalise également les tests en conditions réelles, identifie les anomalies et valide les corrections et les évolutions.
+À l'origine du projet et de ses idées, il définit les besoins, les fonctionnalités et les orientations de conception. Il réalise également les tests en conditions réelles, identifie les anomalies et valide les corrections et les évolutions. Il participe aussi à la revue et à la vérification de certaines parties du code, notamment sur les aspects techniques et de sécurité relevant de son expertise.
 
 **Développement :** réalisé avec l'assistance d'outils d'intelligence artificielle, sous son pilotage.
