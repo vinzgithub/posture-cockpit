@@ -266,3 +266,154 @@ def test_a_check_that_times_out_does_not_cancel_shared_work_for_the_others():
     impatient_result, patient_result = asyncio.run(main())
     assert impatient_result.status is Status.ERROR
     assert patient_result.outcome.params == {"value": 7}
+
+
+
+@pytest.mark.asyncio
+async def test_smtp_engine_observations_are_explicitly_disabled_by_default():
+    class NoNetwork:
+        async def dns(self, *args):
+            pytest.fail("disabled SMTP observation performed DNS")
+
+    assert await engine.smtp_observations("example.org", NoNetwork()) == ()
+
+
+@pytest.mark.asyncio
+async def test_smtp_engine_observations_respect_dns_mx_and_host_limit():
+    from posture_cockpit.checks.smtp_probe import SmtpObservation
+    from posture_cockpit.core.network import DnsAnswer
+
+    class FakeNetwork:
+        def __init__(self):
+            from posture_cockpit.core.egress import INTERNET
+
+            self.policy = INTERNET
+            self.probed = []
+            self.dns_calls = []
+
+        async def dns(self, name, kind):
+            self.dns_calls.append((name, kind))
+            return DnsAnswer(("10 mx1.example.org.", "20 mx2.example.org.",
+                              "30 mx3.example.org.", "0 .", "bad MX"))
+
+        async def smtp_ehlo_for_domain(self, domain, host, *, verify_tls):
+            self.probed.append((domain, host, verify_tls))
+            return SmtpObservation(host, (), False)
+
+    net = FakeNetwork()
+    results = await engine.smtp_observations("example.org", net, enabled=True, max_hosts=2)
+    assert [result.mx for result in results] == ["mx1.example.org", "mx2.example.org"]
+    assert net.probed == [
+        ("example.org", "mx1.example.org", True),
+        ("example.org", "mx2.example.org", True),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_smtp_engine_rejects_invalid_host_limit_before_dns():
+    class NoNetwork:
+        async def dns(self, *args):
+            pytest.fail("invalid limit triggered DNS")
+
+    with pytest.raises(ValueError, match="host limit"):
+        await engine.smtp_observations("example.org", NoNetwork(), enabled=True, max_hosts=6)
+
+
+
+@pytest.mark.asyncio
+async def test_smtp_engine_refuses_internal_perimeter_before_dns():
+    class InternalNetwork:
+        policy = type("Policy", (), {"internal": True})()
+
+        async def dns(self, *args):
+            pytest.fail("internal perimeter reached DNS")
+
+    with pytest.raises(NetworkError, match="internal"):
+        await engine.smtp_observations("example.org", InternalNetwork(), enabled=True)
+
+
+@pytest.mark.asyncio
+async def test_smtp_engine_refuses_unnormalized_domain_before_dns():
+    class NoNetwork:
+        async def dns(self, *args):
+            pytest.fail("invalid domain reached DNS")
+
+    with pytest.raises(ValueError, match="normalized"):
+        await engine.smtp_observations("http://example.org", NoNetwork(), enabled=True)
+
+
+@pytest.mark.asyncio
+async def test_standard_scan_does_not_invoke_smtp_probe():
+    class NetworkWithoutSMTP(FixtureNetwork):
+        async def smtp_ehlo_for_domain(self, *args, **kwargs):
+            pytest.fail("ordinary scan invoked SMTP")
+
+    ext = Extension("smtp_guard", name="SMTP guard", version="1")
+
+    @ext.check("dns_only", category="dns", weight=1)
+    async def dns_only(ctx):
+        return ok("dns.only")
+
+    result = await engine.scan("example.org", ext.checks, NetworkWithoutSMTP({}))
+    assert len(result.findings) == 1
+    assert result.findings[0].status is Status.OK
+
+
+@pytest.mark.asyncio
+async def test_smtp_engine_caps_observations_at_five_mx():
+    from posture_cockpit.checks.smtp_probe import SmtpObservation
+    from posture_cockpit.core.egress import INTERNET
+    from posture_cockpit.core.network import DnsAnswer
+
+    class FakeNetwork:
+        policy = INTERNET
+
+        def __init__(self):
+            self.visited = []
+
+        async def dns(self, domain, kind):
+            assert kind == "MX"
+            return DnsAnswer(tuple(f"{i} mx{i}.example.org." for i in range(1, 9)))
+
+        async def smtp_ehlo_for_domain(self, domain, host, *, verify_tls):
+            self.visited.append(host)
+            return SmtpObservation(host, (), False)
+
+    net = FakeNetwork()
+    observations = await engine.smtp_observations("example.org", net, enabled=True, max_hosts=5)
+    assert len(observations) == 5
+    assert len(net.visited) == 5
+    assert "mx6.example.org" not in net.visited
+
+
+@pytest.mark.asyncio
+async def test_smtp_opt_in_does_not_mutate_standard_scan_result():
+    from posture_cockpit.checks.smtp_probe import SmtpObservation
+    from posture_cockpit.core.egress import INTERNET
+    from posture_cockpit.core.network import DnsAnswer
+
+    class ValidationNetwork(FixtureNetwork):
+        policy = INTERNET
+
+        async def dns(self, name, rtype):
+            if rtype == "MX":
+                return DnsAnswer(("10 mx.example.org.",))
+            return await super().dns(name, rtype)
+
+        async def smtp_ehlo_for_domain(self, domain, host, *, verify_tls):
+            return SmtpObservation(host, ("250 STARTTLS",), True, True, True)
+
+    ext = Extension("smtp_unchanged", name="Unchanged", version="1")
+
+    @ext.check("status", category="dns", weight=1)
+    async def status(ctx):
+        return ok("dns.only")
+
+    net = ValidationNetwork({})
+    before = await engine.scan("example.org", ext.checks, net)
+    observations = await engine.smtp_observations("example.org", net, enabled=True)
+    after = await engine.scan("example.org", ext.checks, net)
+    assert len(observations) == 1
+    assert [(finding.check_id, finding.status, finding.outcome_json()) for finding in before.findings] == [
+        (finding.check_id, finding.status, finding.outcome_json()) for finding in after.findings
+    ]

@@ -18,10 +18,11 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from ..checks.smtp_probe import SmtpObservation
 from .egress import DestinationBlocked
 from .extension import Check, CheckContext
 from .model import Finding, Outcome, Status
-from .network import Network, NetworkError
+from .network import LiveNetwork, Network, NetworkError
 
 log = logging.getLogger(__name__)
 
@@ -106,6 +107,39 @@ async def scan(domain: str, checks: Iterable[Check], net: Network, timeout: floa
         if callable(close):
             close()
     return ScanResult(domain, started, int((time.monotonic() - clock) * 1000), list(findings))
+
+
+
+async def smtp_observations(
+    domain: str, net: LiveNetwork, *, enabled: bool = False,
+    verify_tls: bool = True, max_hosts: int = 2,
+) -> tuple[SmtpObservation, ...]:
+    """Explicit opt-in SMTP measurements, excluded from scoring and normal scans.
+
+    Probe only a bounded number of MX hosts declared in the audited domain DNS.
+    Network quotas and destination filtering remain enforced by LiveNetwork.
+    """
+    if not enabled:
+        return ()
+    if not 1 <= max_hosts <= 5:
+        raise ValueError("SMTP host limit must be between 1 and 5")
+    if normalize_domain(domain) != domain:
+        raise ValueError("SMTP audit requires a normalized domain name")
+    if net.policy.internal:
+        raise NetworkError("SMTP probing is disabled for internal perimeters")
+    records = (await net.dns(domain, "MX")).records
+    hosts: list[str] = []
+    for record in records:
+        parts = record.split()
+        if len(parts) != 2 or not parts[0].isdigit():
+            continue
+        host = parts[1].lower().rstrip(".")
+        if host and host not in hosts:
+            hosts.append(host)
+    observations: list[SmtpObservation] = []
+    for host in hosts[:max_hosts]:
+        observations.append(await net.smtp_ehlo_for_domain(domain, host, verify_tls=verify_tls))
+    return tuple(observations)
 
 
 async def preflight(net: Network, domain: str) -> str | None:

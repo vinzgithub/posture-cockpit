@@ -179,6 +179,10 @@ class LiveNetwork:
             raise NetworkError(f"limit of {allowed} {kind} per scan reached")
         self._spent[kind] += 1
 
+    def reserve_connection(self) -> None:
+        """Reserve one connection from the shared per-scan budget for a bounded external probe."""
+        self._spend("connections")
+
     async def _bounded(self, key: tuple, make: Callable[[], Awaitable[T]]) -> T:
         # Shielded work outlives the check that asked for it: it needs its own deadline.
         try:
@@ -206,6 +210,46 @@ class LiveNetwork:
         if answer.rrset is None:
             return DnsAnswer(())
         return DnsAnswer(tuple(_record_text(r) for r in answer.rrset))
+
+    async def smtp_ehlo(self, mx: str, declared_mx: tuple[str, ...], *, verify_tls: bool = False):
+        """Inactive SMTP integration point: DNS, public-only gating and shared connection budget.
+
+        Caller supplies the MX names already observed for the audited domain. No
+        production scan currently invokes this method. DNS failures fail closed.
+        """
+        from ..checks.smtp_probe import probe_smtp_ehlo
+
+        if self.policy.internal:
+            raise NetworkError("SMTP probing is disabled for internal perimeters")
+        replies = await asyncio.gather(self.dns(mx, "A"), self.dns(mx, "AAAA"))
+        addresses = tuple(record for answer in replies for record in answer.records)
+        # smtp_egress validates every returned address and the declared MX
+        # before the connection budget is consumed or any socket is opened.
+        return await probe_smtp_ehlo(
+            mx, declared_mx, addresses,
+            reserve_connection=self.reserve_connection,
+            timeout=min(self.timeout, self.limits.operation_seconds, 20.0),
+            verify_tls=verify_tls,
+        )
+
+    async def smtp_ehlo_for_domain(self, domain: str, mx: str, *, verify_tls: bool = False):
+        """Explicit opt-in SMTP probe, bound to the audited domain MX DNS answer.
+
+        Do not rely on caller-supplied declared MX names. The ordinary scan
+        engine does not invoke this method.
+        """
+        if self.policy.internal:
+            raise NetworkError("SMTP probing is disabled for internal perimeters")
+        answer = await self.dns(domain, "MX")
+        declared = tuple(
+            fields[1].rstrip(".") for record in answer.records
+            if len(fields := record.split()) == 2 and fields[0].isdigit()
+        )
+        # Reject undeclared names before any MX address lookup; smtp_ehlo
+        # independently validates hostname syntax and all resolved addresses.
+        if mx.lower().rstrip(".") not in {name.lower() for name in declared}:
+            raise NetworkError("SMTP target is not a declared MX of the audited domain")
+        return await self.smtp_ehlo(mx, declared, verify_tls=verify_tls)
 
     # ---------------------------------------------------------- destinations
     async def _destinations(self, host: str, port: int) -> list[Address]:
