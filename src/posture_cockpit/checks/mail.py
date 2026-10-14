@@ -412,13 +412,16 @@ async def tls_rpt(ctx: CheckContext) -> Outcome:
     """TLS reports tell the domain when mail could not be delivered over an encrypted connection."""
     if not await _mx_hosts(ctx):
         return na("mail.no_inbound")
-    records = await ctx.txt(f"_smtp._tls.{ctx.domain}")
+    # RFC 8460 §3: non-policy TXT records MUST be discarded before
+    # counting policy records; a malformed recognised policy is still invalid.
+    all_records = await ctx.txt(f"_smtp._tls.{ctx.domain}")
+    records = [record for record in all_records if record.startswith("v=TLSRPTv1;")]
     value = f"v=TLSRPTv1; rua=mailto:tls-reports@{ctx.domain}"
     if not records:
         return warn("mail.tls_rpt.missing", Remedy(5, Effort.EASY, dns=(DnsChange("add", "TXT", "_smtp._tls", value),),
-                                                   how="mail.tls_rpt.how"))
+                                                   how="mail.tls_rpt.how"), {"records": all_records})
     problems = ["several records"] if len(records) > 1 else tls_rpt_problems(records[0])
     if problems:  # RFC 8460 §3: senders then send no report at all
         return warn("mail.tls_rpt.invalid", Remedy(5, Effort.EASY, how="mail.tls_rpt.invalid.how"),
-                    {"records": records, "problems": problems}, problems=", ".join(problems))
+                    {"records": all_records, "policies": records, "problems": problems}, problems=", ".join(problems))
     return ok("mail.tls_rpt.present", {"record": records[0]})
