@@ -96,3 +96,14 @@ def test_missing_texts_and_parameters_do_not_break_pages(catalog):
     assert catalog.text("fr", "no.such.key") == "no.such.key"
     assert catalog.text("fr", "flash.user_created", {}) == "Compte {name} créé."
     assert catalog.text("de", "nav.domains") == "Domains"
+
+
+def test_dkim_dns_evidence_does_not_claim_messages_were_signed(catalog):
+    for language in ("fr", "en"):
+        message = catalog.text(language, "mail.dkim.found", {"selectors": "dkim"})
+        assert "dkim" in message
+        if language == "fr":
+            assert "signature effective" in message
+            assert "n'a pas été vérifiée" in message
+        else:
+            assert "signatures were not verified" in message
