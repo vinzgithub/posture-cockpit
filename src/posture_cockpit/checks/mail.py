@@ -415,7 +415,7 @@ async def tls_rpt(ctx: CheckContext) -> Outcome:
     # RFC 8460 §3: non-policy TXT records MUST be discarded before
     # counting policy records; a malformed recognised policy is still invalid.
     all_records = await ctx.txt(f"_smtp._tls.{ctx.domain}")
-    records = [record for record in all_records if record.startswith("v=TLSRPTv1;")]
+    records = [record for record in all_records if record == "v=TLSRPTv1" or record.startswith("v=TLSRPTv1;")]
     value = f"v=TLSRPTv1; rua=mailto:tls-reports@{ctx.domain}"
     if not records:
         return warn("mail.tls_rpt.missing", Remedy(5, Effort.EASY, dns=(DnsChange("add", "TXT", "_smtp._tls", value),),
