@@ -119,3 +119,10 @@ def test_unscored_web_area_preserves_critical_finding(catalog, language):
             else "Detected issue" in web_area["comment"])
     assert ("renvoie vers un site HTTPS extérieur" in web_area["comment"] if language == "fr"
             else "redirect" in web_area["comment"].lower())
+
+
+@pytest.mark.parametrize(("n", "expected"), [(1, "pourrait permettre"), (2, "pourraient permettre")])
+def test_partial_projection_french_agreement(catalog, n, expected):
+    sentence = catalog.text("fr", "report.diagnosis.plan_partial",
+                            {"n": n, "minutes": 15 * n, "grade": "B", "coverage": 54})
+    assert expected in sentence
