@@ -138,3 +138,14 @@ def test_the_data_folder_and_its_secrets_are_private(tmp_path):
     secret_key(folder)
     assert folder.stat().st_mode & 0o777 == 0o700
     assert (folder / ".secret_key").stat().st_mode & 0o777 == 0o600
+
+
+def test_package_version_matches_project_metadata_and_healthz(client):
+    import tomllib
+    from pathlib import Path
+
+    from posture_cockpit import __version__
+
+    project = tomllib.loads((Path(__file__).resolve().parents[1] / "pyproject.toml").read_text())
+    assert __version__ == project["project"]["version"] == "0.3.0"
+    assert client.get("/healthz").json()["version"] == __version__

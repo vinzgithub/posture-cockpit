@@ -102,7 +102,9 @@ def report_context(catalog: Catalog, lang: str, scan: Scan, author: str = "", tz
         conclusion = t("report.diagnosis.plan_unscored", n=len(prescriptions)) if prescriptions else ""
     elif prescriptions:
         diagnosis = t("report.diagnosis.issues", **numbers)
-        conclusion = t("report.diagnosis.plan", n=len(prescriptions), minutes=minutes, grade=plan.target.grade)
+        conclusion = t("report.diagnosis.plan_partial" if result.partial else "report.diagnosis.plan",
+                       n=len(prescriptions), minutes=minutes, grade=plan.target.grade,
+                       coverage=result.coverage_percent)
     else:
         diagnosis = t("report.diagnosis.clean" if numbers["warn"] else "report.diagnosis.all_ok", **numbers)
         conclusion = ""
@@ -112,7 +114,10 @@ def report_context(catalog: Catalog, lang: str, scan: Scan, author: str = "", tz
         items = [f for f in findings if f.category == category and f.status.scored]
         worst = next((f for status in (Status.FAIL, Status.WARN) for f in items if f.status is status), None)
         if assessment.score is None:
-            comment = t("report.area_not_evaluated")
+            # The category may have reliable FAIL/WARN findings despite insufficient coverage.
+            comment = (t("report.area_unscored_with_finding",
+                         finding=_text(catalog, lang, worst.outcome.summary, worst, scan.domain))
+                       if worst else t("report.area_not_evaluated"))
         elif worst:
             comment = _text(catalog, lang, worst.outcome.summary, worst, scan.domain)
         else:

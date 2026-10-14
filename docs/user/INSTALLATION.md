@@ -58,6 +58,7 @@ Scans do **not** go through an HTTP proxy: the `HTTP_PROXY` and `HTTPS_PROXY` va
 |---|---|---|
 | `POSTURE_COCKPIT_DATA_DIR` | `/data` (image) | Folder of the SQLite database and the session key |
 | `POSTURE_COCKPIT_NAMESERVERS` | the system's | DNS resolvers, comma-separated |
+| `POSTURE_COCKPIT_DKIM_SELECTORS` | empty | Additional DKIM selectors (comma-separated labels, without domain suffix). Usual selectors remain checked; 30 selectors maximum overall. |
 | `POSTURE_COCKPIT_CHECK_TIMEOUT` | `15` | Seconds allowed to each check |
 | `POSTURE_COCKPIT_COOKIE_SECURE` | `false` | `true` when the application is served over HTTPS |
 | `POSTURE_COCKPIT_DEFAULT_LOCALE` | `fr` | Language of the pages before sign-in |

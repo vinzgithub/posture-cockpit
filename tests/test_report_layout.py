@@ -95,3 +95,36 @@ def test_no_page_ends_with_a_heading_whatever_the_length(catalog):
         assert lonely_headings(document) == [], len(document.pages)
         lengths.append(len(document.pages))
     assert min(lengths) <= 3 and max(lengths) >= 10  # from a short file to a long one
+
+
+@pytest.mark.parametrize("language", ["fr", "en"])
+def test_partial_pdf_projection_is_conditional(catalog, language):
+    context = report_context(catalog, language, _scan(http_only_with_redirect_elsewhere()))
+    assert context["result"].partial
+    assert context["result"].coverage_percent < 90
+    assert context["conclusion"]
+    assert ("confirmer" in context["conclusion"] if language == "fr"
+            else "confirmed" in context["conclusion"])
+    assert str(context["result"].coverage_percent) in context["conclusion"]
+
+
+@pytest.mark.parametrize("language", ["fr", "en"])
+def test_unscored_web_area_preserves_critical_finding(catalog, language):
+    context = report_context(catalog, language, _scan(http_only_with_redirect_elsewhere()))
+    web_findings = [f for f in context["scan"].current() if f.category == "web"]
+    assert any(f.status.value == "fail" for f in web_findings)
+    web_area = next(c for c in context["categories"] if c["label"] == catalog.text(language, "category.web"))
+    assert web_area["score"] is None
+    assert ("Défaut détecté" in web_area["comment"] if language == "fr"
+            else "Detected issue" in web_area["comment"])
+    assert ("renvoie vers un site HTTPS extérieur" in web_area["comment"] if language == "fr"
+            else "redirect" in web_area["comment"].lower())
+
+
+@pytest.mark.parametrize(("n", "expected"), [(1, "Après 1 correction"), (2, "Après 2 corrections")])
+def test_partial_projection_french_agreement(catalog, n, expected):
+    sentence = catalog.text("fr", "report.diagnosis.plan_partial",
+                            {"n": n, "minutes": 15 * n, "grade": "B", "coverage": 54})
+    assert expected in sentence
+    assert "la note B pourrait être atteinte" in sentence
+    assert "1 pourrait" not in sentence and "2 pourraient" not in sentence

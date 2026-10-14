@@ -19,6 +19,7 @@ import binascii
 import re
 from dataclasses import dataclass
 from ipaddress import ip_network
+from urllib.parse import urlsplit
 
 from cryptography.hazmat.primitives.asymmetric import ed25519, rsa
 from cryptography.hazmat.primitives.serialization import load_der_public_key
@@ -320,18 +321,64 @@ def mx_matches(pattern: str, host: str) -> bool:
 # ==================================================================== TLS-RPT
 # RFC 8460 §3.
 def tls_rpt_problems(record: str) -> list[str]:
-    """What is wrong with a TLS-RPT record: "v" not first, no "rua", or a destination that is not
-    a mailto: or https: URI. An empty list when it is valid."""
-    pairs = tags(record)
-    values = dict(pairs)
-    problems = []
-    if not pairs or pairs[0] != ("v", "TLSRPTv1"):
+    """Validate the DNS TLS-RPT policy syntax (RFC 8460 §3).
+
+    An unrelated TXT at the reserved name is ignored by the caller, but
+    malformed TLSRPT candidates are never silently treated as absent.
+    RFC 8460 explicitly permits unknown *valid* extension fields and
+    multiple rua destinations.
+    """
+    problems: list[str] = []
+    parts = record.split(";")
+    if parts and not parts[-1].strip():
+        parts.pop()  # one optional final field delimiter
+    if not parts or parts[0] != "v=TLSRPTv1":
         problems.append("v")
-    destinations = [u.strip() for u in values.get("rua", "").split(",") if u.strip()]
-    if not destinations:
+    if not parts or any(not part.strip() for part in parts):
+        problems.append("syntax")
+
+    destinations: list[str] = []
+    version_count = 0
+    rua_count = 0
+    for part in parts:
+        name, separator, value = part.strip().partition("=")
+        if not separator or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,31}", name):
+            problems.append("syntax")
+            continue
+        if name == "v":
+            version_count += 1
+            if value != "TLSRPTv1":
+                problems.append("v")
+        elif name == "rua":
+            rua_count += 1
+            destinations.extend(item.strip() for item in value.split(","))
+        elif not value or re.search(r"[\x00-\x20;=]", value):
+            # Unknown extensions are allowed, but must be syntactically valid.
+            problems.append(name)
+
+    if version_count != 1:
+        problems.append("v")
+    if not rua_count or not destinations or any(not item for item in destinations):
         problems.append("rua")
+
     for uri in destinations:
-        lowered = uri.lower()
-        if not ((lowered.startswith("mailto:") and "@" in uri) or lowered.startswith("https://")):
-            problems.append(uri)
-    return problems
+        # RFC 8460 §3: commas, exclamation marks and semicolons in URI
+        # components must be percent-encoded, not embedded literally.
+        if not uri or re.search(r"[\x00-\x20,!;]", uri):
+            problems.append("rua")
+            continue
+        try:
+            parsed = urlsplit(uri)
+        except ValueError:
+            problems.append("rua")
+            continue
+        if parsed.scheme == "mailto":
+            address = uri[len("mailto:"):]
+            if not re.fullmatch(r"[^@/?#\s]+@[^@/?#\s]+", address):
+                problems.append("rua")
+        elif parsed.scheme == "https":
+            if not parsed.hostname or parsed.username is not None or parsed.password is not None:
+                problems.append("rua")
+        else:
+            problems.append("rua")
+    return list(dict.fromkeys(problems))

@@ -1,9 +1,7 @@
 {
   "web.extension.name": "Site web",
   "web.extension.description": "Redirection HTTPS, HSTS, CSP et autres en-têtes de protection, security.txt.",
-
   "web.no_website": "Pas de site web sur le domaine ni sur www : ce contrôle ne s'applique pas.",
-
   "web.https_redirect.title": "Passage automatique en HTTPS",
   "web.https_redirect.action": "Rediriger {host} vers HTTPS",
   "web.https_redirect.why": "Un visiteur qui tape l'adresse sans « https:// » doit être envoyé vers la version chiffrée. Sinon, il navigue en clair : ses formulaires peuvent être lus et la page modifiée en route.",
@@ -11,7 +9,9 @@
   "web.https_redirect.missing": "http://{host} affiche le site sans chiffrement au lieu de rediriger vers HTTPS.",
   "web.https_redirect.message": "Bonjour,\n\nL'adresse http://{host} affiche le site sans chiffrement. Pourriez-vous ajouter une redirection permanente (301) de http:// vers https:// pour toutes les pages ?\n\nMerci d'avance.",
   "web.https_redirect.ok": "Les visiteurs sont toujours envoyés vers HTTPS.",
-
+  "web.https_redirect.external": "http://{host} renvoie vers un site HTTPS extérieur au domaine audité : cela ne prouve pas que ce domaine dispose de son propre HTTPS.",
+  "web.https_redirect.bad_certificate": "La destination HTTPS de {host} présente un certificat non fiable ou invalide.",
+  "web.https_redirect.https_unavailable": "La destination HTTPS de {host} refuse la connexion : HTTPS n'est pas confirmé.",
   "web.hsts.title": "HTTPS obligatoire (HSTS)",
   "web.hsts.action": "Activer HSTS",
   "web.hsts.why": "HSTS demande aux navigateurs de n'utiliser que HTTPS pour le site pendant une durée donnée, même si un lien ou un réseau piégé propose http://.",
@@ -22,7 +22,6 @@
   "web.hsts.ok": "HSTS est actif avec une durée suffisante.",
   "web.hsts.invalid": "L'en-tête HSTS de {host} n'a pas de durée « max-age » lisible : les navigateurs l'ignorent.",
   "web.hsts.disabled": "L'en-tête HSTS de {host} a une durée nulle (max-age=0) : il demande aux navigateurs d'oublier la protection.",
-
   "web.csp.title": "Politique de sécurité du contenu (CSP)",
   "web.csp.action": "Définir une politique de sécurité du contenu",
   "web.csp.why": "La CSP dit au navigateur d'où le site a le droit de charger ses scripts. Un script injecté par un pirate est alors bloqué au lieu de s'exécuter chez vos visiteurs.",
@@ -33,7 +32,6 @@
   "web.csp.no_script": "La politique de sécurité du contenu de {host} ne restreint pas les scripts (ni script-src ni default-src).",
   "web.csp.unsafe_inline": "La politique de sécurité du contenu de {host} autorise les scripts intégrés à la page ('unsafe-inline') : un script injecté s'exécuterait quand même.",
   "web.csp.open": "La politique de sécurité du contenu de {host} autorise des scripts de n'importe quelle origine (*, https: ou data:).",
-
   "web.framing.title": "Protection contre l'intégration (clickjacking)",
   "web.framing.action": "Interdire l'intégration du site dans d'autres pages",
   "web.framing.why": "Sans cette protection, un site piégé peut afficher le vôtre de façon invisible et faire cliquer vos visiteurs à leur insu.",
@@ -43,7 +41,6 @@
   "web.framing.ok": "Le site ne peut pas être intégré dans une page tierce.",
   "web.framing.permissive": "La directive frame-ancestors de {host} autorise n'importe quel site à afficher le vôtre dans une page (X-Frame-Options est alors ignoré par les navigateurs).",
   "web.framing.obsolete": "{host} utilise « X-Frame-Options: ALLOW-FROM », que les navigateurs actuels ne comprennent plus : le site peut être affiché dans une page tierce.",
-
   "web.nosniff.title": "Types de fichiers respectés (nosniff)",
   "web.nosniff.action": "Ajouter l'en-tête nosniff",
   "web.nosniff.why": "Cet en-tête empêche le navigateur de deviner le type d'un fichier, une devinette qui peut transformer un fichier envoyé par un visiteur en script.",
@@ -51,7 +48,6 @@
   "web.nosniff.missing": "{host} n'envoie pas « X-Content-Type-Options: nosniff ».",
   "web.nosniff.message": "Bonjour,\n\nPourriez-vous ajouter sur {host} l'en-tête « X-Content-Type-Options: nosniff » ?\n\nMerci d'avance.",
   "web.nosniff.ok": "Le navigateur respecte le type annoncé des fichiers.",
-
   "web.referrer.title": "Adresse de provenance (Referrer-Policy)",
   "web.referrer.action": "Limiter l'adresse de provenance transmise",
   "web.referrer.why": "Quand un visiteur clique sur un lien sortant, le navigateur peut transmettre l'adresse complète de la page qu'il quitte, parfois avec des informations personnelles.",
@@ -60,7 +56,6 @@
   "web.referrer.message": "Bonjour,\n\nPourriez-vous ajouter sur {host} l'en-tête « Referrer-Policy: strict-origin-when-cross-origin » ?\n\nMerci d'avance.",
   "web.referrer.ok": "La transmission de l'adresse de provenance est encadrée.",
   "web.referrer.unsafe": "{host} demande de transmettre l'adresse complète de ses pages à tous les sites, même sans chiffrement (Referrer-Policy: unsafe-url).",
-
   "web.server_banner.title": "Versions des logiciels affichées",
   "web.server_banner.action": "Masquer les versions des logiciels",
   "web.server_banner.why": "Afficher la version exacte du serveur indique aux attaquants quelles failles connues essayer en premier.",
@@ -68,7 +63,6 @@
   "web.server_banner.version": "L'en-tête « {header} » affiche « {value} ».",
   "web.server_banner.message": "Bonjour,\n\nLe site du domaine {domain} affiche la version de ses logiciels dans l'en-tête « {header} » (« {value} »). Pourriez-vous la masquer ?\n\nMerci d'avance.",
   "web.server_banner.ok": "Aucune version de logiciel n'est affichée.",
-
   "web.security_txt.title": "Contact sécurité (security.txt)",
   "web.security_txt.action": "Publier un contact sécurité",
   "web.security_txt.why": "Le fichier security.txt indique à qui signaler une faille trouvée sur le site. Sans lui, celui qui la trouve ne sait pas à qui écrire.",
@@ -77,5 +71,8 @@
   "web.security_txt.message": "Bonjour,\n\nPourriez-vous publier le fichier https://{domain}/.well-known/security.txt (RFC 9116) avec au moins une ligne « Contact: mailto:securite@{domain} » et une ligne « Expires: » ?\n\nMerci d'avance.",
   "web.security_txt.ok": "Un fichier security.txt valide indique un contact.",
   "web.security_txt.invalid": "Le fichier {url} est incomplet : il manque {fields} (champs obligatoires de la RFC 9116).",
-  "web.security_txt.expired": "Le fichier {url} a expiré le {expires_on} : ses informations ne sont plus réputées à jour."
+  "web.security_txt.expired": "Le fichier {url} a expiré le {expires_on} : ses informations ne sont plus réputées à jour.",
+  "web.https_redirect.external.action": "Sécuriser l'accès HTTPS de {host} avant toute redirection externe",
+  "web.https_redirect.external.message": "Bonjour,\n\nhttp://{host} redirige vers un site HTTPS extérieur au domaine. La destination est chiffrée, mais le premier accès au domaine audité utilise HTTP et sa propre disponibilité HTTPS n'est pas confirmée.\n\nPourriez-vous vérifier que https://{host}/ répond avec un certificat valide et, si la redirection externe est volontaire, la faire partir de cette adresse HTTPS ?\n\nMerci d'avance.",
+  "web.https_redirect.external.why": "Une redirection externe en HTTPS ne sécurise pas le premier échange HTTP avec le domaine audité, qui peut être modifié avant la redirection."
 }

@@ -271,6 +271,57 @@ def test_tls_rpt_follows_rfc_8460(records, expected):
     assert verdict(one(changed(healthy(), dns={f"_smtp._tls.{DOMAIN} TXT": records}), "mail.tls_rpt")) == expected
 
 
+
+
+@pytest.mark.parametrize(("records", "expected"), [
+    (["v=TLSRPTv2; rua=mailto:tls@example.org"], (Status.WARN, "mail.tls_rpt.missing")),
+    (["random TXT"], (Status.WARN, "mail.tls_rpt.missing")),
+    (["v=TLSRPTv1; rua=mailto:one@example.org; rua=mailto:two@example.org"],
+     (Status.OK, "mail.tls_rpt.present")),
+    (["v=TLSRPTv1; rua=mailto:tls@example.org; bogus=value"],
+     (Status.OK, "mail.tls_rpt.present")),
+    (["v=TLSRPTv1; rua=mailto:tls@example.org; v=TLSRPTv1"],
+     (Status.WARN, "mail.tls_rpt.invalid")),
+    (["v=TLSRPTv1; rua=mailto:"], (Status.WARN, "mail.tls_rpt.invalid")),
+    (["unrelated TXT", "v=TLSRPTv1; rua=mailto:tls@example.org"],
+     (Status.OK, "mail.tls_rpt.present")),
+    (["unrelated TXT", "v=TLSRPTv1; rua=mailto:"],
+     (Status.WARN, "mail.tls_rpt.invalid")),
+    (["v=TLSRPTv1; rua=https://reports.example.org/a"],
+     (Status.OK, "mail.tls_rpt.present")),
+    (["v=TLSRPTv1; rua=https://[invalid/"],
+     (Status.WARN, "mail.tls_rpt.invalid")),
+    ([], (Status.WARN, "mail.tls_rpt.missing")),
+])
+def test_tls_rpt_invalid_reserved_txt_is_not_absence(records, expected):
+    finding = one(changed(healthy(), dns={f"_smtp._tls.{DOMAIN} TXT": records}), "mail.tls_rpt")
+    assert verdict(finding) == expected
+
+
+def test_custom_dkim_selector_is_found_and_audited(monkeypatch):
+    monkeypatch.setenv("POSTURE_COCKPIT_DKIM_SELECTORS", "custom2026")
+    data = changed(
+        healthy(),
+        dns={
+            f"selector1._domainkey.{DOMAIN} TXT": [],
+            f"custom2026._domainkey.{DOMAIN} TXT": [f"v=DKIM1; p={dkim_key(2048)}"],
+        },
+    )
+    finding = one(data, "mail.dkim")
+    assert verdict(finding) == (Status.OK, "mail.dkim.found")
+    assert "custom2026" in finding.outcome.evidence["selectors"]
+
+
+@pytest.mark.parametrize("selectors", [
+    "custom2026,*", "bad.name", "has space", ",".join(f"s{i}" for i in range(40)),
+])
+def test_custom_dkim_selectors_reject_invalid_or_excessive_values(monkeypatch, selectors):
+    from posture_cockpit.checks.mail import dkim_selectors
+
+    monkeypatch.setenv("POSTURE_COCKPIT_DKIM_SELECTORS", selectors)
+    with pytest.raises(ValueError):
+        dkim_selectors()
+
 # ================================================================== framing
 @pytest.mark.parametrize(("csp", "xfo", "expected"), [
     # 0.1.0: OK as soon as "frame-ancestors" appeared, whatever its value.
@@ -350,6 +401,46 @@ def test_http_that_never_reaches_https_fails(http):
     assert verdict(one(changed(healthy(), http=http), "web.https_redirect")) == \
         (Status.FAIL, "web.https_redirect.missing")
 
+
+def test_external_https_redirect_is_not_a_verified_website():
+    """A third-party HTTPS page cannot prove HTTPS for the audited domain."""
+    data = changed(healthy(), http={
+        f"http://{DOMAIN}/": {"status": 301, "headers": {"Location": "https://elsewhere.example.net/"}},
+        f"http://www.{DOMAIN}/": {"status": 301, "headers": {"Location": "https://elsewhere.example.net/"}},
+    })
+    f = one(data, "web.https_redirect")
+    assert verdict(f) == (Status.FAIL, "web.https_redirect.external")
+    assert f.outcome.remedy.message == "web.https_redirect.external.message"
+
+
+def test_https_redirect_rejects_invalid_certificate():
+    data = changed(healthy(), http={
+        f"http://{DOMAIN}/": {"status": 301, "headers": {"Location": f"https://{DOMAIN}/"}},
+    })
+    data["certificates"][DOMAIN]["trusted"] = False
+    assert verdict(one(data, "web.https_redirect")) == (Status.FAIL, "web.https_redirect.bad_certificate")
+
+
+def test_https_redirect_timeout_does_not_create_compliance():
+    data = changed(healthy(), http={
+        f"http://{DOMAIN}/": "timeout",
+    })
+    assert one(data, "web.https_redirect").status is Status.ERROR
+
+
+def test_https_redirect_requires_reachable_https():
+    data = changed(healthy(), http={
+        f"http://{DOMAIN}/": {"status": 301, "headers": {"Location": f"https://{DOMAIN}/"}},
+    })
+    del data["http"][f"https://{DOMAIN}/"]
+    assert verdict(one(data, "web.https_redirect")) == (Status.FAIL, "web.https_redirect.https_unavailable")
+
+
+def test_closed_http_port_does_not_excuse_unreachable_https():
+    data = healthy()
+    del data["http"][f"http://{DOMAIN}/"]
+    del data["http"][f"https://{DOMAIN}/"]
+    assert verdict(one(data, "web.https_redirect")) == (Status.FAIL, "web.https_redirect.https_unavailable")
 
 class BlockingNetwork(FixtureNetwork):
     """Recorded answers, with some URLs refused by the egress policy."""
