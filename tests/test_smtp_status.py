@@ -11,7 +11,7 @@ def observation(**kwargs):
 
 def test_missing_or_unreachable_is_not_evaluated():
     assert assess_smtp("mx.example.org").state is SmtpState.NOT_EVALUATED
-    assert assess_smtp("mx.example.org", error=TimeoutError()).reason == "probe_failed"
+    assert assess_smtp("mx.example.org", error=TimeoutError()).reason == "timeout"
 
 
 def test_advertised_or_accepted_is_not_proof_of_tls():
