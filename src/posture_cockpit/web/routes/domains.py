@@ -18,9 +18,9 @@ from starlette.datastructures import FormData
 from starlette.exceptions import HTTPException
 
 from ...core import providers, scoring
-from ...core.engine import normalize_domain
+from ...core.engine import normalize_domain, smtp_assessments
 from ...core.model import Status
-from ...core.network import NetworkError
+from ...core.network import LiveNetwork, NetworkError
 from ...i18n import finding_summary
 from ...scanner import DEMO_DOMAIN, InternalScansDisabled
 from ...storage import Row
@@ -33,6 +33,7 @@ from ..deps import (
     lang_of,
     redirect,
     render,
+    require_admin,
     require_user,
     t,
     visible_domain,
@@ -180,6 +181,40 @@ async def details(request: Request, name: str, user: Row = Depends(require_user)
     return render(request, "details.html", scan=scan, categories=categories, result=scan.assessment(),
                   registry=s.registry, rechecks=scan.rechecks, domain=domain, history=s.scans.history(domain["id"]),
                   full_coverage=scoring.FULL_COVERAGE)
+
+
+@router.post("/{name}/smtp-observations")
+async def smtp_probe(request: Request, name: str, user: Row = Depends(require_admin),
+                     form: FormData = Depends(checked_form)):
+    """Explicit administrator-only SMTP audit; never changes a stored scan or its score."""
+    s = services(request)
+    domain = visible_domain(request, name, user)
+    if domain["perimeter_id"] is not None:
+        raise HTTPException(403)
+    scan = s.scans.latest(domain["id"])
+    if scan is None:
+        raise HTTPException(404)
+    net = s.scanner.network_for(name)
+    if not isinstance(net, LiveNetwork):
+        raise HTTPException(422, "SMTP observation requires a live public network")
+    try:
+        with s.scan_limiter.slot(str(user["id"])):
+            observations = await smtp_assessments(name, net, enabled=True, max_hosts=2)
+    except TooManyScans as exc:
+        raise HTTPException(429, "SMTP audit rate limit reached",
+                            headers={"Retry-After": str(exc.retry_after)}) from exc
+    except NetworkError:
+        observations = ()
+    finally:
+        net.close()
+    categories: dict[str, list] = {}
+    for finding in scan.current():
+        categories.setdefault(finding.category, []).append(finding)
+    audit(request, "smtp.observations", user=user, target=name, count=len(observations))
+    return render(request, "details.html", scan=scan, categories=categories, result=scan.assessment(),
+                  registry=s.registry, rechecks=scan.rechecks, domain=domain,
+                  history=s.scans.history(domain["id"]), full_coverage=scoring.FULL_COVERAGE,
+                  smtp_results=observations, smtp_attempted=True)
 
 
 @router.get("/{name}/history")

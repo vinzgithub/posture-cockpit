@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from ..checks.smtp_probe import SmtpObservation
+from ..checks.smtp_status import SmtpAssessment, assess_smtp
 from .egress import DestinationBlocked
 from .extension import Check, CheckContext
 from .model import Finding, Outcome, Status
@@ -140,6 +141,48 @@ async def smtp_observations(
     for host in hosts[:max_hosts]:
         observations.append(await net.smtp_ehlo_for_domain(domain, host, verify_tls=verify_tls))
     return tuple(observations)
+
+
+async def smtp_assessments(
+    domain: str, net: LiveNetwork, *, enabled: bool = False,
+    verify_tls: bool = True, max_hosts: int = 2,
+) -> tuple[SmtpAssessment, ...]:
+    """Opt-in evidence for each declared MX; never scored or run by ordinary scans.
+
+    MX beyond the probe cap stay explicitly NOT_EVALUATED, rather than silently
+    disappearing. Per-host connection failures cannot make other MX compliant.
+    """
+    if not enabled:
+        return ()
+    if not 1 <= max_hosts <= 5:
+        raise ValueError("SMTP host limit must be between 1 and 5")
+    if normalize_domain(domain) != domain:
+        raise ValueError("SMTP audit requires a normalized domain name")
+    if net.policy.internal:
+        raise NetworkError("SMTP probing is disabled for internal perimeters")
+    records = (await net.dns(domain, "MX")).records
+    hosts: list[str] = []
+    for record in records:
+        fields = record.split()
+        if len(fields) != 2 or not fields[0].isdigit():
+            continue
+        host = fields[1].lower().rstrip(".")
+        if host and host not in hosts:
+            hosts.append(host)
+    if not hosts:
+        return ()
+    assessments: list[SmtpAssessment] = []
+    for i, host in enumerate(hosts):
+        if i >= max_hosts:
+            assessments.append(assess_smtp(host))
+            continue
+        try:
+            observation = await net.smtp_ehlo_for_domain(domain, host, verify_tls=verify_tls)
+        except (NetworkError, OSError, TimeoutError, ValueError) as exc:
+            assessments.append(assess_smtp(host, error=exc))
+        else:
+            assessments.append(assess_smtp(host, observation))
+    return tuple(assessments)
 
 
 async def preflight(net: Network, domain: str) -> str | None:
