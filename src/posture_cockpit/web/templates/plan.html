@@ -58,6 +58,14 @@
   </div>
 </section>
 
+<nav class="plan-quick-links" aria-label="{{ t('plan.quick_links') }}">
+  <a class="btn btn-secondary" href="/domains/{{ plan.domain }}/history">{{ t('details.history') }}</a>
+  <a class="btn btn-secondary" href="/domains/{{ plan.domain }}/details">{{ t('details.title') }}</a>
+  {% if not domain.perimeter %}
+  <a class="btn btn-secondary" href="/domains/{{ plan.domain }}/details#smtp-observations">{{ t('smtp.details.title') }}</a>
+  {% endif %}
+</nav>
+
 <div class="plan-grid">
   <aside class="task-list" aria-label="{{ t('plan.tasks') }}">
     {% if plan.priorities %}
@@ -76,7 +84,7 @@
       <a href="/domains/{{ plan.domain }}/history" class="side-link"><span class="side-link-icon ok">↺</span><span><strong>{{ t("details.history") }}</strong><small>{{ t("history.all") }}</small></span></a>
       <a href="/domains/{{ plan.domain }}/details" class="side-link">
         <span class="side-link-icon ok">{{ check_icon() }}</span>
-        <span><strong>{{ t('plan.ok_count', n=plan.counts.ok) }}</strong><small>{{ t('plan.details_hint') }}</small></span>
+        <span><strong>{{ t('details.title') }}</strong><small>{{ t('plan.details_hint') }}</small></span>
       </a>
       <a href="/domains/{{ plan.domain }}/report.pdf" class="side-link">
         <svg class="side-link-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>
