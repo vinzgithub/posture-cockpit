@@ -27,7 +27,9 @@ from ..core import (
     HttpReply,
     NetworkError,
     Outcome,
+    Refused,
     Remedy,
+    UntrustedCertificate,
     fail,
     load_messages,
     na,
@@ -119,45 +121,80 @@ def _csp_policies(page: HttpReply) -> list[dict[str, list[str]]]:
 # ------------------------------------------------------------------ HTTPS
 @extension.check("https_redirect", category="web", weight=8)
 async def https_redirect(ctx: CheckContext) -> Outcome:
-    """A visitor who types the address without https:// must end up on the encrypted site.
+    """Credit HTTPS only after a reachable, certificate-verified same-site endpoint.
 
-    Redirects over plain HTTP inside the domain (http://www → http://domain →
-    https://) are followed: what matters is that HTTPS is reached before any
-    page is served in clear."""
+    An external HTTPS destination is not evidence that the audited domain
+    supports HTTPS. Timeouts and blocked egress never earn a positive verdict.
+    """
     hosts = await ctx.web_hosts()
     if not hosts:
         return na("web.no_website")
     evidence: dict[str, str] = {}
+
+    async def verify_https(host: str, target: str, steps: list[str]) -> Outcome | None:
+        evidence[host] = " → ".join([*steps, target])
+        if not _same_site(ctx, target):
+            # A third-party redirect may be a legitimate business choice, but
+            # it must not certify the audited site's own HTTPS deployment.
+            return fail("web.https_redirect.external", _delegate("https_redirect"), evidence, host=host)
+        try:
+            # Follow no redirects here: one valid HTTPS response on our own
+            # hostname proves reachability and certificate validity.
+            await ctx.net.http_get(target, verify=True)
+        except DestinationBlocked:
+            raise
+        except UntrustedCertificate:
+            return fail("web.https_redirect.bad_certificate", _delegate("https_redirect"), evidence, host=host)
+        except Refused:
+            return fail("web.https_redirect.https_unavailable", _delegate("https_redirect"), evidence, host=host)
+        # Other NetworkError subclasses (timeouts, DNS, etc.) remain ERROR:
+        # the probe has no evidence and must not invent a server failure.
+        return None
+
     for host in hosts:
         url = f"http://{host}/"
         steps: list[str] = []
         try:
             reply = await ctx.net.http_get(url)
         except DestinationBlocked:
-            raise  # the rule of the scan forbids it: not evaluated, not "closed"
-        except NetworkError:
-            evidence[host] = "closed"  # nothing served without encryption: fine
+            raise
+        except Refused:
+            # A closed HTTP port is safe only if HTTPS actually works.
+            verdict = await verify_https(host, f"https://{host}/", [f"{url} closed"])
+            if verdict is not None:
+                return verdict
             continue
+        # A timeout, unlike connection refusal, is not evidence of a
+        # closed HTTP port; let the engine report this as not evaluated.
+        seen: set[str] = set()
         for _ in range(MAX_REDIRECTS + 1):
-            location = reply.header("location")
+            if url in seen:
+                evidence[host] = " → ".join([*steps, f"loop {url}"])
+                return fail("web.https_redirect.missing", _delegate("https_redirect"), evidence, host=host)
+            seen.add(url)
             steps.append(f"{reply.status} {url}")
+            location = reply.header("location")
             if not (300 <= reply.status < 400 and location):
                 evidence[host] = " → ".join(steps)
                 return fail("web.https_redirect.missing", _delegate("https_redirect"), evidence, host=host)
-            url = urljoin(url, location)
-            if url.startswith("https://"):
-                evidence[host] = " → ".join([*steps, url])
+            next_url = urljoin(url, location)
+            scheme = urlsplit(next_url).scheme
+            if scheme == "https":
+                verdict = await verify_https(host, next_url, steps)
+                if verdict is not None:
+                    return verdict
                 break
-            if not _same_site(ctx, url):
-                evidence[host] = " → ".join([*steps, url])
+            if scheme != "http" or not _same_site(ctx, next_url):
+                evidence[host] = " → ".join([*steps, next_url])
                 return fail("web.https_redirect.missing", _delegate("https_redirect"), evidence, host=host)
+            url = next_url
             try:
                 reply = await ctx.net.http_get(url)
             except DestinationBlocked:
                 raise
-            except NetworkError:
+            except Refused:
                 evidence[host] = " → ".join([*steps, f"{url} closed"])
-                break
+                return fail("web.https_redirect.missing", _delegate("https_redirect"), evidence, host=host)
         else:
             evidence[host] = " → ".join(steps)
             return fail("web.https_redirect.missing", _delegate("https_redirect"), evidence, host=host)
