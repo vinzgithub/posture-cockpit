@@ -71,5 +71,8 @@
   "web.security_txt.message": "Bonjour,\n\nPourriez-vous publier le fichier https://{domain}/.well-known/security.txt (RFC 9116) avec au moins une ligne « Contact: mailto:securite@{domain} » et une ligne « Expires: » ?\n\nMerci d'avance.",
   "web.security_txt.ok": "Un fichier security.txt valide indique un contact.",
   "web.security_txt.invalid": "Le fichier {url} est incomplet : il manque {fields} (champs obligatoires de la RFC 9116).",
-  "web.security_txt.expired": "Le fichier {url} a expiré le {expires_on} : ses informations ne sont plus réputées à jour."
+  "web.security_txt.expired": "Le fichier {url} a expiré le {expires_on} : ses informations ne sont plus réputées à jour.",
+  "web.https_redirect.external.action": "Sécuriser l'accès HTTPS de {host} avant toute redirection externe",
+  "web.https_redirect.external.message": "Bonjour,\n\nhttp://{host} redirige vers un site HTTPS extérieur au domaine. La destination est chiffrée, mais le premier accès au domaine audité utilise HTTP et sa propre disponibilité HTTPS n'est pas confirmée.\n\nPourriez-vous vérifier que https://{host}/ répond avec un certificat valide et, si la redirection externe est volontaire, la faire partir de cette adresse HTTPS ?\n\nMerci d'avance.",
+  "web.https_redirect.external.why": "Une redirection externe en HTTPS ne sécurise pas le premier échange HTTP avec le domaine audité, qui peut être modifié avant la redirection."
 }
