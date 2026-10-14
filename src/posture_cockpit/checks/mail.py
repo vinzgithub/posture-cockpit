@@ -17,6 +17,7 @@ d'interconnexion sécurisée ».
 from __future__ import annotations
 
 import asyncio
+import os
 import re
 from dataclasses import dataclass, field
 
@@ -61,6 +62,26 @@ SPF_LOOKUP_LIMIT = 10  # RFC 7208 §4.6.4: more DNS lookups than this and SPF fa
 # DKIM selectors cannot be listed; these are the ones mail services use most often.
 DKIM_SELECTORS = ("default", "dkim", "mail", "selector1", "selector2", "google", "k1", "k2", "s1", "s2",
                   "protonmail", "protonmail2", "fm1", "fm2", "zoho", "mxvault", "smtp", "key1")
+_DKIM_SELECTOR_PATTERN = re.compile(r"[a-z0-9](?:[a-z0-9_-]{0,61}[a-z0-9])?", re.IGNORECASE)
+MAX_DKIM_SELECTORS = 30
+
+
+def dkim_selectors() -> tuple[str, ...]:
+    """Common names plus administrator-provided DNS selectors, bounded per scan."""
+    values = list(DKIM_SELECTORS)
+    custom = os.environ.get("POSTURE_COCKPIT_DKIM_SELECTORS", "")
+    if custom:
+        for raw in custom.split(","):
+            selector = raw.strip().lower()
+            if not _DKIM_SELECTOR_PATTERN.fullmatch(selector):
+                raise ValueError(f"Invalid DKIM selector: {selector!r}")
+            if selector not in values:
+                values.append(selector)
+    if len(values) > MAX_DKIM_SELECTORS:
+        raise ValueError("Too many DKIM selectors (max 30)")
+    return tuple(values)
+
+
 MTA_STS_MIN_MAX_AGE = 86_400  # a policy cached for less than a day protects little (RFC 8461 §3.2: "weeks")
 
 
@@ -304,9 +325,10 @@ async def dmarc(ctx: CheckContext) -> Outcome:
 @extension.check("dkim", category="mail", weight=4, internal=False)
 async def dkim(ctx: CheckContext) -> Outcome:
     """DKIM signs outgoing mail. Its keys are only found by guessing their name (the selector)."""
-    answers = await asyncio.gather(*(ctx.txt(f"{s}._domainkey.{ctx.domain}") for s in DKIM_SELECTORS))
+    selectors = dkim_selectors()
+    answers = await asyncio.gather(*(ctx.txt(f"{s}._domainkey.{ctx.domain}") for s in selectors))
     keys = {}
-    for selector, records in zip(DKIM_SELECTORS, answers, strict=True):
+    for selector, records in zip(selectors, answers, strict=True):
         key = next((k for k in map(parse_dkim, records) if k is not None), None)
         if key is not None:
             keys[selector] = key
@@ -316,7 +338,7 @@ async def dkim(ctx: CheckContext) -> Outcome:
     broken = sorted(s for s, k in keys.items() if not k.readable and not k.revoked)
     if not usable and not broken:
         # Not found under the usual names, or withdrawn: nothing can be concluded either way.
-        return info("mail.dkim.not_found", {"selectors_tried": list(DKIM_SELECTORS), **evidence})
+        return info("mail.dkim.not_found", {"selectors_tried": list(selectors), **evidence})
     rsa_sizes = {s: k.bits for s, k in usable.items() if k.key_type == "rsa"}
     weakest = min(rsa_sizes.values(), default=0)
     weak_selectors = ", ".join(sorted(s for s, bits in rsa_sizes.items() if bits == weakest))
@@ -390,7 +412,7 @@ async def tls_rpt(ctx: CheckContext) -> Outcome:
     """TLS reports tell the domain when mail could not be delivered over an encrypted connection."""
     if not await _mx_hosts(ctx):
         return na("mail.no_inbound")
-    records = [r for r in await ctx.txt(f"_smtp._tls.{ctx.domain}") if r.lower().startswith("v=tlsrptv1")]
+    records = await ctx.txt(f"_smtp._tls.{ctx.domain}")
     value = f"v=TLSRPTv1; rua=mailto:tls-reports@{ctx.domain}"
     if not records:
         return warn("mail.tls_rpt.missing", Remedy(5, Effort.EASY, dns=(DnsChange("add", "TXT", "_smtp._tls", value),),
