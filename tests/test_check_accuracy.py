@@ -406,6 +406,7 @@ def test_external_https_redirect_is_not_a_verified_website():
     })
     f = one(data, "web.https_redirect")
     assert verdict(f) == (Status.FAIL, "web.https_redirect.external")
+    assert f.outcome.remedy.message == "web.https_redirect.external.message"
 
 
 def test_https_redirect_rejects_invalid_certificate():
