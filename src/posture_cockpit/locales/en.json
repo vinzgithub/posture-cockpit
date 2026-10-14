@@ -491,5 +491,8 @@
   "smtp.reason.connection_failed": "SMTP connection unavailable from this instance.",
   "smtp.reason.probe_failed": "SMTP check failed; no conclusion about server security.",
   "smtp.reason.mx_mismatch": "Observed server does not match requested MX.",
-  "smtp.reason.tls_not_verified": "STARTTLS observed but TLS handshake was not verified."
+  "smtp.reason.tls_not_verified": "STARTTLS observed but TLS handshake was not verified.",
+  "smtp.reason.stage_dns": "MX DNS resolution failed.",
+  "smtp.reason.stage_egress": "MX address blocked by network safety policy.",
+  "smtp.reason.stage_smtp_protocol": "Invalid SMTP reply or protocol exchange."
 }
