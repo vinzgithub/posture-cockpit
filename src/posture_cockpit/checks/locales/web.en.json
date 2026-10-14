@@ -1,9 +1,7 @@
 {
   "web.extension.name": "Website",
   "web.extension.description": "HTTPS redirection, HSTS, CSP and the other protection headers, security.txt.",
-
   "web.no_website": "No website on the domain or on www: this check does not apply.",
-
   "web.https_redirect.title": "Automatic switch to HTTPS",
   "web.https_redirect.action": "Redirect {host} to HTTPS",
   "web.https_redirect.why": "A visitor who types the address without \"https://\" must be sent to the encrypted version. Otherwise they browse in clear text: their forms can be read and the page changed on the way.",
@@ -11,7 +9,9 @@
   "web.https_redirect.missing": "http://{host} shows the website without encryption instead of redirecting to HTTPS.",
   "web.https_redirect.message": "Hello,\n\nThe address http://{host} shows the website without encryption. Could you add a permanent (301) redirect from http:// to https:// for every page?\n\nThank you.",
   "web.https_redirect.ok": "Visitors are always sent to HTTPS.",
-
+  "web.https_redirect.external": "http://{host} redirects to an external HTTPS website: this does not prove HTTPS is available on the audited domain.",
+  "web.https_redirect.bad_certificate": "The HTTPS destination for {host} has an invalid or untrusted certificate.",
+  "web.https_redirect.https_unavailable": "The HTTPS destination for {host} refuses connections: HTTPS is not confirmed.",
   "web.hsts.title": "HTTPS required (HSTS)",
   "web.hsts.action": "Turn on HSTS",
   "web.hsts.why": "HSTS asks browsers to use only HTTPS for the website for a given time, even if a link or a rigged network offers http://.",
@@ -22,7 +22,6 @@
   "web.hsts.ok": "HSTS is on, with a long enough duration.",
   "web.hsts.invalid": "The HSTS header of {host} has no readable \"max-age\": browsers ignore it.",
   "web.hsts.disabled": "The HSTS header of {host} has a zero duration (max-age=0): it tells browsers to forget the protection.",
-
   "web.csp.title": "Content Security Policy (CSP)",
   "web.csp.action": "Define a Content Security Policy",
   "web.csp.why": "The CSP tells the browser where the website may load its scripts from. A script injected by an attacker is then blocked instead of running for your visitors.",
@@ -33,7 +32,6 @@
   "web.csp.no_script": "The content security policy of {host} does not restrict scripts (neither script-src nor default-src).",
   "web.csp.unsafe_inline": "The content security policy of {host} allows scripts written in the page ('unsafe-inline'): an injected script would still run.",
   "web.csp.open": "The content security policy of {host} allows scripts from any origin (*, https: or data:).",
-
   "web.framing.title": "Protection against framing (clickjacking)",
   "web.framing.action": "Forbid framing the website in other pages",
   "web.framing.why": "Without this protection, a rigged website can show yours invisibly and make your visitors click without knowing it.",
@@ -43,7 +41,6 @@
   "web.framing.ok": "The website cannot be framed by a third-party page.",
   "web.framing.permissive": "The frame-ancestors directive of {host} lets any site show yours in a page (browsers then ignore X-Frame-Options).",
   "web.framing.obsolete": "{host} uses \"X-Frame-Options: ALLOW-FROM\", which current browsers no longer understand: the site can be shown in a third-party page.",
-
   "web.nosniff.title": "File types respected (nosniff)",
   "web.nosniff.action": "Add the nosniff header",
   "web.nosniff.why": "This header stops the browser from guessing the type of a file, a guess that can turn a file uploaded by a visitor into a script.",
@@ -51,7 +48,6 @@
   "web.nosniff.missing": "{host} does not send \"X-Content-Type-Options: nosniff\".",
   "web.nosniff.message": "Hello,\n\nCould you add on {host} the header \"X-Content-Type-Options: nosniff\"?\n\nThank you.",
   "web.nosniff.ok": "The browser respects the announced type of files.",
-
   "web.referrer.title": "Referring address (Referrer-Policy)",
   "web.referrer.action": "Limit the referring address sent",
   "web.referrer.why": "When a visitor follows an outgoing link, the browser may send the full address of the page they leave, sometimes with personal information in it.",
@@ -60,7 +56,6 @@
   "web.referrer.message": "Hello,\n\nCould you add on {host} the header \"Referrer-Policy: strict-origin-when-cross-origin\"?\n\nThank you.",
   "web.referrer.ok": "Sending the referring address is restricted.",
   "web.referrer.unsafe": "{host} asks browsers to send the full address of its pages to every site, even without encryption (Referrer-Policy: unsafe-url).",
-
   "web.server_banner.title": "Software versions shown",
   "web.server_banner.action": "Hide software versions",
   "web.server_banner.why": "Showing the exact version of the server tells attackers which known flaws to try first.",
@@ -68,7 +63,6 @@
   "web.server_banner.version": "The header \"{header}\" shows \"{value}\".",
   "web.server_banner.message": "Hello,\n\nThe website of {domain} shows its software version in the header \"{header}\" (\"{value}\"). Could you hide it?\n\nThank you.",
   "web.server_banner.ok": "No software version is shown.",
-
   "web.security_txt.title": "Security contact (security.txt)",
   "web.security_txt.action": "Publish a security contact",
   "web.security_txt.why": "The security.txt file says whom to tell about a flaw found on the website. Without it, whoever finds one does not know whom to write to.",
