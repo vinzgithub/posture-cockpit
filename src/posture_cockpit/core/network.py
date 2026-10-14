@@ -54,6 +54,14 @@ __all__ = [
 ]
 
 
+class SmtpProbeStageError(NetworkError):
+    """Non-sensitive stage for failed opt-in SMTP checks."""
+
+    def __init__(self, stage: str):
+        self.stage = stage
+        super().__init__(f"SMTP observation failed during {stage}")
+
+
 class UntrustedCertificate(NetworkError):
     """Raised by ``http_get(url, verify=True)`` when the server's certificate is not valid.
 
@@ -221,16 +229,23 @@ class LiveNetwork:
 
         if self.policy.internal:
             raise NetworkError("SMTP probing is disabled for internal perimeters")
-        replies = await asyncio.gather(self.dns(mx, "A"), self.dns(mx, "AAAA"))
+        try:
+            replies = await asyncio.gather(self.dns(mx, "A"), self.dns(mx, "AAAA"))
+        except NetworkError as exc:
+            raise SmtpProbeStageError("dns") from exc
         addresses = tuple(record for answer in replies for record in answer.records)
         # smtp_egress validates every returned address and the declared MX
         # before the connection budget is consumed or any socket is opened.
-        return await probe_smtp_ehlo(
-            mx, declared_mx, addresses,
-            reserve_connection=self.reserve_connection,
-            timeout=min(self.timeout, self.limits.operation_seconds, 20.0),
-            verify_tls=verify_tls,
-        )
+        try:
+            return await probe_smtp_ehlo(
+                mx, declared_mx, addresses,
+                reserve_connection=self.reserve_connection,
+                timeout=min(self.timeout, self.limits.operation_seconds, 20.0),
+                verify_tls=verify_tls,
+            )
+        except ValueError as exc:
+            stage = "egress" if str(exc).startswith("SMTP target ") else "smtp_protocol"
+            raise SmtpProbeStageError(stage) from exc
 
     async def smtp_ehlo_for_domain(self, domain: str, mx: str, *, verify_tls: bool = False):
         """Explicit opt-in SMTP probe, bound to the audited domain MX DNS answer.
