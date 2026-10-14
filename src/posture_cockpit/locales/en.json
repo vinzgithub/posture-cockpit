@@ -472,6 +472,7 @@
   "history.legacy_dns.dnssec_off": "No DNSSEC signature was observed during this scan.",
   "history.legacy_dns.dnssec_broken": "The observed DNSSEC configuration was inconsistent: DS record without a DNSKEY.",
   "history.legacy_dns.caa_inherited": "Inherited CAA records were observed for this domain.",
+  "plan.quick_links": "Domain quick links",
   "smtp.details.title": "SMTP / STARTTLS observations",
   "smtp.details.starttls": "MX server STARTTLS security",
   "smtp.details.not_evaluated": "Not evaluated: ordinary scans do not make SMTP connections. MX TLS compliance cannot be inferred from DNS records or the MTA-STS policy alone.",
