@@ -117,4 +117,5 @@ def test_unscored_web_area_preserves_critical_finding(catalog, language):
     assert web_area["score"] is None
     assert ("Défaut détecté" in web_area["comment"] if language == "fr"
             else "Detected issue" in web_area["comment"])
-    assert "redirect" in web_area["comment"].lower() or "redirection" in web_area["comment"].lower()
+    assert ("renvoie vers un site HTTPS extérieur" in web_area["comment"] if language == "fr"
+            else "redirect" in web_area["comment"].lower())
