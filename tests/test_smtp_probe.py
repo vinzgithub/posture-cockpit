@@ -177,7 +177,7 @@ async def test_live_network_smtp_rejects_mixed_public_private_addresses(monkeypa
 
     monkeypatch.setattr(net, "dns", fake_dns)
     monkeypatch.setattr(asyncio, "open_connection", must_not_connect)
-    with pytest.raises(ValueError, match="non-public"):
+    with pytest.raises(NetworkError, match="SMTP observation failed during egress"):
         await net.smtp_ehlo("mx.example.org", ("mx.example.org",))
     assert net._spent["connections"] == 0
 
