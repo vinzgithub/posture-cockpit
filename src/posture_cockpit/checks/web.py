@@ -136,7 +136,7 @@ async def https_redirect(ctx: CheckContext) -> Outcome:
         if not _same_site(ctx, target):
             # A third-party redirect may be a legitimate business choice, but
             # it must not certify the audited site's own HTTPS deployment.
-            return fail("web.https_redirect.external", _delegate("https_redirect"), evidence, host=host)
+            return fail("web.https_redirect.external", _delegate("https_redirect.external"), evidence, host=host)
         try:
             # Follow no redirects here: one valid HTTPS response on our own
             # hostname proves reachability and certificate validity.
