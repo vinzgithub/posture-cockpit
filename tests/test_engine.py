@@ -266,3 +266,26 @@ def test_a_check_that_times_out_does_not_cancel_shared_work_for_the_others():
     impatient_result, patient_result = asyncio.run(main())
     assert impatient_result.status is Status.ERROR
     assert patient_result.outcome.params == {"value": 7}
+
+
+@pytest.mark.parametrize(("error_type", "expected"), [
+    ("ConnectionTimedOut", "check.error.network_timeout"),
+    ("ConnectionReset", "check.error.reset"),
+    ("Refused", "check.error.refused"),
+    ("TLSHandshakeError", "check.error.tls"),
+    ("NetworkError", "check.error.network"),
+])
+def test_network_failure_remains_unscored_with_precise_reason(error_type, expected):
+    from posture_cockpit.core import errors
+
+    ext = Extension("diagnostic", name="Diagnostic", version="1")
+
+    @ext.check("failure", category="tls", weight=8)
+    async def failure(ctx):
+        raise getattr(errors, error_type)("TLS example.org:443 unavailable")
+
+    result = asyncio.run(engine.scan("example.org", ext.checks, FixtureNetwork({})))
+    outcome = result.findings[0].outcome
+    assert outcome.status is Status.ERROR
+    assert outcome.summary == expected
+    assert "example.org" in outcome.evidence["error"]

@@ -17,3 +17,15 @@ class Refused(NetworkError):
 
     Unlike a timeout, this is a definite answer, and a check may treat it as
     such (no MTA-STS policy server, for instance)."""
+
+
+class ConnectionTimedOut(NetworkError):
+    """The remote connection did not finish within the allowed time."""
+
+
+class ConnectionReset(NetworkError):
+    """The connection was reset while communicating with the remote host."""
+
+
+class TLSHandshakeError(NetworkError):
+    """TLS negotiation failed before a usable certificate or response was obtained."""

@@ -26,6 +26,9 @@
   "grade.F": "Critical",
   "check.error.timeout": "No answer within {seconds} seconds: this point could not be evaluated.",
   "check.error.network": "No answer (DNS server or the site's server): this point could not be evaluated.",
+  "check.error.reset": "The server connection was reset: this check could not be evaluated.",
+  "check.error.refused": "The server refused the connection: this check could not be evaluated.",
+  "check.error.tls": "TLS negotiation failed: this check could not be evaluated.",
   "check.error.internal": "This check ran into an error: this point could not be evaluated. The details are in the values found.",
   "check.error.blocked.private": "Not evaluated: {host} points to {address}, an address that is not public. In Internet mode, Posture Cockpit only contacts public addresses (an internal site is audited in an internal perimeter).",
   "check.error.blocked.outside": "Not evaluated: {host} points to {address}, outside the networks allowed for this internal perimeter.",
@@ -473,5 +476,6 @@
   "history.legacy_dns.dnssec_on": "A DNSSEC signature was observed during this scan.",
   "history.legacy_dns.dnssec_off": "No DNSSEC signature was observed during this scan.",
   "history.legacy_dns.dnssec_broken": "The observed DNSSEC configuration was inconsistent: DS record without a DNSKEY.",
-  "history.legacy_dns.caa_inherited": "Inherited CAA records were observed for this domain."
+  "history.legacy_dns.caa_inherited": "Inherited CAA records were observed for this domain.",
+  "check.error.network_timeout": "The connection to the server timed out: this check could not be evaluated."
 }

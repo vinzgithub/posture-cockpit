@@ -230,7 +230,7 @@ def test_unreachable_website_is_not_a_failure():
     data = healthy()
     data["certificates"] = {}
     f = one(data, "tls.certificate")
-    assert f.status is Status.ERROR and f.outcome.summary == "check.error.network"
+    assert f.status is Status.ERROR and f.outcome.summary == "check.error.refused"
 
 
 def test_obsolete_tls_versions():
