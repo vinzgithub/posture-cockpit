@@ -58,7 +58,7 @@ Les analyses ne passent **pas** par un proxy HTTP : les variables `HTTP_PROXY` e
 |---|---|---|
 | `POSTURE_COCKPIT_DATA_DIR` | `/data` (image) | Dossier de la base SQLite et de la clé de session |
 | `POSTURE_COCKPIT_NAMESERVERS` | ceux du système | Résolveurs DNS, séparés par des virgules |
-| `POSTURE_COCKPIT_DKIM_SELECTORS` | vide | Sélecteurs DKIM supplémentaires (séparés par des virgules, sans nom de domaine). Les sélecteurs usuels restent vérifiés ; limite totale : 30 sélecteurs. |
+| `POSTURE_COCKPIT_DKIM_SELECTORS` | vide | Sélecteurs DKIM supplémentaires (séparés par des virgules, sans nom de domaine). Les sélecteurs usuels restent vérifiés ; limite totale : 30 sélecteurs. Une valeur invalide empêche le démarrage, avec sa raison. |
 | `POSTURE_COCKPIT_CHECK_TIMEOUT` | `15` | Secondes accordées à chaque contrôle |
 | `POSTURE_COCKPIT_COOKIE_SECURE` | `false` | `true` quand l'application est servie en HTTPS |
 | `POSTURE_COCKPIT_DEFAULT_LOCALE` | `fr` | Langue des pages avant la connexion |

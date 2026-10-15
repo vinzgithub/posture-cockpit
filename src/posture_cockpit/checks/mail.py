@@ -66,10 +66,14 @@ _DKIM_SELECTOR_PATTERN = re.compile(r"[a-z0-9](?:[a-z0-9_-]{0,61}[a-z0-9])?", re
 MAX_DKIM_SELECTORS = 30
 
 
-def dkim_selectors() -> tuple[str, ...]:
-    """Common names plus administrator-provided DNS selectors, bounded per scan."""
+def dkim_selectors(custom: str | None = None) -> tuple[str, ...]:
+    """Common names plus administrator-provided DNS selectors, bounded per scan.
+
+    ``custom``: the value of POSTURE_COCKPIT_DKIM_SELECTORS, read from the environment when None.
+    An invalid value raises ValueError; Config.from_env checks it when the instance starts."""
     values = list(DKIM_SELECTORS)
-    custom = os.environ.get("POSTURE_COCKPIT_DKIM_SELECTORS", "")
+    if custom is None:
+        custom = os.environ.get("POSTURE_COCKPIT_DKIM_SELECTORS", "")
     if custom:
         for raw in custom.split(","):
             selector = raw.strip().lower()

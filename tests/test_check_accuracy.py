@@ -347,6 +347,19 @@ def test_custom_dkim_selectors_reject_invalid_or_excessive_values(monkeypatch, s
     with pytest.raises(ValueError):
         dkim_selectors()
 
+
+@pytest.mark.parametrize("selectors", ["custom2026,*", ",".join(f"s{i}" for i in range(40))])
+def test_a_wrong_dkim_selector_setting_stops_the_start(monkeypatch, tmp_path, selectors):
+    """0.3.1 started, then reported an internal error for DKIM on every scan."""
+    from posture_cockpit.config import Config
+
+    monkeypatch.setenv("POSTURE_COCKPIT_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("POSTURE_COCKPIT_DKIM_SELECTORS", selectors)
+    with pytest.raises(ValueError, match="POSTURE_COCKPIT_DKIM_SELECTORS"):
+        Config.from_env()
+    monkeypatch.setenv("POSTURE_COCKPIT_DKIM_SELECTORS", " Custom2026 , s2 ")
+    assert Config.from_env().data_dir == tmp_path
+
 # ================================================================== framing
 @pytest.mark.parametrize(("csp", "xfo", "expected"), [
     # 0.1.0: OK as soon as "frame-ancestors" appeared, whatever its value.
@@ -469,7 +482,7 @@ def test_external_redirect_with_a_silent_host_is_not_evaluated():
     """The domain as it was on 13 October 2026: no answer is not a verdict."""
     data = changed(healthy(), http={f"http://{DOMAIN}/": ELSEWHERE, f"https://{DOMAIN}/": "timeout"})
     f, _asked = _redirect_elsewhere_scan(data)
-    assert f.status is Status.ERROR
+    assert (f.status, f.outcome.summary) == (Status.ERROR, "check.error.network_timeout")
     # With every web and TLS check unanswered, too little is evaluated for a score (0.3.1: 67/100).
     assessment = scoring.assess(list(run(http_only_with_redirect_elsewhere()).values()))
     assert assessment.score is None and assessment.coverage < 0.5
