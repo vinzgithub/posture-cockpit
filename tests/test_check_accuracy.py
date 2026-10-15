@@ -62,13 +62,14 @@ def with_headers(**headers):
     ("v=DMARC1; p=reject; pct=abc", (Status.WARN, "mail.dmarc.syntax")),
     ("v=DMARC1; p=reject; pct=-5", (Status.WARN, "mail.dmarc.syntax")),
     ("v=DMARC1; p=reject; pct=+50", (Status.WARN, "mail.dmarc.syntax")),
-    # 0.3.1: OK. RFC 9989 removed pct, but receivers that still follow RFC 7489 apply it:
-    # pct=0 means that no failing mail at all meets the policy there.
-    ("v=DMARC1; p=reject; pct=0", (Status.WARN, "mail.dmarc.partial")),
-    ("v=DMARC1; p=reject; pct=99", (Status.WARN, "mail.dmarc.partial")),
+    # 0.3.1: OK. RFC 9989 made pct historic, but receivers that still follow RFC 7489 apply it
+    # (§6.6.4): with p=reject, only that share is selected for rejection, the rest SHOULD be quarantined.
+    ("v=DMARC1; p=reject; pct=0", (Status.WARN, "mail.dmarc.partial_reject")),
+    ("v=DMARC1; p=reject; pct=99", (Status.WARN, "mail.dmarc.partial_reject")),
+    ("v=DMARC1; p=quarantine; pct=99", (Status.WARN, "mail.dmarc.partial")),
     ("v=DMARC1; p=reject; pct=100", (Status.OK, "mail.dmarc.enforced")),
     ("v=DMARC1; p=reject; pct=0100", (Status.WARN, "mail.dmarc.syntax")),   # 1*3DIGIT
-    ("v=DMARC1; p=reject; pct=050", (Status.WARN, "mail.dmarc.partial")),
+    ("v=DMARC1; p=reject; pct=050", (Status.WARN, "mail.dmarc.partial_reject")),
     # 0.1.0: OK. A report address without "mailto:" is not a URI: no report is sent.
     ("v=DMARC1; p=reject; rua=dmarc@example.org", (Status.WARN, "mail.dmarc.syntax")),
     ("v=DMARC1; p=reject; adkim=x", (Status.WARN, "mail.dmarc.syntax")),
@@ -113,7 +114,9 @@ def test_a_subdomain_follows_the_policy_of_its_domain(parent, expected):
 def test_a_subdomain_record_of_its_own_wins():
     data = changed(healthy(), dns={f"_dmarc.{SUB} TXT": ["v=DMARC1; p=none"],
                                    f"_dmarc.{DOMAIN} TXT": ["v=DMARC1; p=reject"]})
-    assert verdict(run(data, "mail.dmarc", domain=SUB)["mail.dmarc"]) == (Status.WARN, "mail.dmarc.monitoring")
+    # The record of the subdomain applies: p=none, and (since 0.3.2) without a report address.
+    assert verdict(run(data, "mail.dmarc", domain=SUB)["mail.dmarc"]) == \
+        (Status.WARN, "mail.dmarc.monitoring_no_reports")
 
 
 def test_dmarc_parser():

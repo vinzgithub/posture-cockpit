@@ -14,7 +14,7 @@ from urllib.parse import quote
 
 from ..core import providers, scoring
 from ..core.model import DnsChange, Finding, Status
-from ..i18n import Catalog
+from ..i18n import Catalog, finding_summary
 from ..storage import Row, Scan
 
 EFFORT_KEYS = {"easy": "effort.easy", "medium": "effort.medium", "delegate": "effort.delegate"}
@@ -168,12 +168,10 @@ def task_view(catalog: Catalog, lang: str, scan: Scan, finding: Finding, number:
     # After "Vérifier", the latest result describes the domain as it is now.
     recheck = scan.rechecks.get(finding.check_id)
     current = recheck.finding if recheck else finding
-    summary_key = current.outcome.summary
-    current_params = {"domain": scan.domain, **current.outcome.params}
     view = TaskView(
         check_id=finding.check_id, number=number,
         title=catalog.first(lang, [f"{finding.outcome.summary}.action", f"{finding.check_id}.action"], params),
-        summary=catalog.text(lang, summary_key, current_params),
+        summary=finding_summary(catalog, lang, current, scan.domain),
         why=catalog.first(lang, [f"{finding.outcome.summary}.why", f"{finding.check_id}.why"], params),
         category=text(f"category.{finding.category}"),
         minutes=remedy.minutes, effort=remedy.effort.value, effort_label=text(EFFORT_KEYS[remedy.effort.value]),
@@ -196,8 +194,7 @@ def task_view(catalog: Catalog, lang: str, scan: Scan, finding: Finding, number:
 
 def gaps(catalog: Catalog, lang: str, domain: str, findings: list[Finding]) -> list[GapView]:
     """The checks that could not be evaluated, with the reason (timeout, unreachable, destination refused)."""
-    return [GapView(f.check_id, catalog.text(lang, f"{f.check_id}.title"),
-                    catalog.text(lang, f.outcome.summary, {"domain": domain, **f.outcome.params}))
+    return [GapView(f.check_id, catalog.text(lang, f"{f.check_id}.title"), finding_summary(catalog, lang, f, domain))
             for f in findings if f.status is Status.ERROR]
 
 

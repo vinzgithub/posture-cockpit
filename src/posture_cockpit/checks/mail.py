@@ -42,6 +42,7 @@ from ..core import (
 from ..core.egress import parse_address
 from . import LOCALES
 from .records import (
+    Dmarc,
     Spf,
     is_dmarc_candidate,
     is_spf,
@@ -51,6 +52,7 @@ from .records import (
     parse_dmarc,
     parse_mta_sts_policy,
     parse_spf,
+    tags,
     tls_rpt_problems,
 )
 
@@ -281,11 +283,37 @@ async def dmarc(ctx: CheckContext) -> Outcome:
             if not exists:
                 policy = record.non_existent_policy
     params: dict[str, str | int] = {"policy": policy or "", "parent": owner}
+    if record.errors:
+        evidence["errors"] = [list(e) for e in record.errors]
+    # One check, one verdict, chosen in this order: invalid policy, t=y, p=none, faulty values,
+    # pct, sp=none, local records ignored. Each other anomaly of the record is kept as a note,
+    # shown after the verdict on every page and report (i18n.finding_summary): none disappears
+    # behind the verdict. Notes are translation keys with their parameters, never sentences.
+    enforced = policy in ("quarantine", "reject")
+    anomalies: dict[str, tuple[str, dict[str, str | int]]] = {}
+    if record.errors:
+        anomalies["syntax"] = ("mail.dmarc.note.syntax", {"name": f"_dmarc.{owner}", "tags": _tags_text(record.errors)})
+    if enforced and record.pct < 100:  # pct only limits an enforced policy (RFC 7489 §6.6.4)
+        anomalies["partial"] = ("mail.dmarc.note.partial_reject" if policy == "reject" else "mail.dmarc.note.partial",
+                                {"pct": record.pct})
+    if enforced and not inherited and record.subdomain_policy == "none":
+        anomalies["subdomains_open"] = ("mail.dmarc.note.subdomains_open", {})
+    if ignored_local:
+        anomalies["multiple_local"] = ("mail.dmarc.note.multiple_local",
+                                       {"name": f"_dmarc.{ctx.domain}", "parent": owner})
+
+    def noted(shown: str) -> dict[str, object]:
+        """The evidence, with the anomalies other than ``shown`` (the one the verdict describes) as notes."""
+        notes = [{"key": key, "params": values} for name, (key, values) in anomalies.items() if name != shown]
+        if notes:
+            evidence["notes"] = notes
+        return evidence
+
     invalid_policy = policy is None or record.policy is None or any(
         name in {"p", "sp", "np"} for name, _value in record.errors
     )
     if invalid_policy:
-        evidence["errors"] = [list(e) for e in record.errors]
+        noted("syntax")  # the verdict replaces the whole record: its faulty values go with it
         # RFC 9989 §4.10.1: invalid p/sp/np disables enforcement even when
         # p=reject looks usable. A valid rua allows reporting-only treatment.
         if record.rua:
@@ -297,9 +325,11 @@ async def dmarc(ctx: CheckContext) -> Outcome:
     if record.testing and policy != "none":
         # t=y requests one level less enforcement (reject -> quarantine;
         # quarantine -> none), not full protection at the declared level.
+        # RFC 9989 §4.7. Receivers that still follow RFC 7489 do not know t=y and apply the declared
+        # policy (limited by pct, kept as a note): the effective level is the RFC 9989 one.
         effective = "quarantine" if policy == "reject" else "none"
         evidence["effective_policy"] = effective
-        return warn("mail.dmarc.testing", Remedy(5, Effort.MEDIUM), evidence,
+        return warn("mail.dmarc.testing", Remedy(5, Effort.MEDIUM, how="mail.dmarc.testing.how"), noted("testing"),
                     policy=policy or "", effective=effective, parent=owner)
     if policy == "none":
         if inherited:
@@ -308,30 +338,57 @@ async def dmarc(ctx: CheckContext) -> Outcome:
             return warn("mail.dmarc.monitoring_inherited",
                         Remedy(10, Effort.EASY, how="mail.dmarc.monitoring_inherited.how",
                                dns=(DnsChange("add", "TXT", "_dmarc", first_step),)),
-                        evidence, **params)
-        # Next step once the reports show that legitimate mail passes: quarantine.
-        stricter = (re.sub(r"(?<![a-z])p\s*=\s*none", "p=quarantine", valid[0], count=1, flags=re.IGNORECASE)
-                    if "p" in record.tags else valid[0].rstrip("; ") + "; p=quarantine")
+                        noted("monitoring"), **params)
+        if not record.rua:
+            # No valid report address: nothing can show that legitimate mail passes, so no stricter
+            # record is offered, and no address is made up. Reports first, then quarantine.
+            return warn("mail.dmarc.monitoring_no_reports",
+                        Remedy(10, Effort.MEDIUM, how="mail.dmarc.monitoring_no_reports.how"),
+                        noted("monitoring"), name=f"_dmarc.{owner}", **params)
+        # Next step once the reports show that legitimate mail passes: quarantine, from the valid tags only.
+        stricter = stricter_dmarc(valid[0], record)
         return warn("mail.dmarc.monitoring", Remedy(10, Effort.MEDIUM, how="mail.dmarc.monitoring.how",
                                                     dns=(DnsChange("delete", "TXT", "_dmarc", valid[0]),
                                                          DnsChange("add", "TXT", "_dmarc", stricter))),
-                    evidence)
+                    noted("monitoring"))
     if record.errors:
-        evidence["errors"] = [list(e) for e in record.errors]
-        return warn("mail.dmarc.syntax", Remedy(5, Effort.EASY, how="mail.dmarc.syntax.how"), evidence,
+        return warn("mail.dmarc.syntax", Remedy(5, Effort.EASY, how="mail.dmarc.syntax.how"), noted("syntax"),
                     tags=_tags_text(record.errors), name=f"_dmarc.{owner}", **params)
     if record.pct < 100:
-        # Removed by RFC 9989 (which ignores it), still applied by receivers that follow RFC 7489:
-        # for them only this share of the failing mail meets the policy.
-        return warn("mail.dmarc.partial", Remedy(5, Effort.MEDIUM, how="mail.dmarc.partial.how"), evidence,
+        # Historic in RFC 9989, still applied by receivers that follow RFC 7489 (§6.6.4): only this
+        # share of the failing mail is selected for the policy. For p=reject, the rest SHOULD be
+        # quarantined; for p=quarantine, it goes through the receiver's usual filtering.
+        return warn("mail.dmarc.partial_reject" if policy == "reject" else "mail.dmarc.partial",
+                    Remedy(5, Effort.MEDIUM, how="mail.dmarc.partial.how"), noted("partial"),
                     pct=record.pct, **params)
     if not inherited and record.subdomain_policy == "none":
         return warn("mail.dmarc.subdomains_open", Remedy(5, Effort.MEDIUM, how="mail.dmarc.subdomains_open.how"),
-                    evidence, **params)
+                    noted("subdomains_open"), **params)
     if ignored_local:
         return warn("mail.dmarc.multiple_inherited", Remedy(5, Effort.MEDIUM, how="mail.dmarc.multiple.how"),
-                    evidence, parent=owner, policy=policy or "", name=f"_dmarc.{ctx.domain}")
+                    noted("multiple_local"), parent=owner, policy=policy or "", name=f"_dmarc.{ctx.domain}")
     return ok("mail.dmarc.enforced_inherited" if inherited else "mail.dmarc.enforced", evidence, **params)
+
+
+def stricter_dmarc(text: str, record: Dmarc) -> str:
+    """``text`` with p=quarantine, rebuilt from its valid tags only: a record the plan asks to
+    publish never copies a faulty value. rua and ruf keep their valid addresses, a repeated tag
+    and a tag with a faulty value are left out, v=DMARC1 and p come first."""
+    faulty = {name for name, _value in record.errors}
+    parts = ["v=DMARC1", "p=quarantine"]
+    seen = {"v", "p"}
+    for name, value in tags(text):
+        if name in seen:
+            continue
+        seen.add(name)
+        if name in ("rua", "ruf"):
+            good = [uri for uri in (u.strip() for u in record.tags[name].split(",")) if uri
+                    and (name, uri) not in record.errors]
+            if good:
+                parts.append(f"{name}={','.join(good)}")
+        elif name not in faulty:
+            parts.append(f"{name}={value}")
+    return "; ".join(parts)
 
 
 # ------------------------------------------------------------------- DKIM

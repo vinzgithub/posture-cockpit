@@ -66,7 +66,7 @@ def test_removed_pct_tag_still_counts_for_rfc_7489_receivers():
         "_dmarc.example.org TXT": ["v=DMARC1; p=reject; pct=50"],
     })
     assert f.status is Status.WARN
-    assert f.outcome.summary == "mail.dmarc.partial"
+    assert f.outcome.summary == "mail.dmarc.partial_reject"
     assert f.outcome.params["pct"] == 50
 
 
@@ -76,7 +76,7 @@ def test_inherited_pct_is_reported_too():
         "_dmarc.example.org TXT": ["v=DMARC1; p=reject; pct=0"],
         "shop.example.org A": ["192.0.2.10"],
     })
-    assert (f.status, f.outcome.summary) == (Status.WARN, "mail.dmarc.partial")
+    assert (f.status, f.outcome.summary) == (Status.WARN, "mail.dmarc.partial_reject")
 
 
 def test_testing_mode_downgrades_enforcement():

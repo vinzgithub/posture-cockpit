@@ -29,7 +29,7 @@ from .config import Config
 from .core import engine, scoring
 from .core.network import NetworkError
 from .core.registry import Registry
-from .i18n import LOCALES, Catalog
+from .i18n import LOCALES, Catalog, finding_summary
 from .scanner import Scanner
 from .security import MIN_PASSWORD_LENGTH, hash_password
 from .storage import Accounts, Database
@@ -97,7 +97,7 @@ def _scan(typed: str, as_json: bool, lang: str) -> int:
                                                      "percent": assessment.coverage_percent})
     print(f"{domain} — {verdict} — {coverage} — {result.duration_ms} ms\n")
     for f in result.findings:
-        summary = catalog.text(lang, f.outcome.summary, {"domain": domain, **f.outcome.params})
+        summary = finding_summary(catalog, lang, f, domain)
         print(f"  {SYMBOLS[f.status.value]} {f.check_id:<22} {summary}")
     plan = scoring.plan(result.findings)
     if plan.priorities:
