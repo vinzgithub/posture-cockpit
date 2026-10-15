@@ -19,10 +19,10 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from .egress import DestinationBlocked
+from .errors import ConnectionReset, ConnectionTimedOut, Refused, TLSHandshakeError
 from .extension import Check, CheckContext
 from .model import Finding, Outcome, Status
 from .network import Network, NetworkError
-from .errors import ConnectionReset, ConnectionTimedOut, Refused, TLSHandshakeError
 
 log = logging.getLogger(__name__)
 
