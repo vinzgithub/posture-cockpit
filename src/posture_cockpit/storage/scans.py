@@ -121,9 +121,14 @@ class Scans:
         return scan_id
 
     def latest(self, domain_id: int) -> Scan | None:
+        scan_id = self.latest_id(domain_id)
+        return self.get(scan_id) if scan_id else None
+
+    def latest_id(self, domain_id: int) -> int | None:
+        """The number of the latest scan of a domain: the one the plan of fixes shows."""
         scan_id = self.db.value("SELECT id FROM scans WHERE domain_id = ? ORDER BY started_at DESC, id DESC LIMIT 1",
                                 (domain_id,))
-        return self.get(scan_id) if scan_id else None
+        return int(scan_id) if scan_id else None
 
     def get(self, scan_id: int) -> Scan | None:
         row = self.db.one("SELECT s.*, d.name AS domain FROM scans s JOIN domains d ON d.id = s.domain_id "

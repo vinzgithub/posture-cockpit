@@ -27,7 +27,7 @@ from starlette.exceptions import HTTPException
 from .. import __version__
 from ..i18n import LOCALES, fmt_date, pick_locale
 from ..security import csrf_token, csrf_valid
-from ..storage import Row
+from ..storage import Row, Scan
 from ..timezones import local, local_date
 from .services import services
 
@@ -139,6 +139,24 @@ def visible_domain(request: Request, name: str, user: Row) -> Row:
     if row is None or (row["perimeter_id"] is not None and not user["is_admin"]):
         raise HTTPException(404)
     return row
+
+
+def number_or_404(text: str) -> int:
+    """A scan or page number taken from the address: 1 to 9 ASCII digits, not zero.
+
+    Anything else (``abc``, ``-1``, ``²``, a number SQLite cannot hold) names a page
+    that does not exist: a 404 page, never a JSON validation error or a crash."""
+    if not (text.isascii() and text.isdigit() and len(text) <= 9) or int(text) == 0:
+        raise HTTPException(404)
+    return int(text)
+
+
+def stored_scan(request: Request, domain: Row, number: str) -> Scan:
+    """Scan ``number`` of ``domain`` (already checked with :func:`visible_domain`), otherwise a 404."""
+    scan = services(request).scans.get(number_or_404(number))
+    if scan is None or scan.domain_id != domain["id"]:
+        raise HTTPException(404)
+    return scan
 
 
 # --------------------------------------------------------------------- audit

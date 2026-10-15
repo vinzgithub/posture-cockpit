@@ -8,34 +8,33 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response
-from starlette.exceptions import HTTPException
 
 from ...report import ReportUnavailable, build_pdf
 from ...storage import Row
-from ..deps import audit, flash, lang_of, redirect, require_user, visible_domain
+from ...timezones import local_date
+from ..deps import audit, flash, lang_of, redirect, require_user, stored_scan, visible_domain
 from ..services import services
 
 router = APIRouter()
 
 
 @router.get("/domains/{name}/history/{scan_id}/report.pdf")
-async def historical_report(request: Request, name: str, scan_id: int,
+async def historical_report(request: Request, name: str, scan_id: str,
                             user: Row = Depends(require_user)):
     """Read-only PDF for exactly one stored analysis, with domain ownership enforced."""
     s = services(request)
     domain = visible_domain(request, name, user)
-    scan = s.scans.get(scan_id) if scan_id > 0 else None
-    if scan is None or scan.domain_id != domain["id"]:
-        raise HTTPException(404)
+    scan = stored_scan(request, domain, scan_id)
     try:
         pdf = build_pdf(s.catalog, lang_of(request), scan, author=s.settings.report_author(),
                         tz=s.config.timezone, historical=True)
     except ReportUnavailable:
         flash(request, "error", "error.pdf_unavailable")
-        return redirect(f"/domains/{name}/history/{scan_id}")
+        return redirect(f"/domains/{name}/history/{scan.id}")
     if domain["perimeter_id"] is not None:
-        audit(request, "report.internal", user=user, target=name, perimeter=domain["perimeter"])
-    filename = f"posture-{name}-{scan.started_at[:10]}-scan-{scan.id}.pdf"
+        audit(request, "report.internal", user=user, target=name, perimeter=domain["perimeter"], scan=scan.id)
+    # The day of the scan as the pages show it, in the time zone of the instance.
+    filename = f"posture-{name}-{local_date(scan.started_at, s.config.timezone).isoformat()}-scan-{scan.id}.pdf"
     return Response(pdf, media_type="application/pdf",
                     headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 

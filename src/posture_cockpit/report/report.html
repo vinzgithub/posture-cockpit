@@ -12,7 +12,7 @@
 <body>
   <div class="running-footer">{% if perimeter %}{{ t('report.restricted') }} · {% endif %}Posture Cockpit · {{ domain }} · {{ date }}</div>
 
-  {% if historical %}<p class="history-stamp">{{ t("history.pdf_notice", scan_version=scan.version, generator_version=generator_version) }}</p>{% endif %}
+  {% if historical %}<p class="history-stamp">{{ t("history.pdf_notice", scan_version=scan.version, generator_version=generator_version, date=generated.date, time=generated.time, zone=generated.zone) }}</p>{% endif %}
   <!-- Page 1: for the decision-maker -->
   <section class="sheet">
     <header class="masthead">

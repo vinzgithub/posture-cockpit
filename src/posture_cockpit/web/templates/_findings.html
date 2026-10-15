@@ -1,0 +1,30 @@
+{# Copyright © 2026 Vincent Fournet · SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 -#}
+{# The checks of one scan by category, with the raw values they saw: details.html and history_detail.html.
+   Needs: scan, categories, rechecks, summary (the wording of a finding). #}
+{% from "_macros.html" import status_icon %}
+{% for category, findings in categories.items() %}
+<section class="panel details" aria-labelledby="cat-{{ category }}">
+  <h2 id="cat-{{ category }}">{{ t('category.' ~ category) }}</h2>
+  <ul class="checks">
+    {% for f in findings %}
+    <li class="check status-{{ f.status.value }}">
+      {{ status_icon(f.status.value) }}
+      <div class="check-body">
+        <p class="check-title"><strong>{{ t(f.check_id ~ '.title') }}</strong>
+          <span class="badge badge-{{ f.status.value }}">{{ t('status.' ~ f.status.value) }}</span>
+          {% if f.check_id in rechecks %}<span class="muted small">{{ t('details.rechecked', date=date(rechecks[f.check_id].checked_at)) }}</span>{% endif %}
+        </p>
+        <p>{{ summary(f, scan.domain) }}</p>
+        {% if f.outcome.evidence %}
+        <details>
+          <summary>{{ t('details.evidence') }}</summary>
+          <pre class="evidence">{{ f.outcome.evidence | tojson(indent=2) }}</pre>
+        </details>
+        {% endif %}
+      </div>
+      <code class="check-id muted small">{{ f.check_id }}{% if f.status.scored %} · {{ t('details.weight', n=f.weight) }}{% endif %}</code>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endfor %}

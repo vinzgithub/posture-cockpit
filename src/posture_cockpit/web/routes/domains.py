@@ -12,6 +12,8 @@ tasks and DNS hosts without reloading, copy buttons, spinner while scanning).
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response
 from starlette.datastructures import FormData
@@ -19,11 +21,11 @@ from starlette.exceptions import HTTPException
 
 from ...core import providers, scoring
 from ...core.engine import normalize_domain
-from ...core.model import Status
+from ...core.model import Finding, Status
 from ...core.network import NetworkError
 from ...i18n import finding_summary
 from ...scanner import DEMO_DOMAIN, InternalScansDisabled
-from ...storage import Row
+from ...storage import Row, Scan
 from ..deps import (
     audit,
     checked_form,
@@ -31,9 +33,11 @@ from ..deps import (
     field,
     flash,
     lang_of,
+    number_or_404,
     redirect,
     render,
     require_user,
+    stored_scan,
     t,
     visible_domain,
 )
@@ -43,6 +47,7 @@ from ..services import services
 from ..views import plan_view
 
 router = APIRouter(prefix="/domains")
+HISTORY_PAGE_SIZE = 20  # the default of Scans.history_page
 
 
 def list_page(request: Request, user: Row, status: int = 200, **context):
@@ -173,45 +178,55 @@ async def details(request: Request, name: str, user: Row = Depends(require_user)
     scan = s.scans.latest(domain["id"])
     if scan is None:
         return redirect("/domains")
-    current = scan.current()
-    categories: dict[str, list] = {}
-    for finding in current:
+    return render(request, "details.html", scan=scan, categories=_by_category(scan), summary=_summary(request),
+                  result=scan.assessment(), registry=s.registry, rechecks=scan.rechecks, domain=domain,
+                  history=s.scans.history(domain["id"]), full_coverage=scoring.FULL_COVERAGE)
+
+
+def _by_category(scan: Scan) -> dict[str, list[Finding]]:
+    categories: dict[str, list[Finding]] = {}
+    for finding in scan.current():
         categories.setdefault(finding.category, []).append(finding)
-    return render(request, "details.html", scan=scan, categories=categories, result=scan.assessment(),
-                  registry=s.registry, rechecks=scan.rechecks, domain=domain, history=s.scans.history(domain["id"]),
-                  full_coverage=scoring.FULL_COVERAGE)
+    return categories
+
+
+def _summary(request: Request) -> Callable[[Finding, str], str]:
+    """The text of a finding, including the wording of DNS findings stored before 0.3.0."""
+    catalog, lang = services(request).catalog, lang_of(request)
+    return lambda finding, domain: finding_summary(catalog, lang, finding, domain)
 
 
 @router.get("/{name}/history")
-async def history_page(request: Request, name: str, page: int = 1, user: Row = Depends(require_user)):
+async def history_page(request: Request, name: str, page: str = "1", user: Row = Depends(require_user)):
     """Paginated scan history for one visible domain."""
     s = services(request)
     domain = visible_domain(request, name, user)
-    if page < 1 or page > 1000000:
+    number = number_or_404(page)
+    rows, total = s.scans.history_page(domain["id"], page=number)
+    pages = max(1, (total + HISTORY_PAGE_SIZE - 1) // HISTORY_PAGE_SIZE)
+    if number > pages:
         raise HTTPException(404)
-    rows, total = s.scans.history_page(domain["id"], page=page)
-    pages = max(1, (total + 19) // 20)
-    if page > pages:
-        raise HTTPException(404)
-    return render(request, "history.html", domain=domain, history=rows, page=page,
-                  pages=pages, total=total, full_coverage=scoring.FULL_COVERAGE)
+    # How many checks each scan could evaluate: the stored coverage alone does not say it.
+    results = {}
+    for row in rows:
+        scan = s.scans.get(row["id"])
+        if scan is not None:
+            results[row["id"]] = scan.assessment()
+    return render(request, "history.html", domain=domain, history=rows, results=results, page=number,
+                  pages=pages, total=total, latest_id=s.scans.latest_id(domain["id"]),
+                  full_coverage=scoring.FULL_COVERAGE)
 
 
 @router.get("/{name}/history/{scan_id}")
-async def history_detail(request: Request, name: str, scan_id: int, user: Row = Depends(require_user)):
+async def history_detail(request: Request, name: str, scan_id: str, user: Row = Depends(require_user)):
     """Historic assessment: view only; never offer a recheck or another scan."""
     s = services(request)
     domain = visible_domain(request, name, user)
-    scan = s.scans.get(scan_id) if scan_id > 0 else None
-    if scan is None or scan.domain_id != domain["id"]:
-        raise HTTPException(404)
-    categories: dict[str, list] = {}
-    for finding in scan.current():
-        categories.setdefault(finding.category, []).append(finding)
-    return render(request, "history_detail.html", domain=domain, scan=scan, categories=categories,
-                  finding_summary=lambda f, d: finding_summary(s.catalog, lang_of(request), f, d),
-                  result=scan.assessment(), registry=s.registry, rechecks=scan.rechecks,
-                  full_coverage=scoring.FULL_COVERAGE)
+    scan = stored_scan(request, domain, scan_id)
+    newest = next(iter(s.scans.history(domain["id"], limit=1)), None)  # the scan the plan of fixes shows
+    return render(request, "history_detail.html", domain=domain, scan=scan, categories=_by_category(scan),
+                  summary=_summary(request), result=scan.assessment(), registry=s.registry,
+                  rechecks=scan.rechecks, newest=newest, full_coverage=scoring.FULL_COVERAGE)
 
 
 @router.post("/{name}/delete")

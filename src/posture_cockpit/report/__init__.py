@@ -20,7 +20,7 @@ of the application keeps working and only this report is unavailable.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import tzinfo
+from datetime import datetime, tzinfo
 from pathlib import Path
 from typing import Any
 
@@ -64,8 +64,8 @@ def _text(catalog: Catalog, lang: str, key: str, finding: Finding, domain: str) 
 
 
 def report_context(catalog: Catalog, lang: str, scan: Scan, author: str = "", tz: tzinfo = UTC, *,
-                   historical: bool = False) -> dict[str, Any]:
-    """Everything the report template shows, already worded."""
+                   historical: bool = False, now: datetime | None = None) -> dict[str, Any]:
+    """Everything the report template shows, already worded. ``now``: when the PDF is made (tests)."""
     findings = scan.current()
     plan = scoring.plan(findings)
     result = scan.assessment()
@@ -138,9 +138,13 @@ def report_context(catalog: Catalog, lang: str, scan: Scan, author: str = "", tz
         })
 
     started = local(scan.started_at, tz)
+    generated = (now or datetime.now(UTC)).astimezone(tz)
     return {
         "lang": lang, "t": t, "domain": scan.domain, "scan": scan, "author": author,
         "historical": historical, "generator_version": __version__,
+        # A historical report is made long after the scan: it says when, in the time zone of the instance.
+        "generated": {"date": fmt_date(generated.date(), lang), "time": generated.strftime("%H:%M"),
+                      "zone": offset_label(generated)},
         # The file number keeps the UTC day: it must not change with the time zone of the instance.
         "file_number": f"{scan.started_at[:10].replace('-', '')}-{scan.id:04d}",
         "date": fmt_date(started.date(), lang), "time": started.strftime("%H:%M"), "zone": offset_label(started),
