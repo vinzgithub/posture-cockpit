@@ -299,7 +299,11 @@ async def dmarc(ctx: CheckContext) -> Outcome:
                     policy=policy or "", effective=effective, parent=owner)
     if policy == "none":
         if inherited:
-            return warn("mail.dmarc.monitoring_inherited", Remedy(10, Effort.MEDIUM, how="mail.dmarc.monitoring.how"),
+            # The parent may not be the owner's to change (a public suffix such as gouv.fr): the step that
+            # is always in the owner's hands is a policy of the domain's own, with its own reports.
+            return warn("mail.dmarc.monitoring_inherited",
+                        Remedy(10, Effort.EASY, how="mail.dmarc.monitoring_inherited.how",
+                               dns=(DnsChange("add", "TXT", "_dmarc", first_step),)),
                         evidence, **params)
         # Next step once the reports show that legitimate mail passes: quarantine.
         stricter = (re.sub(r"(?<![a-z])p\s*=\s*none", "p=quarantine", valid[0], count=1, flags=re.IGNORECASE)
@@ -312,6 +316,11 @@ async def dmarc(ctx: CheckContext) -> Outcome:
         evidence["errors"] = [list(e) for e in record.errors]
         return warn("mail.dmarc.syntax", Remedy(5, Effort.EASY, how="mail.dmarc.syntax.how"), evidence,
                     tags=_tags_text(record.errors), name=f"_dmarc.{owner}", **params)
+    if record.pct < 100:
+        # Removed by RFC 9989 (which ignores it), still applied by receivers that follow RFC 7489:
+        # for them only this share of the failing mail meets the policy.
+        return warn("mail.dmarc.partial", Remedy(5, Effort.MEDIUM, how="mail.dmarc.partial.how"), evidence,
+                    pct=record.pct, **params)
     if not inherited and record.subdomain_policy == "none":
         return warn("mail.dmarc.subdomains_open", Remedy(5, Effort.MEDIUM, how="mail.dmarc.subdomains_open.how"),
                     evidence, **params)

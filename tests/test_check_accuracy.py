@@ -46,12 +46,18 @@ def with_headers(**headers):
 
 # ===================================================================== DMARC
 @pytest.mark.parametrize(("record", "expected"), [
-    # 0.1.0: OK. RFC 7489 §6.3: pct is an integer from 0 to 100; receivers fall back to 100, the record is faulty.
-    ("v=DMARC1; p=reject; pct=101", (Status.OK, "mail.dmarc.enforced")),
-    ("v=DMARC1; p=reject; pct=abc", (Status.OK, "mail.dmarc.enforced")),
-    ("v=DMARC1; p=reject; pct=-5", (Status.OK, "mail.dmarc.enforced")),
-    ("v=DMARC1; p=reject; pct=0", (Status.OK, "mail.dmarc.enforced")),
+    # RFC 7489 §6.3: pct is an integer from 0 to 100; receivers fall back to 100, the record is faulty.
+    ("v=DMARC1; p=reject; pct=101", (Status.WARN, "mail.dmarc.syntax")),
+    ("v=DMARC1; p=reject; pct=abc", (Status.WARN, "mail.dmarc.syntax")),
+    ("v=DMARC1; p=reject; pct=-5", (Status.WARN, "mail.dmarc.syntax")),
+    ("v=DMARC1; p=reject; pct=+50", (Status.WARN, "mail.dmarc.syntax")),
+    # 0.3.1: OK. RFC 9989 removed pct, but receivers that still follow RFC 7489 apply it:
+    # pct=0 means that no failing mail at all meets the policy there.
+    ("v=DMARC1; p=reject; pct=0", (Status.WARN, "mail.dmarc.partial")),
+    ("v=DMARC1; p=reject; pct=99", (Status.WARN, "mail.dmarc.partial")),
     ("v=DMARC1; p=reject; pct=100", (Status.OK, "mail.dmarc.enforced")),
+    ("v=DMARC1; p=reject; pct=0100", (Status.WARN, "mail.dmarc.syntax")),   # 1*3DIGIT
+    ("v=DMARC1; p=reject; pct=050", (Status.WARN, "mail.dmarc.partial")),
     # 0.1.0: OK. A report address without "mailto:" is not a URI: no report is sent.
     ("v=DMARC1; p=reject; rua=dmarc@example.org", (Status.WARN, "mail.dmarc.syntax")),
     ("v=DMARC1; p=reject; adkim=x", (Status.WARN, "mail.dmarc.syntax")),
@@ -71,7 +77,7 @@ def test_dmarc_follows_rfc_7489(record, expected):
 def test_dmarc_syntax_names_the_faulty_tags():
     f = one(changed(healthy(), dns={f"_dmarc.{DOMAIN} TXT": ["v=DMARC1; p=reject; pct=101; rua=x@y.z"]}),
             "mail.dmarc")
-    assert f.outcome.params["tags"] == "rua=x@y.z"
+    assert f.outcome.params["tags"] == "pct=101, rua=x@y.z"
 
 
 def test_two_dmarc_records_cancel_each_other():
@@ -102,7 +108,7 @@ def test_a_subdomain_record_of_its_own_wins():
 def test_dmarc_parser():
     record = parse_dmarc("v=DMARC1;p=Quarantine;sp=reject;pct=50;rua=mailto:a@example.org")
     assert (record.starts_right, record.policy, record.subdomain_policy, record.pct) == (True, "quarantine",
-                                                                                         "reject", 100)
+                                                                                         "reject", 50)
     assert record.rua == ("mailto:a@example.org",) and record.errors == ()
 
 

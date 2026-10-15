@@ -149,7 +149,7 @@ class Dmarc:
     starts_right: bool                    # the record begins with v=DMARC1 (otherwise it is discarded)
     policy: str | None                    # p: none, quarantine, reject; absent defaults to none
     subdomain_policy: str | None          # sp, or p when sp is absent
-    pct: int                              # legacy compatibility; RFC 9989 does not use pct
+    pct: int                              # 100 when absent or invalid; see below
     rua: tuple[str, ...]
     errors: tuple[tuple[str, str], ...]   # (tag, value) that do not follow the RFC
     psd: str = "u"                        # y: public suffix; n: explicitly organizational; u: unspecified
@@ -194,9 +194,16 @@ def parse_dmarc(record: str) -> Dmarc:
     if values.get("t", "n").lower() not in ("y", "n"):
         errors.append(("t", values["t"]))
 
-    # RFC 9989 §4.7: unregistered tags (including legacy pct/rf/ri)
-    # MUST be ignored, not treated as syntax errors or partial enforcement.
+    # pct (RFC 7489 §6.3) was removed by RFC 9989, which replaces it with t=y. Receivers that
+    # still follow RFC 7489 apply it, so it is read: a value below 100 means a partial policy
+    # for them, and a value that is not an integer from 0 to 100 is a faulty record.
     pct = 100
+    if "pct" in values:
+        raw = values["pct"]
+        if raw.isascii() and raw.isdigit() and len(raw) <= 3 and int(raw) <= 100:  # 1*3DIGIT
+            pct = int(raw)
+        else:
+            errors.append(("pct", raw))
 
     for name, allowed in (("adkim", ("r", "s")), ("aspf", ("r", "s"))):
         if name in values and values[name].lower() not in allowed:

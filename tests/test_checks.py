@@ -89,7 +89,7 @@ def test_dmarc_monitoring_suggests_quarantine():
 
 
 @pytest.mark.parametrize(("record", "status", "summary"), [
-    ("v=DMARC1; p=quarantine; pct=50", Status.OK, "mail.dmarc.enforced"),
+    ("v=DMARC1; p=quarantine; pct=50", Status.WARN, "mail.dmarc.partial"),
     ("v=DMARC1; p=whatever", Status.FAIL, "mail.dmarc.invalid"),
     ("v=DMARC1;p=reject", Status.OK, "mail.dmarc.enforced"),
     ("V=DMARC1; P=Quarantine", Status.OK, "mail.dmarc.enforced"),

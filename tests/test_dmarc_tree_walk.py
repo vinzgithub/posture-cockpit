@@ -60,12 +60,23 @@ def test_tld_psd_policy_can_be_inherited():
     assert f.outcome.evidence["found_at"] == "_dmarc.org"
 
 
-def test_removed_pct_tag_is_ignored():
+def test_removed_pct_tag_still_counts_for_rfc_7489_receivers():
+    # RFC 9989 removed pct; receivers that still follow RFC 7489 apply it to half of the failing mail.
     f = _check("example.org", {
         "_dmarc.example.org TXT": ["v=DMARC1; p=reject; pct=50"],
     })
-    assert f.status is Status.OK
-    assert f.outcome.summary == "mail.dmarc.enforced"
+    assert f.status is Status.WARN
+    assert f.outcome.summary == "mail.dmarc.partial"
+    assert f.outcome.params["pct"] == 50
+
+
+def test_inherited_pct_is_reported_too():
+    f = _check("shop.example.org", {
+        "_dmarc.shop.example.org TXT": [],
+        "_dmarc.example.org TXT": ["v=DMARC1; p=reject; pct=0"],
+        "shop.example.org A": ["192.0.2.10"],
+    })
+    assert (f.status, f.outcome.summary) == (Status.WARN, "mail.dmarc.partial")
 
 
 def test_testing_mode_downgrades_enforcement():
@@ -84,6 +95,19 @@ def test_non_existent_domain_uses_np():
     assert f.status is Status.WARN
     assert f.outcome.summary == "mail.dmarc.monitoring_inherited"
     assert f.outcome.evidence["existence"] == "nxdomain"
+
+
+def test_inherited_monitoring_offers_a_policy_of_the_domains_own():
+    # 0.3.1 said no local record was needed: the parent (gouv.fr, say) may not be the owner's to change.
+    f = _check("agency.gov.fr", {
+        "_dmarc.agency.gov.fr TXT": None,
+        "_dmarc.gov.fr TXT": ["v=DMARC1; p=none; rua=mailto:d@gov.fr"],
+    })
+    assert (f.status, f.outcome.summary) == (Status.WARN, "mail.dmarc.monitoring_inherited")
+    remedy = f.outcome.remedy
+    assert remedy is not None and remedy.how == "mail.dmarc.monitoring_inherited.how"
+    assert [(c.action, c.rtype, c.name) for c in remedy.dns] == [("add", "TXT", "_dmarc")]
+    assert remedy.dns[0].value == "v=DMARC1; p=none; rua=mailto:dmarc@agency.gov.fr"
 
 
 def test_existing_domain_uses_sp_not_np():
