@@ -81,7 +81,8 @@ def healthy() -> dict:
 def http_only_with_redirect_elsewhere() -> dict:
     """The domain as fournet.one was on 13 October 2026: plain HTTP redirects to another site,
     HTTPS on the domain itself never answers, DMARC in monitoring (p=none), MTA-STS in testing.
-    The mail checks pass; the ten web and TLS checks cannot be evaluated (85/100, coverage 54 %)."""
+    The mail checks pass; the eleven web and TLS checks cannot be evaluated: no score (coverage 44 %).
+    0.2.0 gave 85/100 and 0.3.1 67/100 at 54 %, counting the redirect as failed without an answer."""
     data = healthy()
     silent = {url: "timeout" for url in data["http"]
               if url.startswith((f"https://{DOMAIN}/", f"https://www.{DOMAIN}/"))}
@@ -94,6 +95,13 @@ def http_only_with_redirect_elsewhere() -> dict:
                   {"status": 200, "body": "version: STSv1\nmode: testing\nmx: mx.example.net\nmax_age: 604800\n"}},
         certificates={host: "timeout" for host in data["certificates"] if not host.startswith("mta-sts.")},
     )
+
+
+def redirect_elsewhere_https_refused() -> dict:
+    """The same, but HTTPS on the domain refuses the connection: the redirect fails, 67/100 at 54 %."""
+    data = http_only_with_redirect_elsewhere()
+    del data["http"][f"https://{DOMAIN}/"]
+    return data
 
 
 def with_certificate(**values) -> dict:

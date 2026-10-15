@@ -124,7 +124,8 @@ async def https_redirect(ctx: CheckContext) -> Outcome:
     """Credit HTTPS only after a reachable, certificate-verified same-site endpoint.
 
     An external HTTPS destination is not evidence that the audited domain
-    supports HTTPS. Timeouts and blocked egress never earn a positive verdict.
+    supports HTTPS: after one, ``https://host/`` itself is tried (the external
+    site is never fetched). Timeouts and blocked egress never earn a positive verdict.
     """
     hosts = await ctx.web_hosts()
     if not hosts:
@@ -133,10 +134,12 @@ async def https_redirect(ctx: CheckContext) -> Outcome:
 
     async def verify_https(host: str, target: str, steps: list[str]) -> Outcome | None:
         evidence[host] = " → ".join([*steps, target])
-        if not _same_site(ctx, target):
-            # A third-party redirect may be a legitimate business choice, but
-            # it must not certify the audited site's own HTTPS deployment.
-            return fail("web.https_redirect.external", _delegate("https_redirect.external"), evidence, host=host)
+        external = not _same_site(ctx, target)
+        if external:
+            # A redirect to another site may be a legitimate business choice: it is fine
+            # when the audited host also answers over HTTPS with a valid certificate.
+            target = f"https://{host}/"
+            evidence[host] += f" ; {target} tested"
         try:
             # Follow no redirects here: one valid HTTPS response on our own
             # hostname proves reachability and certificate validity.
@@ -146,6 +149,8 @@ async def https_redirect(ctx: CheckContext) -> Outcome:
         except UntrustedCertificate:
             return fail("web.https_redirect.bad_certificate", _delegate("https_redirect"), evidence, host=host)
         except Refused:
+            if external:
+                return fail("web.https_redirect.external", _delegate("https_redirect.external"), evidence, host=host)
             return fail("web.https_redirect.https_unavailable", _delegate("https_redirect"), evidence, host=host)
         # Other NetworkError subclasses (timeouts, DNS, etc.) remain ERROR:
         # the probe has no evidence and must not invent a server failure.

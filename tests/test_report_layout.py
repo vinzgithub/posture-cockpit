@@ -13,7 +13,7 @@ from posture_cockpit.core import scoring
 from posture_cockpit.report import REPORT_DIR, _env, report_context
 from posture_cockpit.storage import Scan
 from posture_cockpit.web.app import create_app
-from worlds import DOMAIN, healthy, http_only_with_redirect_elsewhere, run
+from worlds import DOMAIN, healthy, http_only_with_redirect_elsewhere, redirect_elsewhere_https_refused, run
 
 weasyprint = pytest.importorskip("weasyprint")
 HEADINGS = {"section-label", "annex-title"}
@@ -99,7 +99,7 @@ def test_no_page_ends_with_a_heading_whatever_the_length(catalog):
 
 @pytest.mark.parametrize("language", ["fr", "en"])
 def test_partial_pdf_projection_is_conditional(catalog, language):
-    context = report_context(catalog, language, _scan(http_only_with_redirect_elsewhere()))
+    context = report_context(catalog, language, _scan(redirect_elsewhere_https_refused()))
     assert context["result"].partial
     assert context["result"].coverage_percent < 90
     assert context["conclusion"]
@@ -110,14 +110,14 @@ def test_partial_pdf_projection_is_conditional(catalog, language):
 
 @pytest.mark.parametrize("language", ["fr", "en"])
 def test_unscored_web_area_preserves_critical_finding(catalog, language):
-    context = report_context(catalog, language, _scan(http_only_with_redirect_elsewhere()))
+    context = report_context(catalog, language, _scan(redirect_elsewhere_https_refused()))
     web_findings = [f for f in context["scan"].current() if f.category == "web"]
     assert any(f.status.value == "fail" for f in web_findings)
     web_area = next(c for c in context["categories"] if c["label"] == catalog.text(language, "category.web"))
     assert web_area["score"] is None
     assert ("Défaut détecté" in web_area["comment"] if language == "fr"
             else "Detected issue" in web_area["comment"])
-    assert ("renvoie vers un site HTTPS extérieur" in web_area["comment"] if language == "fr"
+    assert ("renvoie vers un autre site" in web_area["comment"] if language == "fr"
             else "redirect" in web_area["comment"].lower())
 
 

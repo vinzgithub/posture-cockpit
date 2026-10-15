@@ -9,7 +9,7 @@
   "web.https_redirect.missing": "http://{host} affiche le site sans chiffrement au lieu de rediriger vers HTTPS.",
   "web.https_redirect.message": "Bonjour,\n\nL'adresse http://{host} affiche le site sans chiffrement. Pourriez-vous ajouter une redirection permanente (301) de http:// vers https:// pour toutes les pages ?\n\nMerci d'avance.",
   "web.https_redirect.ok": "Les visiteurs sont toujours envoyés vers HTTPS.",
-  "web.https_redirect.external": "http://{host} renvoie vers un site HTTPS extérieur au domaine audité : cela ne prouve pas que ce domaine dispose de son propre HTTPS.",
+  "web.https_redirect.external": "http://{host} renvoie vers un autre site, mais https://{host} refuse la connexion : le domaine audité n'a pas son propre accès HTTPS.",
   "web.https_redirect.bad_certificate": "La destination HTTPS de {host} présente un certificat non fiable ou invalide.",
   "web.https_redirect.https_unavailable": "La destination HTTPS de {host} refuse la connexion : HTTPS n'est pas confirmé.",
   "web.hsts.title": "HTTPS obligatoire (HSTS)",
@@ -72,7 +72,7 @@
   "web.security_txt.ok": "Un fichier security.txt valide indique un contact.",
   "web.security_txt.invalid": "Le fichier {url} est incomplet : il manque {fields} (champs obligatoires de la RFC 9116).",
   "web.security_txt.expired": "Le fichier {url} a expiré le {expires_on} : ses informations ne sont plus réputées à jour.",
-  "web.https_redirect.external.action": "Sécuriser l'accès HTTPS de {host} avant toute redirection externe",
-  "web.https_redirect.external.message": "Bonjour,\n\nhttp://{host} redirige vers un site HTTPS extérieur au domaine. La destination est chiffrée, mais le premier accès au domaine audité utilise HTTP et sa propre disponibilité HTTPS n'est pas confirmée.\n\nPourriez-vous vérifier que https://{host}/ répond avec un certificat valide et, si la redirection externe est volontaire, la faire partir de cette adresse HTTPS ?\n\nMerci d'avance.",
-  "web.https_redirect.external.why": "Une redirection externe en HTTPS ne sécurise pas le premier échange HTTP avec le domaine audité, qui peut être modifié avant la redirection."
+  "web.https_redirect.external.action": "Ouvrir HTTPS sur {host}",
+  "web.https_redirect.external.message": "Bonjour,\n\nhttp://{host} redirige vers un autre site, mais https://{host}/ refuse la connexion : les liens et favoris en https:// ne fonctionnent pas.\n\nPourriez-vous ouvrir HTTPS sur {host}, avec un certificat valide, et faire partir la même redirection de https://{host}/ ?\n\nMerci d'avance.",
+  "web.https_redirect.external.why": "Sans HTTPS sur {host}, les adresses en https:// (liens, favoris, navigateurs qui essaient HTTPS d'abord) ne mènent nulle part : seule la version non chiffrée renvoie vers l'autre site."
 }

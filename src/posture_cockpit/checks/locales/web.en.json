@@ -9,7 +9,7 @@
   "web.https_redirect.missing": "http://{host} shows the website without encryption instead of redirecting to HTTPS.",
   "web.https_redirect.message": "Hello,\n\nThe address http://{host} shows the website without encryption. Could you add a permanent (301) redirect from http:// to https:// for every page?\n\nThank you.",
   "web.https_redirect.ok": "Visitors are always sent to HTTPS.",
-  "web.https_redirect.external": "http://{host} redirects to an external HTTPS website: this does not prove HTTPS is available on the audited domain.",
+  "web.https_redirect.external": "http://{host} redirects to another website, but https://{host} refuses the connection: the audited domain has no HTTPS of its own.",
   "web.https_redirect.bad_certificate": "The HTTPS destination for {host} has an invalid or untrusted certificate.",
   "web.https_redirect.https_unavailable": "The HTTPS destination for {host} refuses connections: HTTPS is not confirmed.",
   "web.hsts.title": "HTTPS required (HSTS)",
@@ -72,7 +72,7 @@
   "web.security_txt.ok": "A valid security.txt file gives a contact.",
   "web.security_txt.invalid": "The file {url} is incomplete: {fields} is missing (fields required by RFC 9116).",
   "web.security_txt.expired": "The file {url} expired on {expires_on}: its information is no longer considered current.",
-  "web.https_redirect.external.action": "Secure HTTPS on {host} before an external redirect",
-  "web.https_redirect.external.message": "Hello,\n\nhttp://{host} redirects to an HTTPS website outside the audited domain. The destination is encrypted, but the initial request to the audited domain uses HTTP and its own HTTPS availability is unconfirmed.\n\nCould you verify that https://{host}/ responds with a valid certificate and, if the external redirect is intentional, have the redirection originate from that HTTPS URL?\n\nThank you.",
-  "web.https_redirect.external.why": "An external HTTPS redirect does not protect the initial HTTP request to the audited domain, which may be altered before redirection."
+  "web.https_redirect.external.action": "Open HTTPS on {host}",
+  "web.https_redirect.external.message": "Hello,\n\nhttp://{host} redirects to another website, but https://{host}/ refuses the connection: https:// links and bookmarks do not work.\n\nCould you open HTTPS on {host}, with a valid certificate, and have the same redirect start from https://{host}/?\n\nThank you.",
+  "web.https_redirect.external.why": "Without HTTPS on {host}, https:// addresses (links, bookmarks, browsers that try HTTPS first) lead nowhere: only the unencrypted version redirects to the other website."
 }

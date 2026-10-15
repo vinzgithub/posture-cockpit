@@ -16,12 +16,23 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.serialization import load_der_public_key
 
 from posture_cockpit.checks.records import mx_matches, parse_dkim, parse_dmarc, parse_spf
-from posture_cockpit.core import engine
+from posture_cockpit.core import engine, scoring
 from posture_cockpit.core.egress import DestinationBlocked
 from posture_cockpit.core.fixture import FixtureNetwork
 from posture_cockpit.core.model import Status
 from posture_cockpit.core.registry import Registry
-from worlds import DOMAIN, NOW, changed, dkim_key, healthy, one, run, with_certificate
+from worlds import (
+    DOMAIN,
+    NOW,
+    changed,
+    dkim_key,
+    healthy,
+    http_only_with_redirect_elsewhere,
+    one,
+    redirect_elsewhere_https_refused,
+    run,
+    with_certificate,
+)
 
 SUB = f"shop.{DOMAIN}"
 HOME = f"https://www.{DOMAIN}/"
@@ -408,15 +419,54 @@ def test_http_that_never_reaches_https_fails(http):
         (Status.FAIL, "web.https_redirect.missing")
 
 
-def test_external_https_redirect_is_not_a_verified_website():
+ELSEWHERE = {"status": 301, "headers": {"Location": "https://elsewhere.example.net/"}}
+
+
+def _redirect_elsewhere_scan(data):
+    net = FixtureNetwork(data, NOW)
+    result = asyncio.run(engine.scan(DOMAIN, [Registry.discover().get("web.https_redirect")], net, now=NOW))
+    return result.findings[0], net.asked
+
+
+def test_external_redirect_is_fine_when_the_host_also_answers_over_https():
+    """0.3.1: FAIL. example.org → https://www.example.com is a business choice: what matters for the
+    audited domain is that https://example.org/ itself answers with a valid certificate."""
+    data = changed(healthy(), http={f"http://{DOMAIN}/": ELSEWHERE, f"http://www.{DOMAIN}/": ELSEWHERE})
+    f, asked = _redirect_elsewhere_scan(data)
+    assert verdict(f) == (Status.OK, "web.https_redirect.ok")
+    assert f.outcome.evidence[DOMAIN] == \
+        f"301 http://{DOMAIN}/ → https://elsewhere.example.net/ ; https://{DOMAIN}/ tested"
+    assert f"http https://{DOMAIN}/" in asked
+    assert not any("elsewhere.example.net" in line for line in asked)  # the other site is never fetched
+
+
+def test_external_redirect_without_https_on_the_host_fails():
     """A third-party HTTPS page cannot prove HTTPS for the audited domain."""
-    data = changed(healthy(), http={
-        f"http://{DOMAIN}/": {"status": 301, "headers": {"Location": "https://elsewhere.example.net/"}},
-        f"http://www.{DOMAIN}/": {"status": 301, "headers": {"Location": "https://elsewhere.example.net/"}},
-    })
-    f = one(data, "web.https_redirect")
+    data = changed(healthy(), http={f"http://{DOMAIN}/": ELSEWHERE, f"http://www.{DOMAIN}/": ELSEWHERE})
+    del data["http"][f"https://{DOMAIN}/"]
+    f, _asked = _redirect_elsewhere_scan(data)
     assert verdict(f) == (Status.FAIL, "web.https_redirect.external")
+    assert f.outcome.params["host"] == DOMAIN
     assert f.outcome.remedy.message == "web.https_redirect.external.message"
+
+
+def test_external_redirect_with_an_untrusted_certificate_on_the_host_fails():
+    data = changed(healthy(), http={f"http://{DOMAIN}/": ELSEWHERE})
+    data["certificates"][DOMAIN]["trusted"] = False
+    f, _asked = _redirect_elsewhere_scan(data)
+    assert verdict(f) == (Status.FAIL, "web.https_redirect.bad_certificate")
+
+
+def test_external_redirect_with_a_silent_host_is_not_evaluated():
+    """The domain as it was on 13 October 2026: no answer is not a verdict."""
+    data = changed(healthy(), http={f"http://{DOMAIN}/": ELSEWHERE, f"https://{DOMAIN}/": "timeout"})
+    f, _asked = _redirect_elsewhere_scan(data)
+    assert f.status is Status.ERROR
+    # With every web and TLS check unanswered, too little is evaluated for a score (0.3.1: 67/100).
+    assessment = scoring.assess(list(run(http_only_with_redirect_elsewhere()).values()))
+    assert assessment.score is None and assessment.coverage < 0.5
+    refused = scoring.assess(list(run(redirect_elsewhere_https_refused()).values()))
+    assert (refused.score, refused.grade) == (67, "C")
 
 
 def test_https_redirect_rejects_invalid_certificate():
