@@ -69,7 +69,7 @@
   "mail.dmarc.monitoring_inherited": "The domain follows the DMARC policy of {parent}, which is in monitoring mode: fake e-mails are still delivered.",
   "mail.dmarc.monitoring_inherited.action": "Publish a DMARC policy of the domain's own",
   "mail.dmarc.monitoring_inherited.how": "The policy applied is the one of {parent}, which you may not manage. Publish a policy of this domain's own: first p=none with a report address that exists and that you read, then p=quarantine once the reports show that your real e-mail passes. If {parent} is a public suffix (such as gouv.fr), receivers that still follow RFC 7489 apply no policy at all to this domain until it has its own.",
-  "mail.dmarc.syntax": "The DMARC policy (p={policy}) holds values that do not follow the standard: {tags}. Receiving services replace them by the defaults, but the record should be fixed.",
+  "mail.dmarc.syntax": "The DMARC policy (p={policy}) contains invalid values: {tags}. How they are handled may depend on the error and the receiving mail service; the record should be corrected.",
   "mail.dmarc.syntax.action": "Fix the values of the DMARC policy",
   "mail.dmarc.syntax.how": "Accepted values: pct from 0 to 100, adkim and aspf r or s, rua and ruf \"mailto:address@domain\" addresses separated by commas. Remove or fix the tags reported in {name}.",
   "mail.dmarc.subdomains_open": "The DMARC policy (p={policy}) leaves the subdomains out (sp=none): a fake e-mail from invoices.{domain} would be delivered.",

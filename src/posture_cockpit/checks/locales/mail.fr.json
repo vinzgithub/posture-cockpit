@@ -69,7 +69,7 @@
   "mail.dmarc.monitoring_inherited": "Le domaine suit la politique DMARC de {parent}, qui est en observation : les faux e-mails sont encore livrés.",
   "mail.dmarc.monitoring_inherited.action": "Publier une politique DMARC propre au domaine",
   "mail.dmarc.monitoring_inherited.how": "La politique appliquée est celle de {parent}, que vous ne gérez peut-être pas. Publiez une politique propre à ce domaine : d'abord p=none avec une adresse de rapports qui existe et que vous consultez, puis p=quarantine quand les rapports montrent que vos vrais e-mails passent. Si {parent} est un suffixe public (comme gouv.fr), les messageries qui suivent encore la RFC 7489 n'appliquent d'ailleurs aucune politique à ce domaine tant qu'il n'a pas la sienne.",
-  "mail.dmarc.syntax": "La politique DMARC (p={policy}) contient des valeurs non conformes : {tags}. Les messageries les remplacent par les valeurs par défaut, mais l'enregistrement est à corriger.",
+  "mail.dmarc.syntax": "La politique DMARC (p={policy}) contient des valeurs non conformes : {tags}. Leur traitement peut varier selon l'anomalie et la messagerie destinataire ; l'enregistrement doit être corrigé.",
   "mail.dmarc.syntax.action": "Corriger les valeurs de la politique DMARC",
   "mail.dmarc.syntax.how": "Valeurs admises : pct de 0 à 100, adkim et aspf r ou s, rua et ruf des adresses « mailto:adresse@domaine » séparées par des virgules. Retirez ou corrigez les balises signalées dans {name}.",
   "mail.dmarc.subdomains_open": "La politique DMARC (p={policy}) exclut les sous-domaines (sp=none) : un faux e-mail venant de facture.{domain} serait livré.",

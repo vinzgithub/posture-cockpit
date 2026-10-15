@@ -100,6 +100,14 @@ def test_a_repeated_tag_is_said_to_risk_the_whole_record():
     en = finding_summary(texts(), "en", f, DOMAIN)
     assert "certaines messageries peuvent ignorer l'enregistrement entier" in fr and "RFC 6376" in fr
     assert "some receivers may ignore the whole record" in en
+    # The verdict no longer claims that every faulty value is replaced by its default (40cee65 did).
+    assert fr.startswith("La politique DMARC (p=reject) contient des valeurs non conformes : rua=mailto:b@example.org. "
+                         "Leur traitement peut varier selon l'anomalie et la messagerie destinataire ; "
+                         "l'enregistrement doit être corrigé.")
+    assert en.startswith("The DMARC policy (p=reject) contains invalid values: rua=mailto:b@example.org. "
+                         "How they are handled may depend on the error and the receiving mail service; "
+                         "the record should be corrected.")
+    assert "remplacent par les valeurs par défaut" not in fr and "replace them by the defaults" not in en
 
 
 # ----------------------------------------------- an invalid policy hides nothing
