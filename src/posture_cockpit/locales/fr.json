@@ -476,5 +476,6 @@
   "history.legacy_dns.dnssec_on": "Une signature DNSSEC a été relevée lors de cette analyse.",
   "history.legacy_dns.dnssec_off": "Aucune signature DNSSEC n'a été relevée lors de cette analyse.",
   "history.legacy_dns.dnssec_broken": "La signature DNSSEC relevée était incohérente : enregistrement DS sans clé DNSKEY.",
-  "history.legacy_dns.caa_inherited": "Des enregistrements CAA hérités ont été relevés pour ce domaine."
+  "history.legacy_dns.caa_inherited": "Des enregistrements CAA hérités ont été relevés pour ce domaine.",
+  "check.error.network_timeout": "Délai dépassé lors de la connexion au serveur : ce point n'a pas pu être évalué."
 }
