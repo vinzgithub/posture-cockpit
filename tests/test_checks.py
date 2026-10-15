@@ -130,9 +130,23 @@ def test_mta_sts_testing_mode():
     (["v=STSv1; id=20261012-01"], "mail.mta_sts.bad_record"),
     (["v=STSv1; id=2026101201", "v=STSv1; id=2026101202"], "mail.mta_sts.bad_record"),
     (["v=STSv2; id=2026101201"], "mail.mta_sts.bad_record"),
-    (["unexpected TXT"], "mail.mta_sts.bad_record"),
+    (["v=stsv1; id=2026101201"], "mail.mta_sts.bad_record"),          # §3.1: "v=STSv1" is case-sensitive
+    (["v=STSv1; ID=2026101201"], "mail.mta_sts.bad_record"),          # and so is "id="
+    # 0.3.1: bad_record. A TXT that is not an MTA-STS record is not a broken one: nothing is published.
+    (["unexpected TXT"], "mail.mta_sts.missing"),
     (["v=STSv1; id=2026101201; id=2026101202"], "mail.mta_sts.bad_record"),
-    (["v=STSv1; id=2026101201; extra=yes"], "mail.mta_sts.bad_record"),
+    (["v=STSv1; id=2026101201;"], "mail.mta_sts.enforce"),            # [sts-sep]
+    # 0.3.1: bad_record. §3.1 allows extension fields, in any order after the version.
+    (["v=STSv1; id=2026101201; extra=yes"], "mail.mta_sts.enforce"),
+    (["v=STSv1; ext=1; id=2026101201"], "mail.mta_sts.enforce"),
+    (["v=STSv1 ;\tid=2026101201"], "mail.mta_sts.enforce"),            # sts-sep = *WSP ";" *WSP
+    (["v=STSv1; id=2026101201; ext=a b"], "mail.mta_sts.bad_record"),  # no space in a value
+    (["v=STSv1; id=2026101201; =x"], "mail.mta_sts.bad_record"),
+    (["id=2026101201; v=STSv1"], "mail.mta_sts.missing"),              # does not name the protocol first
+    # 0.3.1: bad_record. Among several TXT, those not beginning with "v=STSv1;" are discarded.
+    (["google-site-verification=abc", "v=STSv1; id=2026101201"], "mail.mta_sts.enforce"),
+    (["google-site-verification=abc", "v=STSv1 ; id=2026101201"], "mail.mta_sts.bad_record"),
+    (["v=STSv1; id=2026101201", "v=STSv1; id=2026101201"], "mail.mta_sts.bad_record"),
 ])
 def test_mta_sts_dns_distinguishes_absence_from_invalid_records(records, summary):
     data = changed(healthy(), dns={f"_mta-sts.{DOMAIN} TXT": records})

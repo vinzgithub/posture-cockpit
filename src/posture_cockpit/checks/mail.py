@@ -369,14 +369,21 @@ async def mta_sts(ctx: CheckContext) -> Outcome:
     mx_hosts = await _mx_hosts(ctx)
     if not mx_hosts:
         return na("mail.no_inbound")
-    # Inspect every TXT at this dedicated name: malformed markers must not vanish.
-    records = await ctx.txt(f"_mta-sts.{ctx.domain}")
+    all_records = await ctx.txt(f"_mta-sts.{ctx.domain}")
     remedy = Remedy(30, Effort.DELEGATE, message="mail.mta_sts.message")
-    if not records:
-        return warn("mail.mta_sts.missing", remedy)
-    evidence: dict[str, object] = {"records": records}
-    if len(records) > 1 or not mta_sts_record_ok(records[0]):
-        return warn("mail.mta_sts.bad_record", remedy, evidence)  # §3.1: senders then ignore MTA-STS
+    # A TXT that does not name the protocol is not an MTA-STS record; one that does (v=STSv1,
+    # v=stsv1, v=STSv2...) must not vanish when senders cannot use it.
+    attempts = [r for r in all_records if r[:5].lower() == "v=sts"]
+    if not attempts:
+        return warn("mail.mta_sts.missing", remedy, {"ignored": all_records} if all_records else None)
+    evidence: dict[str, object] = {"records": attempts}
+    if len(attempts) < len(all_records):
+        evidence["ignored"] = [r for r in all_records if r not in attempts]
+    # §3.1: among several TXT records, those that do not begin with "v=STSv1;" are discarded;
+    # exactly one valid record must remain, otherwise senders ignore MTA-STS.
+    kept = all_records if len(all_records) == 1 else [r for r in all_records if r.startswith("v=STSv1;")]
+    if len(kept) != 1 or not mta_sts_record_ok(kept[0]):
+        return warn("mail.mta_sts.bad_record", remedy, evidence)
     host = f"mta-sts.{ctx.domain}"
     url = f"https://{host}/.well-known/mta-sts.txt"
     evidence["url"] = url
@@ -421,16 +428,24 @@ async def tls_rpt(ctx: CheckContext) -> Outcome:
     """TLS reports tell the domain when mail could not be delivered over an encrypted connection."""
     if not await _mx_hosts(ctx):
         return na("mail.no_inbound")
-    # RFC 8460 §3: non-policy TXT records MUST be discarded before
-    # counting policy records; a malformed recognised policy is still invalid.
     all_records = await ctx.txt(f"_smtp._tls.{ctx.domain}")
-    records = [record for record in all_records if record == "v=TLSRPTv1" or record.startswith("v=TLSRPTv1;")]
+    # A TXT that does not name the protocol is not a TLS-RPT record; one that does (v=TLSRPTv1,
+    # v=tlsrptv1...) is reported when senders cannot use it, not taken for absence.
+    attempts = [r for r in all_records if r[:8].lower() == "v=tlsrpt"]
     value = f"v=TLSRPTv1; rua=mailto:tls-reports@{ctx.domain}"
-    if not records:
+    if not attempts:
         return warn("mail.tls_rpt.missing", Remedy(5, Effort.EASY, dns=(DnsChange("add", "TXT", "_smtp._tls", value),),
                                                    how="mail.tls_rpt.how"), {"records": all_records})
-    problems = ["several records"] if len(records) > 1 else tls_rpt_problems(records[0])
-    if problems:  # RFC 8460 §3: senders then send no report at all
+    # RFC 8460 §3: among several TXT records, those that do not begin with "v=TLSRPTv1;" are
+    # discarded; exactly one valid record must remain, otherwise senders send no report at all.
+    kept = all_records if len(all_records) == 1 else [r for r in all_records if r.startswith("v=TLSRPTv1;")]
+    if len(kept) > 1:
+        problems = ["several records"]
+    elif kept:
+        problems = tls_rpt_problems(kept[0])
+    else:
+        problems = (tls_rpt_problems(attempts[0]) if len(attempts) == 1 else []) or ["v"]
+    if problems:
         return warn("mail.tls_rpt.invalid", Remedy(5, Effort.EASY, how="mail.tls_rpt.invalid.how"),
-                    {"records": all_records, "policies": records, "problems": problems}, problems=", ".join(problems))
-    return ok("mail.tls_rpt.present", {"record": records[0]})
+                    {"records": all_records, "policies": attempts, "problems": problems}, problems=", ".join(problems))
+    return ok("mail.tls_rpt.present", {"record": kept[0]})

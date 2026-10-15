@@ -271,13 +271,18 @@ MTA_STS_MODES = ("enforce", "testing", "none")
 MTA_STS_MAX_AGE = 31_557_600
 
 
+_STS_SEP = r"[ \t]*;[ \t]*"                                                    # sts-sep
+_STS_FIELD = r"[A-Za-z0-9][A-Za-z0-9_.-]{0,31}=[\x21-\x3a\x3c\x3e-\x7e]+"      # sts-id or sts-extension
+
+
 def mta_sts_record_ok(record: str) -> bool:
-    """``v=STSv1; id=…`` with an id of 1 to 32 letters and digits."""
-    pairs = tags(record)
-    values = dict(pairs)
-    return (len(pairs) == 2 and pairs[0] == ("v", "STSv1")
-            and pairs[1][0] == "id"
-            and bool(re.fullmatch(r"[A-Za-z0-9]{1,32}", values.get("id", ""))))
+    """§3.1: ``v=STSv1`` first (case matters), then ``;``-separated fields: exactly one ``id`` of
+    1 to 32 letters and digits, and any extension fields (``name=value``), which senders ignore."""
+    if not re.fullmatch(rf"v=STSv1(?:{_STS_SEP}{_STS_FIELD})+(?:{_STS_SEP})?", record):
+        return False
+    fields = [field.partition("=") for field in re.split(_STS_SEP, record)[1:] if field]
+    ids = [value for name, _sep, value in fields if name == "id"]
+    return len(ids) == 1 and bool(re.fullmatch(r"[A-Za-z0-9]{1,32}", ids[0]))
 
 
 @dataclass(frozen=True)
@@ -339,7 +344,7 @@ def tls_rpt_problems(record: str) -> list[str]:
     parts = record.split(";")
     if parts and not parts[-1].strip():
         parts.pop()  # one optional final field delimiter
-    if not parts or parts[0] != "v=TLSRPTv1":
+    if not parts or parts[0].rstrip(" \t") != "v=TLSRPTv1":  # field-delim = *WSP ";" *WSP
         problems.append("v")
     if not parts or any(not part.strip() for part in parts):
         problems.append("syntax")

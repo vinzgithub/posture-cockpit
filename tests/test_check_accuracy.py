@@ -291,7 +291,15 @@ def test_tls_rpt_follows_rfc_8460(records, expected):
 
 
 @pytest.mark.parametrize(("records", "expected"), [
-    (["v=TLSRPTv2; rua=mailto:tls@example.org"], (Status.WARN, "mail.tls_rpt.missing")),
+    # 0.3.1: missing. A record that names the protocol is reported when senders cannot use it.
+    (["v=TLSRPTv2; rua=mailto:tls@example.org"], (Status.WARN, "mail.tls_rpt.invalid")),
+    (["v=tlsrptv1; rua=mailto:tls@example.org"], (Status.WARN, "mail.tls_rpt.invalid")),
+    # 0.3.1: missing (single record) or "v" (one of several). RFC 8460 §3: field-delim = *WSP ";" *WSP.
+    (["v=TLSRPTv1 ; rua=mailto:tls@example.org"], (Status.OK, "mail.tls_rpt.present")),
+    (["v=TLSRPTv1;\trua=mailto:tls@example.org ;"], (Status.OK, "mail.tls_rpt.present")),
+    # ...but among several TXT, only those beginning with "v=TLSRPTv1;" are kept.
+    (["unrelated TXT", "v=TLSRPTv1 ; rua=mailto:tls@example.org"], (Status.WARN, "mail.tls_rpt.invalid")),
+    ([" v=TLSRPTv1; rua=mailto:tls@example.org"], (Status.WARN, "mail.tls_rpt.missing")),
     (["random TXT"], (Status.WARN, "mail.tls_rpt.missing")),
     (["v=TLSRPTv1; rua=mailto:one@example.org; rua=mailto:two@example.org"],
      (Status.OK, "mail.tls_rpt.present")),
