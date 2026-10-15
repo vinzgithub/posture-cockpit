@@ -94,7 +94,7 @@ Les poids, la formule de la note et les règles de couverture ne changent pas, e
 
 | Situation | 0.3.1 | 0.3.2 | Raison |
 |---|---|---|---|
-| DMARC `p=reject; pct=0` (ou tout `pct` inférieur à 100) | Conforme | À améliorer | La RFC 9989 a retiré `pct`, mais les messageries qui suivent encore la RFC 7489 n'appliquent la politique qu'à cette part des e-mails en échec |
+| DMARC `p=reject; pct=0` (ou tout `pct` inférieur à 100) | Conforme | À améliorer | La RFC 9989 a rendu `pct` historique, mais les messageries qui suivent encore la RFC 7489 ne sélectionnent pour la politique que cette part des e-mails en échec (avec `p=reject`, les autres devraient être mis en quarantaine ; avec `p=quarantine`, ils passent par le filtrage habituel) |
 | DMARC `pct=101`, `pct=abc` | Conforme | À améliorer (valeurs à corriger) | RFC 7489 §6.3 : un entier de 0 à 100 |
 | `http://` renvoie vers un autre site, `https://domaine/` répond avec un certificat valide | Critique | Conforme | Envoyer les visiteurs vers un autre site est un choix ; le HTTPS du domaine fonctionne |
 | Idem, `https://domaine/` refuse la connexion | Critique | Critique | Le domaine n'a pas son propre HTTPS |
@@ -103,3 +103,28 @@ Les poids, la formule de la note et les règles de couverture ne changent pas, e
 Les enregistrements MTA-STS et TLS-RPT sont désormais lus comme leurs RFC les écrivent (champs d'extension, espaces autour de `;`) : un enregistrement que la 0.3.1 jugeait invalide ou absent peut être reconnu valide, et inversement. Les deux restent « à améliorer » quand ils ne sont pas utilisables : la note ne bouge que lorsqu'un enregistrement devient valide.
 
 Pour un domaine dont `http://` renvoie vers un autre site et dont le HTTPS ne répond jamais, aucun contrôle web ni TLS n'est évalué : la note peut désormais être absente (couverture inférieure à 50 %) là où la 0.3.0 et la 0.3.1 en donnaient une, en comptant la redirection en échec sans aucune réponse.
+
+### DMARC : un verdict, des notes
+
+Un contrôle ne donne qu'un verdict. Pour DMARC, il est choisi dans cet ordre : politique invalide, mode d'essai `t=y`, observation `p=none`, valeurs non conformes, `pct` inférieur à 100, sous-domaines exclus (`sp=none`), enregistrements locaux ignorés. Depuis la 0.3.2, les autres anomalies de l'enregistrement sont ajoutées après le verdict, sous forme de notes, sur le plan, la page technique, l'historique et les PDF. Elles ne changent ni le statut ni la note.
+
+Sous `p=none`, l'outil ne propose plus de passer à `p=quarantine` quand aucune adresse de rapports valide n'est publiée (nouveau verdict « sans adresse de rapports valide ») : sans rapports, rien ne permet de vérifier que les vrais e-mails passent. Il n'invente pas d'adresse, et l'enregistrement qu'il propose ne reprend jamais une valeur non conforme.
+
+### Scénarios DMARC synthétiques
+
+Monde de test « sain » (100/100, A, couverture 100 %), dont seul l'enregistrement DMARC change. Ce sont des mondes de test, calculés par le moteur dans `tests/test_dmarc_scenarios.py`, pas des mesures de domaines réels.
+
+| Enregistrement DMARC | 0.3.1 | 0.3.2 | Note 0.3.1 → 0.3.2 |
+|---|---|---|---|
+| `p=reject` | Conforme | Conforme | 100 → 100 |
+| Hérité d'un suffixe public en `p=none` | À améliorer | À améliorer (conseil : politique propre au domaine) | 94 → 94 |
+| `p=reject; pct=50` | Conforme | À améliorer (rejet partiel) | 100 → 94 |
+| `p=reject; pct=0` | Conforme | À améliorer (rejet partiel) | 100 → 94 |
+| `p=quarantine; pct=0` | Conforme | À améliorer (quarantaine partielle) | 100 → 94 |
+| `p=reject; pct=abc` | Conforme | À améliorer (valeurs non conformes) | 100 → 94 |
+| `p=none; pct=abc` | À améliorer (observation) | À améliorer (observation sans rapports) + note « valeurs non conformes » | 94 → 94 |
+| `p=reject; t=y; pct=101` | À améliorer (mode d'essai) | À améliorer (mode d'essai) + note « valeurs non conformes » | 94 → 94 |
+| `p=reject; t=y; pct=50` | À améliorer (mode d'essai) | À améliorer (mode d'essai) + note « rejet partiel » | 94 → 94 |
+| `p=quarantine; t=y; pct=50` | À améliorer (mode d'essai) | À améliorer (mode d'essai) + note « quarantaine partielle » | 94 → 94 |
+| `p=reject; pct=50; sp=none` | À améliorer (sous-domaines exclus) | À améliorer (rejet partiel) + note « sous-domaines exclus » | 94 → 94 |
+| `p=none` sans `rua` | À améliorer (observation) | À améliorer (observation sans rapports) | 94 → 94 |

@@ -6,8 +6,11 @@ Corrections from the audit of 0.3.1. No database migration, no configuration cha
 
 ### Checks
 
-- **DMARC `pct`** is read again. 0.3.0 ignored it because RFC 9989 removed it, so `pct=0` was reported as an enforced policy; receivers that still follow RFC 7489 apply it. A value below 100 is now "to improve" (`mail.dmarc.partial`, advice: remove `pct`, use `t=y` for a gradual roll-out), and a value that is not 1 to 3 digits up to 100 is a syntax warning, as in 0.2.0.
+- **DMARC `pct`** is read again. 0.3.0 ignored it because RFC 9989 made it historic, so `pct=0` was reported as an enforced policy; receivers that still follow RFC 7489 apply it. A value below 100 is now "to improve" (`mail.dmarc.partial` or `mail.dmarc.partial_reject`, advice: remove `pct`), and a value that is not 1 to 3 digits up to 100 is a syntax warning, as in 0.2.0.
 - **DMARC inherited from a parent in monitoring (`p=none`)**: the advice no longer says that no local record is needed. The parent (a public suffix such as `gouv.fr`) may not be the owner's to change: the remedy publishes a policy of the domain's own.
+- **DMARC, one verdict and notes**: the verdict is chosen in a fixed order (invalid policy, `t=y`, `p=none`, faulty values, `pct`, `sp=none`, local records ignored); the other anomalies of the record are shown after it as notes on every page and report (0.3.1 hid `pct=abc` behind `p=none` and `pct=101` behind `t=y`). Notes are stored as translation keys in the evidence of the finding; they change neither the status nor the score.
+- **DMARC under `p=none`**: the record offered for `p=quarantine` is rebuilt from the valid tags only (0.3.1 copied `pct=abc` or `rua=d@x.org` into it); without a valid report address, the new verdict "monitoring without reports" offers no record and no made-up address: reports first. The advice asks to check that reports arrive and are read, and recalls that an address on another domain needs its authorization (`_report._dmarc`).
+- **DMARC wording**: `pct` after RFC 7489 §6.6.4 (with `p=reject`, the other failing mail should be quarantined, new verdict text `mail.dmarc.partial_reject`; with `p=quarantine`, usual filtering), historic in RFC 9989; `t=y` gives the RFC 9989 level and says that RFC 7489 receivers ignore it.
 - **HTTP redirect to another site**: 0.3.0 failed every such redirect, even when the audited host also answers over HTTPS (`example.org` → `https://www.example.com`). `https://host/` itself is now requested, with certificate verification and without following redirects (the other site is never fetched): a valid answer is compliant, a refused connection fails (`web.https_redirect.external`, reworded), an untrusted certificate fails, a timeout is not evaluated.
 - **MTA-STS record** read as RFC 8461 §3.1 writes it: extension fields allowed before or after the `id`, spaces around `;`, one final `;`; `v=STSv1` and `id=` are case-sensitive, a second `id` is refused; among several TXT, those not beginning with `v=STSv1;` are discarded; a TXT that does not name the protocol means "missing", not "invalid record".
 - **TLS-RPT record** read as RFC 8460 §3 writes it: spaces allowed after `v=TLSRPTv1` (`v=TLSRPTv1 ; rua=…` was reported as missing); the discard rule applies only among several TXT; a record naming the protocol in another case or version is reported as invalid instead of missing.
@@ -27,7 +30,7 @@ Corrections from the audit of 0.3.1. No database migration, no configuration cha
 
 - The checks of the technical page and of a stored scan come from one template; the two history style blocks are merged.
 - Timeouts: a real HTTP reply that does not come in time (read, write or pool timeout) is now reported as a timeout ("Délai dépassé…"), like a connection that times out; 0.3.1 reported it as a plain network error. The recorded timeouts of the tests raise the same error.
-- 51 of the new or updated tests fail on 0.3.1.
+- Synthetic DMARC scenarios (`tests/test_dmarc_scenarios.py`) back the table of SCORING §7.
 
 ## 0.3.1 — 2026-10-15
 
