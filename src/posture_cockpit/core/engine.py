@@ -22,6 +22,7 @@ from .egress import DestinationBlocked
 from .extension import Check, CheckContext
 from .model import Finding, Outcome, Status
 from .network import Network, NetworkError
+from .errors import ConnectionReset, ConnectionTimedOut, Refused, TLSHandshakeError
 
 log = logging.getLogger(__name__)
 
@@ -75,7 +76,11 @@ async def run_check(check: Check, ctx: CheckContext, timeout: float) -> Finding:
         outcome = Outcome(Status.ERROR, f"check.error.blocked.{e.reason}",
                           {"host": e.host, "address": str(e.address), "port": e.port}, evidence={"error": str(e)})
     except NetworkError as e:
-        outcome = Outcome(Status.ERROR, "check.error.network", evidence={"error": str(e)})
+        reason = ("timeout" if isinstance(e, ConnectionTimedOut) else
+                  "reset" if isinstance(e, ConnectionReset) else
+                  "refused" if isinstance(e, Refused) else
+                  "tls" if isinstance(e, TLSHandshakeError) else "network")
+        outcome = Outcome(Status.ERROR, f"check.error.{reason}", evidence={"error": str(e)})
     except Exception as e:  # a bug in a check must not break the scan
         log.exception("check %s failed on %s", check.id, ctx.domain)
         outcome = Outcome(Status.ERROR, "check.error.internal", evidence={"error": f"{e.__class__.__name__}: {e}"})
