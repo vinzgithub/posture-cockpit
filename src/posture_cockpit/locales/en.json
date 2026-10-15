@@ -476,5 +476,6 @@
   "history.legacy_dns.dnssec_on": "A DNSSEC signature was observed during this scan.",
   "history.legacy_dns.dnssec_off": "No DNSSEC signature was observed during this scan.",
   "history.legacy_dns.dnssec_broken": "The observed DNSSEC configuration was inconsistent: DS record without a DNSKEY.",
-  "history.legacy_dns.caa_inherited": "Inherited CAA records were observed for this domain."
+  "history.legacy_dns.caa_inherited": "Inherited CAA records were observed for this domain.",
+  "check.error.network_timeout": "The connection to the server timed out: this check could not be evaluated."
 }
