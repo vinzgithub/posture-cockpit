@@ -108,7 +108,7 @@ Pour un domaine dont `http://` renvoie vers un autre site et dont le HTTPS ne r�
 
 Un contrôle ne donne qu'un verdict. Pour DMARC, il est choisi dans cet ordre : politique invalide, mode d'essai `t=y`, observation `p=none`, valeurs non conformes, `pct` inférieur à 100, sous-domaines exclus (`sp=none`), enregistrements locaux ignorés. Depuis la 0.3.2, les autres anomalies de l'enregistrement sont ajoutées après le verdict, sous forme de notes, sur le plan, la page technique, l'historique et les PDF. Elles ne changent ni le statut ni la note.
 
-Sous `p=none`, l'outil ne propose plus de passer à `p=quarantine` quand aucune adresse de rapports valide n'est publiée (nouveau verdict « sans adresse de rapports valide ») : sans rapports, rien ne permet de vérifier que les vrais e-mails passent. Il n'invente pas d'adresse, et l'enregistrement qu'il propose ne reprend jamais une valeur non conforme.
+Sous `p=none`, l'outil ne propose plus de passer à `p=quarantine` quand aucune adresse de rapports valide n'est publiée (nouveau verdict « sans adresse de rapports valide ») : sans rapports, rien ne permet de vérifier que les vrais e-mails passent. Il n'invente ni ne choisit d'adresse, et l'enregistrement qu'il propose est une quarantaine complète : sans valeur non conforme, sans balise répétée, sans `t` ni `pct` ; `sp` et `np` sont repris tels quels. Une balise répétée est signalée : la syntaxe DMARC l'interdit et certaines messageries peuvent ignorer l'enregistrement entier (statut et note inchangés en 0.3.2, étude prévue en 0.4).
 
 ### Scénarios DMARC synthétiques
 

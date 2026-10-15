@@ -56,8 +56,8 @@
   "mail.dmarc.multiple.how": "Delete the extra _dmarc records so that only one is left.",
   "mail.dmarc.monitoring": "DMARC is in monitoring mode (p=none): fake e-mails are still delivered.",
   "mail.dmarc.monitoring.action": "Move DMARC to quarantine",
-  "mail.dmarc.monitoring.how": "Before publishing this record: check that the DMARC reports do reach the address given and that someone reads them (if it is on another domain, that domain must allow the reports with a _report._dmarc record); then check in those reports that your real e-mail (mailbox, newsletter, invoicing) passes. Only then do fakes go to the recipients' spam folder.",
-  "mail.dmarc.invalid": "The DMARC policy of {name} cannot be read: the value of \"p\" is missing or unknown.",
+  "mail.dmarc.monitoring.how": "Before publishing this record: check that the DMARC reports do reach the address given and that someone reads them (if it is on another domain, that domain must allow the reports with a _report._dmarc record); then check in those reports that your real e-mail (mailbox, newsletter, invoicing) passes. Only then do fakes go to the recipients' spam folder. The record offered keeps neither t=y nor pct: with them, the quarantine would not apply to every failing e-mail. Without an sp value, the quarantine also applies to the subdomains: check their mail in the reports too. An sp or np value already there is kept as written.",
+  "mail.dmarc.invalid": "The DMARC policy of {name} cannot be read: unknown policy value ({tags}).",
   "mail.dmarc.invalid.action": "Fix the DMARC policy",
   "mail.dmarc.partial": "At receivers that still follow RFC 7489, only {pct}% of the e-mails failing DMARC are selected for quarantine (\"pct\" tag); the others go through their usual filtering.",
   "mail.dmarc.partial.action": "Quarantine every failing e-mail",
@@ -123,7 +123,7 @@
   "mail.dmarc.testing.action": "Take DMARC out of testing mode",
   "mail.dmarc.testing.how": "With t=y, receivers that follow RFC 9989 apply the policy one level below (reject becomes quarantine, quarantine becomes none). Receivers that still follow RFC 7489 do not know t=y: they apply the declared policy, limited by \"pct\" when present. Once the reports show that your real e-mail passes, remove t=y.",
   "mail.dmarc.existence_unknown": "DNS could not establish whether the domain exists: the np policy inherited from {parent} cannot be assessed reliably.",
-  "mail.dmarc.invalid_monitoring": "DMARC policy at {name} has an invalid policy value: reporting-only processing may remain available.",
+  "mail.dmarc.invalid_monitoring": "DMARC policy at {name} has an invalid policy value ({tags}): reporting-only processing may remain available.",
   "mail.dmarc.monitoring_no_reports": "DMARC is in monitoring mode (p=none) without a valid report address: fake e-mails are still delivered, and no report can show whether your real e-mail passes.",
   "mail.dmarc.monitoring_no_reports.action": "Get DMARC reports before tightening",
   "mail.dmarc.monitoring_no_reports.how": "1. In {name}, add a valid report address, as rua=mailto:address@domain, and fix the values reported. That mailbox must exist, work and be read; if it is on another domain, that domain must allow the reports with a _report._dmarc record. 2. Wait for a few days of reports and check that your real e-mail (mailbox, newsletter, invoicing) passes. 3. Only then move to p=quarantine.",
@@ -133,5 +133,6 @@
   "mail.dmarc.note.partial": "At receivers that still follow RFC 7489, pct={pct} also limits the quarantine to {pct}% of the failing e-mails; the others go through the usual filtering.",
   "mail.dmarc.note.partial_reject": "At receivers that still follow RFC 7489, pct={pct} also limits the rejection to {pct}% of the failing e-mails; the others should be quarantined.",
   "mail.dmarc.note.subdomains_open": "The subdomains are also left out of the policy (sp=none): a fake e-mail from invoices.{domain} would be delivered.",
-  "mail.dmarc.note.multiple_local": "{name} also has several DMARC policies, which receivers ignore: the one of {parent} applies."
+  "mail.dmarc.note.multiple_local": "{name} also has several DMARC policies, which receivers ignore: the one of {parent} applies.",
+  "mail.dmarc.note.repeated": "The record {name} has the same tag more than once ({tags}): the syntax of DMARC records forbids it (RFC 6376 §3.2), and some receivers may ignore the whole record."
 }

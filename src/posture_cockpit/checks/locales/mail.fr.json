@@ -56,8 +56,8 @@
   "mail.dmarc.multiple.how": "Supprimez les enregistrements _dmarc en trop pour n'en garder qu'un.",
   "mail.dmarc.monitoring": "DMARC est en observation (p=none) : les faux e-mails sont encore livrés.",
   "mail.dmarc.monitoring.action": "Passer DMARC en quarantaine",
-  "mail.dmarc.monitoring.how": "Avant de publier cet enregistrement : vérifiez que les rapports DMARC arrivent bien à l'adresse indiquée et que quelqu'un les lit (si elle est sur un autre domaine, ce domaine doit autoriser l'envoi des rapports par un enregistrement _report._dmarc) ; puis vérifiez dans ces rapports que vos vrais e-mails (messagerie, lettre d'information, facturation) passent bien. Ensuite seulement, les faux iront dans les indésirables des destinataires.",
-  "mail.dmarc.invalid": "La politique DMARC de {name} est illisible : la valeur de « p » est absente ou inconnue.",
+  "mail.dmarc.monitoring.how": "Avant de publier cet enregistrement : vérifiez que les rapports DMARC arrivent bien à l'adresse indiquée et que quelqu'un les lit (si elle est sur un autre domaine, ce domaine doit autoriser l'envoi des rapports par un enregistrement _report._dmarc) ; puis vérifiez dans ces rapports que vos vrais e-mails (messagerie, lettre d'information, facturation) passent bien. Ensuite seulement, les faux iront dans les indésirables des destinataires. L'enregistrement proposé ne reprend ni t=y ni pct : avec eux, la quarantaine ne s'appliquerait pas à tous les e-mails en échec. Sans valeur sp, la quarantaine s'applique aussi aux sous-domaines : vérifiez également leurs envois dans les rapports. Une valeur sp ou np déjà présente est reprise telle quelle.",
+  "mail.dmarc.invalid": "La politique DMARC de {name} est illisible : valeur de politique inconnue ({tags}).",
   "mail.dmarc.invalid.action": "Corriger la politique DMARC",
   "mail.dmarc.partial": "Chez les messageries qui suivent encore la RFC 7489, seuls {pct} % des e-mails en échec DMARC sont sélectionnés pour la quarantaine (balise « pct ») ; les autres passent par leur filtrage habituel.",
   "mail.dmarc.partial.action": "Appliquer la quarantaine à tous les e-mails en échec",
@@ -123,7 +123,7 @@
   "mail.dmarc.testing.action": "Sortir DMARC du mode d'essai",
   "mail.dmarc.testing.how": "Avec t=y, les messageries qui suivent la RFC 9989 appliquent la politique d'un niveau en dessous (reject devient quarantine, quarantine devient none). Celles qui suivent encore la RFC 7489 ne connaissent pas t=y : elles appliquent la politique déclarée, limitée par « pct » s'il est présent. Quand les rapports montrent que vos vrais e-mails passent, retirez t=y.",
   "mail.dmarc.existence_unknown": "Impossible de confirmer si le domaine existe dans le DNS : la politique np de {parent} ne peut pas être évaluée avec certitude.",
-  "mail.dmarc.invalid_monitoring": "La politique DMARC de {name} contient une valeur de politique invalide : seule la collecte des rapports peut être retenue.",
+  "mail.dmarc.invalid_monitoring": "La politique DMARC de {name} contient une valeur de politique invalide ({tags}) : seule la collecte des rapports peut être retenue.",
   "mail.dmarc.monitoring_no_reports": "DMARC est en observation (p=none) sans adresse de rapports valide : les faux e-mails sont encore livrés, et aucun rapport ne permet de vérifier vos vrais envois.",
   "mail.dmarc.monitoring_no_reports.action": "Recevoir les rapports DMARC avant de renforcer",
   "mail.dmarc.monitoring_no_reports.how": "1. Dans {name}, ajoutez une adresse de rapports valide, de la forme rua=mailto:adresse@domaine, et corrigez les valeurs signalées. Cette boîte doit exister, fonctionner et être consultée ; si elle est sur un autre domaine, ce domaine doit autoriser l'envoi des rapports par un enregistrement _report._dmarc. 2. Attendez quelques jours de rapports et vérifiez que vos vrais e-mails (messagerie, lettre d'information, facturation) passent. 3. Ensuite seulement, passez à p=quarantine.",
@@ -133,5 +133,6 @@
   "mail.dmarc.note.partial": "Chez les messageries qui suivent encore la RFC 7489, pct={pct} limite aussi la quarantaine à {pct} % des e-mails en échec ; les autres passent par le filtrage habituel.",
   "mail.dmarc.note.partial_reject": "Chez les messageries qui suivent encore la RFC 7489, pct={pct} limite aussi le rejet à {pct} % des e-mails en échec ; les autres devraient être mis en quarantaine.",
   "mail.dmarc.note.subdomains_open": "Les sous-domaines sont aussi exclus de la politique (sp=none) : un faux e-mail venant de facture.{domain} serait livré.",
-  "mail.dmarc.note.multiple_local": "{name} contient aussi plusieurs politiques DMARC, ignorées par les messageries : c'est celle de {parent} qui s'applique."
+  "mail.dmarc.note.multiple_local": "{name} contient aussi plusieurs politiques DMARC, ignorées par les messageries : c'est celle de {parent} qui s'applique.",
+  "mail.dmarc.note.repeated": "L'enregistrement {name} contient plusieurs fois la même balise ({tags}) : la syntaxe des enregistrements DMARC l'interdit (RFC 6376 §3.2), et certaines messageries peuvent ignorer l'enregistrement entier."
 }

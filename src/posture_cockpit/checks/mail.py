@@ -290,9 +290,20 @@ async def dmarc(ctx: CheckContext) -> Outcome:
     # shown after the verdict on every page and report (i18n.finding_summary): none disappears
     # behind the verdict. Notes are translation keys with their parameters, never sentences.
     enforced = policy in ("quarantine", "reject")
+    # An invalid policy (p, sp, np) is named by the verdict itself: the note lists the other faulty values.
+    policy_errors = tuple(e for e in record.errors if e[0] in {"p", "sp", "np"})
+    invalid_policy = policy is None or record.policy is None or bool(policy_errors)
+    repeated = _repeated_tags(valid[0])
+    # The values the syntax note lists: not those the verdict names, not the repeated tags (their own note).
+    other_errors = tuple(e for e in record.errors if e not in policy_errors and e[0] not in repeated)
     anomalies: dict[str, tuple[str, dict[str, str | int]]] = {}
-    if record.errors:
-        anomalies["syntax"] = ("mail.dmarc.note.syntax", {"name": f"_dmarc.{owner}", "tags": _tags_text(record.errors)})
+    if other_errors:
+        anomalies["syntax"] = ("mail.dmarc.note.syntax", {"name": f"_dmarc.{owner}", "tags": _tags_text(other_errors)})
+    if repeated:
+        # RFC 9989 §4.7: DMARC records follow the tag-value syntax of DKIM, where a repeated tag makes
+        # the whole tag-list invalid (RFC 6376 §3.2). How receivers treat it varies: said, not scored
+        # differently in 0.3.2 (a study is planned for 0.4).
+        anomalies["repeated"] = ("mail.dmarc.note.repeated", {"name": f"_dmarc.{owner}", "tags": ", ".join(repeated)})
     if enforced and record.pct < 100:  # pct only limits an enforced policy (RFC 7489 §6.6.4)
         anomalies["partial"] = ("mail.dmarc.note.partial_reject" if policy == "reject" else "mail.dmarc.note.partial",
                                 {"pct": record.pct})
@@ -309,19 +320,16 @@ async def dmarc(ctx: CheckContext) -> Outcome:
             evidence["notes"] = notes
         return evidence
 
-    invalid_policy = policy is None or record.policy is None or any(
-        name in {"p", "sp", "np"} for name, _value in record.errors
-    )
     if invalid_policy:
-        noted("syntax")  # the verdict replaces the whole record: its faulty values go with it
         # RFC 9989 §4.10.1: invalid p/sp/np disables enforcement even when
         # p=reject looks usable. A valid rua allows reporting-only treatment.
+        policy_tags = _tags_text(policy_errors) or "p"
         if record.rua:
-            return warn("mail.dmarc.invalid_monitoring", Remedy(10, Effort.EASY), evidence,
-                        name=f"_dmarc.{owner}")
+            return warn("mail.dmarc.invalid_monitoring", Remedy(10, Effort.EASY), noted("invalid"),
+                        name=f"_dmarc.{owner}", tags=policy_tags)
         return fail("mail.dmarc.invalid", Remedy(10, Effort.EASY, how="mail.dmarc.how", dns=() if inherited else (
             DnsChange("delete", "TXT", "_dmarc", valid[0]), DnsChange("add", "TXT", "_dmarc", first_step))),
-            evidence, name=f"_dmarc.{owner}")
+            noted("invalid"), name=f"_dmarc.{owner}", tags=policy_tags)
     if record.testing and policy != "none":
         # t=y requests one level less enforcement (reject -> quarantine;
         # quarantine -> none), not full protection at the declared level.
@@ -339,14 +347,15 @@ async def dmarc(ctx: CheckContext) -> Outcome:
                         Remedy(10, Effort.EASY, how="mail.dmarc.monitoring_inherited.how",
                                dns=(DnsChange("add", "TXT", "_dmarc", first_step),)),
                         noted("monitoring"), **params)
-        if not record.rua:
-            # No valid report address: nothing can show that legitimate mail passes, so no stricter
-            # record is offered, and no address is made up. Reports first, then quarantine.
+        # Next step once the reports show that legitimate mail passes: quarantine. Decided on the record
+        # that would be published, not on the current one.
+        stricter = stricter_dmarc(valid[0], record)
+        if stricter is None:
+            # No report address that can be kept (none valid, or a repeated rua): nothing can show that
+            # legitimate mail passes, so no stricter record is offered, and no address is chosen or made up.
             return warn("mail.dmarc.monitoring_no_reports",
                         Remedy(10, Effort.MEDIUM, how="mail.dmarc.monitoring_no_reports.how"),
                         noted("monitoring"), name=f"_dmarc.{owner}", **params)
-        # Next step once the reports show that legitimate mail passes: quarantine, from the valid tags only.
-        stricter = stricter_dmarc(valid[0], record)
         return warn("mail.dmarc.monitoring", Remedy(10, Effort.MEDIUM, how="mail.dmarc.monitoring.how",
                                                     dns=(DnsChange("delete", "TXT", "_dmarc", valid[0]),
                                                          DnsChange("add", "TXT", "_dmarc", stricter))),
@@ -370,25 +379,36 @@ async def dmarc(ctx: CheckContext) -> Outcome:
     return ok("mail.dmarc.enforced_inherited" if inherited else "mail.dmarc.enforced", evidence, **params)
 
 
-def stricter_dmarc(text: str, record: Dmarc) -> str:
-    """``text`` with p=quarantine, rebuilt from its valid tags only: a record the plan asks to
-    publish never copies a faulty value. rua and ruf keep their valid addresses, a repeated tag
-    and a tag with a faulty value are left out, v=DMARC1 and p come first."""
+def stricter_dmarc(text: str, record: Dmarc) -> str | None:
+    """The record to publish after ``text`` (p=none): a full quarantine, rebuilt from the valid tags.
+
+    - v=DMARC1 and p=quarantine come first;
+    - t and pct are never kept: t=y would turn the quarantine into none (RFC 9989 §4.7), pct below
+      100 would limit it (RFC 7489 §6.6.4), and t=n or pct=100 are the defaults;
+    - a repeated tag is left out entirely: no choice is made between two values;
+    - a tag with a faulty value is left out; rua and ruf keep their valid addresses;
+    - sp, np and the other valid tags are kept as written.
+
+    None when no report address would remain: the step relies on reports to check the real mail."""
     faulty = {name for name, _value in record.errors}
+    repeated = set(_repeated_tags(text))
     parts = ["v=DMARC1", "p=quarantine"]
-    seen = {"v", "p"}
     for name, value in tags(text):
-        if name in seen:
+        if name in ("v", "p", "t", "pct") or name in repeated:
             continue
-        seen.add(name)
         if name in ("rua", "ruf"):
-            good = [uri for uri in (u.strip() for u in record.tags[name].split(",")) if uri
-                    and (name, uri) not in record.errors]
+            good = [uri for uri in (u.strip() for u in value.split(",")) if uri and (name, uri) not in record.errors]
             if good:
                 parts.append(f"{name}={','.join(good)}")
         elif name not in faulty:
             parts.append(f"{name}={value}")
-    return "; ".join(parts)
+    return "; ".join(parts) if any(part.startswith("rua=") for part in parts) else None
+
+
+def _repeated_tags(text: str) -> list[str]:
+    """Tag names that appear more than once in a record, in order."""
+    names = [name for name, _value in tags(text)]
+    return [name for i, name in enumerate(names) if names.count(name) > 1 and name not in names[:i]]
 
 
 # ------------------------------------------------------------------- DKIM

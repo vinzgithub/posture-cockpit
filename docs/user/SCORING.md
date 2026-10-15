@@ -108,7 +108,7 @@ For a domain whose `http://` redirects to another site and whose own HTTPS never
 
 A check gives one verdict. For DMARC, it is chosen in this order: invalid policy, testing mode `t=y`, monitoring `p=none`, values that do not follow the standard, `pct` below 100, subdomains left out (`sp=none`), local records ignored. Since 0.3.2, the other anomalies of the record are added after the verdict as notes, on the plan, the technical page, the history and the PDF reports. They change neither the status nor the score.
 
-Under `p=none`, the tool no longer offers to move to `p=quarantine` when no valid report address is published (new verdict "without a valid report address"): without reports, nothing can show that the real e-mail passes. It makes up no address, and the record it offers never carries over a faulty value.
+Under `p=none`, the tool no longer offers to move to `p=quarantine` when no valid report address is published (new verdict "without a valid report address"): without reports, nothing can show that the real e-mail passes. It neither makes up nor chooses an address, and the record it offers is a full quarantine: no faulty value, no repeated tag, no `t` or `pct`; `sp` and `np` are kept as written. A repeated tag is reported: the DMARC syntax forbids it and some receivers may ignore the whole record (status and score unchanged in 0.3.2, a study is planned for 0.4).
 
 ### Synthetic DMARC scenarios
 
