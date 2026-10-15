@@ -42,7 +42,7 @@ from cryptography.x509.oid import NameOID
 
 from .. import __version__
 from .egress import INTERNET, Address, DestinationBlocked, EgressPolicy, parse_address
-from .errors import NetworkError, Refused
+from .errors import ConnectionReset, ConnectionTimedOut, NetworkError, Refused, TLSHandshakeError
 
 USER_AGENT = f"PostureCockpit/{__version__} (+https://github.com/vinzgithub/posture-cockpit)"
 MAX_BODY = 64 * 1024  # bytes of a web page kept for the checks
@@ -185,7 +185,7 @@ class LiveNetwork:
             return await asyncio.wait_for(make(), self.limits.operation_seconds)
         except TimeoutError:
             seconds = self.limits.operation_seconds
-            raise NetworkError(f"{' '.join(map(str, key))}: no answer in {seconds:g} s") from None
+            raise ConnectionTimedOut(f"{' '.join(map(str, key))}: no answer in {seconds:g} s") from None
 
     def close(self) -> None:
         """Cancels the work still running once the scan is over (left by checks that timed out)."""
@@ -202,7 +202,8 @@ class LiveNetwork:
         except dns.resolver.NXDOMAIN:
             return DnsAnswer((), exists=False)
         except dns.exception.DNSException as e:  # timeout, no server answering, malformed name…
-            raise NetworkError(f"DNS {rtype} {name}: {e.__class__.__name__}") from e
+            raise (ConnectionTimedOut if isinstance(e, dns.exception.Timeout) else NetworkError)(
+                f"DNS {rtype} {name}: {e.__class__.__name__}") from e
         if answer.rrset is None:
             return DnsAnswer(())
         return DnsAnswer(tuple(_record_text(r) for r in answer.rrset))
@@ -260,6 +261,8 @@ class LiveNetwork:
                 failure = e
         if isinstance(failure, ConnectionRefusedError):
             raise Refused(f"TLS {host}:{port}: connection refused")
+        if isinstance(failure, TimeoutError):
+            raise ConnectionTimedOut(f"TLS {host}:{port}: connection timed out")
         raise NetworkError(f"TLS {host}:{port}: {failure or 'unreachable'}")
 
     def _verified_context(self) -> ssl.SSLContext:
@@ -291,8 +294,10 @@ class LiveNetwork:
             writer = await self._connect(host, port, context)
         except ssl.SSLCertVerificationError:
             raise
-        except (ssl.SSLError, ConnectionResetError) as e:
-            raise NetworkError(f"TLS {host}:{port}: {e}") from e
+        except ConnectionResetError as e:
+            raise ConnectionReset(f"TLS {host}:{port}: connection reset") from e
+        except ssl.SSLError as e:
+            raise TLSHandshakeError(f"TLS {host}:{port}: {e}") from e
         try:
             ssl_object = writer.get_extra_info("ssl_object")
             der = ssl_object.getpeercert(binary_form=True)
@@ -363,6 +368,10 @@ class LiveNetwork:
                     raise NetworkError(f"HTTP {url}: {e.__class__.__name__}") from e
         if failure is not None and _caused_by(failure, ConnectionRefusedError):
             raise Refused(f"HTTP {url}: connection refused")
+        if isinstance(failure, httpx.ConnectTimeout) or (failure and _caused_by(failure, TimeoutError)):
+            raise ConnectionTimedOut(f"HTTP {url}: connection timed out")
+        if failure is not None and _caused_by(failure, ConnectionResetError):
+            raise ConnectionReset(f"HTTP {url}: connection reset")
         raise NetworkError(f"HTTP {url}: {failure.__class__.__name__ if failure else 'unreachable'}")
 
 
