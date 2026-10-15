@@ -269,7 +269,7 @@ def test_a_check_that_times_out_does_not_cancel_shared_work_for_the_others():
 
 
 @pytest.mark.parametrize(("error_type", "expected"), [
-    ("ConnectionTimedOut", "check.error.timeout"),
+    ("ConnectionTimedOut", "check.error.network_timeout"),
     ("ConnectionReset", "check.error.reset"),
     ("Refused", "check.error.refused"),
     ("TLSHandshakeError", "check.error.tls"),
