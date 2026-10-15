@@ -129,7 +129,7 @@
   "mail.dmarc.monitoring_no_reports.how": "1. In {name}, add a valid report address, as rua=mailto:address@domain, and fix the values reported. That mailbox must exist, work and be read; if it is on another domain, that domain must allow the reports with a _report._dmarc record. 2. Wait for a few days of reports and check that your real e-mail (mailbox, newsletter, invoicing) passes. 3. Only then move to p=quarantine.",
   "mail.dmarc.partial_reject": "At receivers that still follow RFC 7489, only {pct}% of the e-mails failing DMARC are selected for rejection (\"pct\" tag); the others should be quarantined.",
   "mail.dmarc.partial_reject.action": "Reject every failing e-mail",
-  "mail.dmarc.note.syntax": "{name} also has values that do not follow the standard, replaced by the defaults: {tags}.",
+  "mail.dmarc.note.syntax": "The record {name} also has values that do not follow the standard, replaced by the defaults: {tags}.",
   "mail.dmarc.note.partial": "At receivers that still follow RFC 7489, pct={pct} also limits the quarantine to {pct}% of the failing e-mails; the others go through the usual filtering.",
   "mail.dmarc.note.partial_reject": "At receivers that still follow RFC 7489, pct={pct} also limits the rejection to {pct}% of the failing e-mails; the others should be quarantined.",
   "mail.dmarc.note.subdomains_open": "The subdomains are also left out of the policy (sp=none): a fake e-mail from invoices.{domain} would be delivered.",

@@ -82,6 +82,10 @@ def test_an_inherited_policy_shows_the_faulty_value_of_the_parent():
         {"key": "mail.dmarc.note.syntax", "params": {"name": f"_dmarc.{DOMAIN}", "tags": "pct=abc"}}]
     # The recommendation is still a policy of the subdomain's own.
     assert proposed(f) == [f"v=DMARC1; p=none; rua=mailto:dmarc@{SHOP}"]
+    shown = finding_summary(texts(), "fr", f, SHOP)
+    assert shown.startswith(f"Le domaine suit la politique DMARC de {DOMAIN}")
+    assert f"L'enregistrement _dmarc.{DOMAIN} contient aussi des valeurs non conformes" in shown
+    assert shown.endswith("pct=abc.")
 
 
 def test_notes_are_translation_keys_not_sentences():

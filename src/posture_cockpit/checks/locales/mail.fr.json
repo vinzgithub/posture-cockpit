@@ -129,7 +129,7 @@
   "mail.dmarc.monitoring_no_reports.how": "1. Dans {name}, ajoutez une adresse de rapports valide, de la forme rua=mailto:adresse@domaine, et corrigez les valeurs signalées. Cette boîte doit exister, fonctionner et être consultée ; si elle est sur un autre domaine, ce domaine doit autoriser l'envoi des rapports par un enregistrement _report._dmarc. 2. Attendez quelques jours de rapports et vérifiez que vos vrais e-mails (messagerie, lettre d'information, facturation) passent. 3. Ensuite seulement, passez à p=quarantine.",
   "mail.dmarc.partial_reject": "Chez les messageries qui suivent encore la RFC 7489, seuls {pct} % des e-mails en échec DMARC sont sélectionnés pour le rejet (balise « pct ») ; les autres devraient être mis en quarantaine.",
   "mail.dmarc.partial_reject.action": "Appliquer le rejet à tous les e-mails en échec",
-  "mail.dmarc.note.syntax": "{name} contient aussi des valeurs non conformes, remplacées par les valeurs par défaut : {tags}.",
+  "mail.dmarc.note.syntax": "L'enregistrement {name} contient aussi des valeurs non conformes, remplacées par les valeurs par défaut : {tags}.",
   "mail.dmarc.note.partial": "Chez les messageries qui suivent encore la RFC 7489, pct={pct} limite aussi la quarantaine à {pct} % des e-mails en échec ; les autres passent par le filtrage habituel.",
   "mail.dmarc.note.partial_reject": "Chez les messageries qui suivent encore la RFC 7489, pct={pct} limite aussi le rejet à {pct} % des e-mails en échec ; les autres devraient être mis en quarantaine.",
   "mail.dmarc.note.subdomains_open": "Les sous-domaines sont aussi exclus de la politique (sp=none) : un faux e-mail venant de facture.{domain} serait livré.",
