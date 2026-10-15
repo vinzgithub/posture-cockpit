@@ -87,3 +87,19 @@ Les contrôles critiques forment les **priorités**, les contrôles à améliore
 Les poids et la formule de la note ne changent pas. Les analyses déjà enregistrées ont été recalculées avec ces règles lors de la mise à jour : leur note chiffrée ne change pas quand leur couverture atteint 50 % ; en dessous, elles deviennent « Non évalué » ; un A obtenu avec moins de 90 % de couverture devient B. Une copie de la base d'avant la mise à jour est conservée dans `backups/`.
 
 Les corrections de contrôles de la 0.2.0 (DMARC, SPF, cadrage, CSP… voir le [CHANGELOG](../../CHANGELOG.md)) peuvent, elles, faire varier la note d'une nouvelle analyse par rapport à la précédente : c'est le diagnostic qui est devenu plus juste, pas le domaine qui a changé.
+
+## 7. Ce qui a changé en 0.3.x, et pourquoi
+
+Les poids, la formule de la note et les règles de couverture ne changent pas, et les analyses enregistrées ne sont pas recalculées. Ces verdicts ont changé en 0.3.2 ; ils peuvent faire varier la note de la prochaine analyse :
+
+| Situation | 0.3.1 | 0.3.2 | Raison |
+|---|---|---|---|
+| DMARC `p=reject; pct=0` (ou tout `pct` inférieur à 100) | Conforme | À améliorer | La RFC 9989 a retiré `pct`, mais les messageries qui suivent encore la RFC 7489 n'appliquent la politique qu'à cette part des e-mails en échec |
+| DMARC `pct=101`, `pct=abc` | Conforme | À améliorer (valeurs à corriger) | RFC 7489 §6.3 : un entier de 0 à 100 |
+| `http://` renvoie vers un autre site, `https://domaine/` répond avec un certificat valide | Critique | Conforme | Envoyer les visiteurs vers un autre site est un choix ; le HTTPS du domaine fonctionne |
+| Idem, `https://domaine/` refuse la connexion | Critique | Critique | Le domaine n'a pas son propre HTTPS |
+| Idem, `https://domaine/` ne répond pas | Critique | Non évalué | Pas de réponse n'est pas un verdict : rien n'a été observé |
+
+Les enregistrements MTA-STS et TLS-RPT sont désormais lus comme leurs RFC les écrivent (champs d'extension, espaces autour de `;`) : un enregistrement que la 0.3.1 jugeait invalide ou absent peut être reconnu valide, et inversement. Les deux restent « à améliorer » quand ils ne sont pas utilisables : la note ne bouge que lorsqu'un enregistrement devient valide.
+
+Pour un domaine dont `http://` renvoie vers un autre site et dont le HTTPS ne répond jamais, aucun contrôle web ni TLS n'est évalué : la note peut désormais être absente (couverture inférieure à 50 %) là où la 0.3.0 et la 0.3.1 en donnaient une, en comptant la redirection en échec sans aucune réponse.

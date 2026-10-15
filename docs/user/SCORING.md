@@ -87,3 +87,19 @@ Critical checks make the **priorities**, checks to improve the **improvements**,
 The weights and the score formula do not change. Scans already stored were computed again with these rules during the upgrade: their score does not change when their coverage reaches 50%; below, they become "Not evaluated"; an A obtained with less than 90% coverage becomes a B. A copy of the database from before the upgrade is kept in `backups/`.
 
 The check fixes of 0.2.0 (DMARC, SPF, framing, CSP… see the [CHANGELOG](../../CHANGELOG.md)) may, for their part, change the score of a new scan compared with the previous one: the diagnosis became more accurate, the domain did not change.
+
+## 7. What changed in 0.3.x, and why
+
+The weights, the score formula and the coverage rules do not change, and stored scans are not recalculated. These verdicts changed in 0.3.2; they may move the score of the next scan:
+
+| Situation | 0.3.1 | 0.3.2 | Reason |
+|---|---|---|---|
+| DMARC `p=reject; pct=0` (or any `pct` below 100) | Compliant | To improve | RFC 9989 removed `pct`, but receivers that still follow RFC 7489 apply the policy to that share of the failing mail only |
+| DMARC `pct=101`, `pct=abc` | Compliant | To improve (values to fix) | RFC 7489 §6.3: an integer from 0 to 100 |
+| `http://` redirects to another site, `https://domain/` answers with a valid certificate | Critical | Compliant | Sending visitors to another site is a business choice; the domain's own HTTPS works |
+| The same, `https://domain/` refuses the connection | Critical | Critical | The domain has no HTTPS of its own |
+| The same, `https://domain/` does not answer | Critical | Not evaluated | No answer is not a verdict: nothing was observed |
+
+The MTA-STS and TLS-RPT records are now read as their RFCs write them (extension fields, spaces around `;`): a record that 0.3.1 called invalid or missing may be found valid, and the reverse. Both stay "to improve" when they are not usable, so the score moves only when a record becomes valid.
+
+For a domain whose `http://` redirects to another site and whose own HTTPS never answers, the web and TLS checks are all not evaluated: the score may now be absent (coverage below 50 %) where 0.3.0 and 0.3.1 gave one by counting the redirect as failed without any answer.
