@@ -76,7 +76,7 @@ async def run_check(check: Check, ctx: CheckContext, timeout: float) -> Finding:
         outcome = Outcome(Status.ERROR, f"check.error.blocked.{e.reason}",
                           {"host": e.host, "address": str(e.address), "port": e.port}, evidence={"error": str(e)})
     except NetworkError as e:
-        reason = ("timeout" if isinstance(e, ConnectionTimedOut) else
+        reason = ("network_timeout" if isinstance(e, ConnectionTimedOut) else
                   "reset" if isinstance(e, ConnectionReset) else
                   "refused" if isinstance(e, Refused) else
                   "tls" if isinstance(e, TLSHandshakeError) else "network")
