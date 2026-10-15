@@ -127,6 +127,44 @@ def test_http_get_reads_headers_and_a_limited_body():
     assert len(reply.body) == network.MAX_BODY
 
 
+def test_a_server_that_takes_the_request_and_never_answers_is_a_timeout():
+    """0.3.1: a plain NetworkError ("ReadTimeout"), shown as "no answer (DNS or web server)"."""
+    from posture_cockpit.core import engine
+    from posture_cockpit.core.errors import ConnectionTimedOut
+    from posture_cockpit.core.extension import Extension
+    from posture_cockpit.core.model import Status, ok
+
+    received: list[bytes] = []
+
+    async def silent(reader, writer):
+        received.append(await reader.readuntil(b"\r\n\r\n"))  # the connection and the request get through
+        await asyncio.sleep(2)  # the reply comes after the read timeout of the client
+        writer.close()
+
+    ext = Extension("lab", name="Lab", version="1")
+
+    async def main():
+        server, port = await serve(silent)
+        url = f"http://127.0.0.1:{port}/"
+
+        @ext.check("page", category="web", weight=4)
+        async def page(ctx):
+            await ctx.net.http_get(url)
+            return ok("never")
+
+        async with server, dns_server({}) as (_, dns_port):
+            # The rule of the scan allows this test server only: 127.0.0.1/32 and its port.
+            with pytest.raises(ConnectionTimedOut, match="ReadTimeout"):
+                await lab_network(dns_port, port, timeout=0.3).http_get(url)
+            result = await engine.scan("lab.example", ext.checks, lab_network(dns_port, port, timeout=0.3))
+        return result.findings[0]
+
+    finding = asyncio.run(main())
+    assert received and received[0].startswith(b"GET / HTTP/1.1")
+    assert (finding.status, finding.outcome.summary) == (Status.ERROR, "check.error.network_timeout")
+    assert not finding.status.scored
+
+
 def test_dns_answers(monkeypatch):
     txt = dns.rdata.from_text(dns.rdataclass.IN, dns.rdatatype.TXT, '"v=spf1 include:_spf.example.net" " -all"')
     mx = dns.rdata.from_text(dns.rdataclass.IN, dns.rdatatype.MX, "10 mx.example.net.")

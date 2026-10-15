@@ -364,6 +364,10 @@ class LiveNetwork:
                     if problem is not None:
                         raise UntrustedCertificate(url, problem) from e
                     failure = e  # this address cannot be reached: try the next one
+                except httpx.TimeoutException as e:
+                    # Connected, but the reply did not come in time (read, write or pool timeout):
+                    # the same diagnosis as a connection that times out.
+                    raise ConnectionTimedOut(f"HTTP {url}: {e.__class__.__name__}") from e
                 except httpx.HTTPError as e:
                     raise NetworkError(f"HTTP {url}: {e.__class__.__name__}") from e
         if failure is not None and _caused_by(failure, ConnectionRefusedError):

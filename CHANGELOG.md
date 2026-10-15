@@ -26,7 +26,7 @@ Corrections from the audit of 0.3.1. No database migration, no configuration cha
 ### Code and tests
 
 - The checks of the technical page and of a stored scan come from one template; the two history style blocks are merged.
-- Recorded timeouts of the tests raise the same error as real ones, so the tests see the wording users see.
+- Timeouts: a real HTTP reply that does not come in time (read, write or pool timeout) is now reported as a timeout ("Délai dépassé…"), like a connection that times out; 0.3.1 reported it as a plain network error. The recorded timeouts of the tests raise the same error.
 - 51 of the new or updated tests fail on 0.3.1.
 
 ## 0.3.1 — 2026-10-15
