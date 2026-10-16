@@ -96,3 +96,25 @@ Sans Home Assistant, la même analyse mensuelle se lance avec cron :
 ```bash
 curl -fsS -X POST -H "Authorization: Bearer VOTRE_CLE" http://localhost:8080/api/v1/domains/mon-domaine.fr/scan
 ```
+
+### Ajouts de l’API en 0.4
+
+`score` et `grade` sont désormais indépendamment nullables. Un score provisoire peut
+être présent avec `grade: null`, `evaluation: "undetermined"` et
+`grade_withheld_reason: "https_availability_undetermined"`. Ne pas en déduire une lettre
+ni le comparer à une note avec lettre.
+
+Nouveaux champs : `score_raw`, `score_cap`, `score_final` (0–1 non arrondis),
+`diagnostic_coverage`, `checks_blocked`, `cap_reasons`, `addresses_discovered`,
+`addresses_attempted`, `addresses_conclusive`, `address_sampling_limited`,
+`address_discovery_complete` et l’objet `addresses` (échéance comprise). Pour les analyses 0.3.x, sans recalcul ni écriture en base, diagnostic_coverage reprend
+la couverture stockée (avec le même arrondi que coverage), checks_blocked vaut 0, score_raw et score_final valent le score
+stocké divisé par 100 (ou null sans score), et score_cap vaut null. Les compteurs d’adresses
+restent nulls. `not_evaluated` compte les erreurs,
+sans les contrôles bloqués. Les champs existants et l’authentification sont conservés.
+
+
+Une analyse stockée illisible est isolée. L’API des domaines continue à fournir les
+résultats des domaines sains ; l’entrée endommagée contient `domain`, `scan_id` et
+`error: "scan_unreadable"`. Une requête sur cette analyse seule renvoie HTTP 409 avec
+le même code. Aucune note n’est déduite de constats corrompus.

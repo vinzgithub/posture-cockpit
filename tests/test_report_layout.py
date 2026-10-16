@@ -5,15 +5,18 @@
 The checks read WeasyPrint's layout (pages and their boxes), which is what ends up in the PDF.
 """
 
+from collections import defaultdict
+
 import pytest
 from fastapi.testclient import TestClient
 
 from posture_cockpit.config import Config
 from posture_cockpit.core import scoring
 from posture_cockpit.report import REPORT_DIR, _env, report_context
+from posture_cockpit.scanner import DEMO_DOMAIN, demo_data
 from posture_cockpit.storage import Scan
 from posture_cockpit.web.app import create_app
-from worlds import DOMAIN, healthy, http_only_with_redirect_elsewhere, run
+from worlds import DOMAIN, healthy, http_only_with_redirect_elsewhere, redirect_elsewhere_https_refused, run
 
 weasyprint = pytest.importorskip("weasyprint")
 HEADINGS = {"section-label", "annex-title"}
@@ -99,7 +102,7 @@ def test_no_page_ends_with_a_heading_whatever_the_length(catalog):
 
 @pytest.mark.parametrize("language", ["fr", "en"])
 def test_partial_pdf_projection_is_conditional(catalog, language):
-    context = report_context(catalog, language, _scan(http_only_with_redirect_elsewhere()))
+    context = report_context(catalog, language, _scan(redirect_elsewhere_https_refused()))
     assert context["result"].partial
     assert context["result"].coverage_percent < 90
     assert context["conclusion"]
@@ -110,14 +113,14 @@ def test_partial_pdf_projection_is_conditional(catalog, language):
 
 @pytest.mark.parametrize("language", ["fr", "en"])
 def test_unscored_web_area_preserves_critical_finding(catalog, language):
-    context = report_context(catalog, language, _scan(http_only_with_redirect_elsewhere()))
+    context = report_context(catalog, language, _scan(redirect_elsewhere_https_refused()))
     web_findings = [f for f in context["scan"].current() if f.category == "web"]
     assert any(f.status.value == "fail" for f in web_findings)
     web_area = next(c for c in context["categories"] if c["label"] == catalog.text(language, "category.web"))
     assert web_area["score"] is None
     assert ("Défaut détecté" in web_area["comment"] if language == "fr"
             else "Detected issue" in web_area["comment"])
-    assert ("renvoie vers un site HTTPS extérieur" in web_area["comment"] if language == "fr"
+    assert ("renvoie vers un autre site" in web_area["comment"] if language == "fr"
             else "redirect" in web_area["comment"].lower())
 
 
@@ -128,3 +131,23 @@ def test_partial_projection_french_agreement(catalog, n, expected):
     assert expected in sentence
     assert "la note B pourrait être atteinte" in sentence
     assert "1 pourrait" not in sentence and "2 pourraient" not in sentence
+
+
+@pytest.mark.parametrize("language", ["fr", "en"])
+def test_a_gain_is_never_cut_across_two_lines(catalog, language):
+    """The demo report of 15 October 2026 ended a line with "(+1" and began the next one
+    with "pt)" (security.txt in French, CAA in English)."""
+    findings = list(run(demo_data(DEMO_DOMAIN), domain=DEMO_DOMAIN).values())
+    a = scoring.assess(findings)
+    scan = Scan(1, 1, DEMO_DOMAIN, "2026-10-15T19:40:00+00:00", 3000, a.score, a.grade, a.coverage, "0.3.2", "",
+                findings, {})
+    document = _layout(report_context(catalog, language, scan))
+    lines: dict[int, set] = defaultdict(set)
+    texts = {}
+    for number, page in enumerate(document.pages):
+        for box in _boxes(page._page_box):
+            if type(box).__name__ == "TextBox" and _classes(box) & {"gain", "p-gain"}:
+                lines[id(box.element)].add((number, round(box.position_y, 1)))
+                texts[id(box.element)] = "".join(box.element.itertext())
+    assert len(lines) >= 10  # the three prescriptions and the seven improvements of the demo
+    assert [texts[k] for k, where in lines.items() if len(where) > 1] == []

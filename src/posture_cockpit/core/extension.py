@@ -27,13 +27,13 @@ from __future__ import annotations
 import asyncio
 import json
 import re
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Collection, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any, TypeVar
 
-from .model import Outcome
+from .model import CREDIT, HTTPS_FAMILY, HTTPS_ROOT_CHECK, Outcome, Role, Status
 from .network import Network
 
 CheckFunction = Callable[["CheckContext"], Awaitable[Outcome]]
@@ -55,6 +55,19 @@ class Check:
     run: CheckFunction
     extension: str
     internal: bool = True  # whether it applies to sites audited inside an internal perimeter
+    # Version 0.4: a family of checks that depend on one another (e.g. "https"), this
+    # check's place in it, and the verdicts it can give (OK, WARN, FAIL).
+    family: str | None = None
+    role: Role | None = None
+    verdicts: frozenset[Status] | None = None
+
+    @property
+    def floor(self) -> float | None:
+        """Lowest credit among the declared verdicts that are not critical; None without a declaration."""
+        if not self.verdicts:
+            return None
+        credits = [CREDIT[v] for v in self.verdicts if v is not Status.FAIL]
+        return min(credits) if credits else None
 
     @property
     def title_key(self) -> str:
@@ -79,22 +92,41 @@ class Extension:
         self.messages: dict[str, dict[str, str]] = {lang: dict(texts) for lang, texts in (messages or {}).items()}
         self.checks: list[Check] = []
 
-    def check(self, name: str, *, category: str, weight: int,
-              internal: bool = True) -> Callable[[CheckFunction], CheckFunction]:
+    def check(self, name: str, *, category: str, weight: int, internal: bool = True,
+              provides: str | None = None, requires: str | None = None,
+              verdicts: Collection[Status] | None = None) -> Callable[[CheckFunction], CheckFunction]:
         """Decorator that registers ``async def f(ctx) -> Outcome`` as the check ``<extension>.<name>``.
 
         ``internal=False``: the check only makes sense on the Internet (SPF, DNSSEC…);
-        in an internal perimeter it is reported as not applicable without running."""
+        in an internal perimeter it is reported as not applicable without running.
+
+        ``provides="https"``: the check observes whether HTTPS answers (the root of the
+        family). ``requires="https"``: the check measures something that only exists
+        when HTTPS answers. Both must declare ``verdicts``, the statuses among OK, WARN
+        and FAIL the check can give: the scoring caps use the lowest non-critical one."""
         if not _ID.fullmatch(name):
             raise ValueError(f"invalid check name {name!r}")
         if not 1 <= weight <= 10:
             raise ValueError(f"weight of {self.id}.{name} must be between 1 and 10")
+        if provides and requires:
+            raise ValueError(f"{self.id}.{name} cannot both provide and require {provides or requires!r}")
+        family = provides or requires
+        declared = frozenset(verdicts) if verdicts is not None else None
+        if declared is not None and (not declared or not all(v.scored for v in declared)):
+            raise ValueError(f"verdicts of {self.id}.{name} must be a non-empty set of OK, WARN and FAIL")
+        if family and declared is None:
+            raise ValueError(f"{self.id}.{name} belongs to the family {family!r}: it must declare its verdicts")
+        if requires and declared is not None and declared <= {Status.FAIL}:
+            raise ValueError(f"{self.id}.{name} must be able to give a verdict that is not critical")
+        if provides == HTTPS_FAMILY and f"{self.id}.{name}" != HTTPS_ROOT_CHECK:
+            raise ValueError(f"{self.id}.{name} cannot provide {HTTPS_FAMILY!r}: {HTTPS_ROOT_CHECK} is its only root")
+        role = Role.ROOT if provides else Role.DEPENDENT if requires else None
 
         def register(function: CheckFunction) -> CheckFunction:
             check_id = f"{self.id}.{name}"
             if any(c.id == check_id for c in self.checks):
                 raise ValueError(f"check {check_id} declared twice")
-            self.checks.append(Check(check_id, category, weight, function, self.id, internal))
+            self.checks.append(Check(check_id, category, weight, function, self.id, internal, family, role, declared))
             return function
 
         return register
@@ -120,6 +152,7 @@ class CheckContext:
     net: Network
     now: datetime
     internal: bool = False  # the scan runs inside an internal perimeter
+    history: dict = field(default_factory=dict)  # read-only snapshot, never mutated by checks
     _memo: dict[str, asyncio.Future[Any]] = field(default_factory=dict, repr=False)
 
     def fqdn(self, label: str) -> str:

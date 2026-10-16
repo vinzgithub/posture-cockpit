@@ -6,6 +6,14 @@ A check that raises or takes too long does not stop the others: it is
 reported with the status ERROR ("not evaluated") and the reason in its
 evidence, so the user sees it and the score leaves it out (the coverage of the
 scan shows how much could not be evaluated, see :mod:`.scoring`).
+
+Version 0.4: the checks of the HTTPS family (the root ``web.https_redirect`` and
+the checks that need HTTPS) wait for the HTTPS probe (:mod:`.https_probe`),
+which starts with the scan and stops at its deadline (9 s); then each has its
+own time limit (15 s), so a scan takes 24 s at most. A dependent that cannot be
+measured is not run: the engine writes its result, blocked when HTTPS is refused
+on every published address, not evaluated "by dependency" otherwise. The other
+checks start at once, as before.
 """
 
 from __future__ import annotations
@@ -14,17 +22,20 @@ import asyncio
 import logging
 import re
 import time
-from collections.abc import Iterable
+from collections.abc import Awaitable, Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from . import https_probe
 from .egress import DestinationBlocked
 from .errors import ConnectionReset, ConnectionTimedOut, Refused, TLSHandshakeError
 from .extension import Check, CheckContext
-from .model import Finding, Outcome, Status
+from .model import HTTPS_FAMILY, Finding, Outcome, Role, Status
 from .network import Network, NetworkError
 
 log = logging.getLogger(__name__)
+
+CHECK_TIMEOUT = 15.0  # seconds a check may take; for the HTTPS family, counted from the end of the probe
 
 _LABEL = re.compile(r"(?!-)[a-z0-9-]{1,63}(?<!-)")
 
@@ -84,26 +95,58 @@ async def run_check(check: Check, ctx: CheckContext, timeout: float) -> Finding:
     except Exception as e:  # a bug in a check must not break the scan
         log.exception("check %s failed on %s", check.id, ctx.domain)
         outcome = Outcome(Status.ERROR, "check.error.internal", evidence={"error": f"{e.__class__.__name__}: {e}"})
-    return Finding(check.id, check.category, check.weight, outcome)
+    try:
+        return finding(check, outcome)
+    except ValueError as e:  # e.g. a signal this check may not report: a bug, never a verdict
+        log.error("check %s gave an outcome its declaration does not allow: %s", check.id, e)
+        return finding(check, Outcome(Status.ERROR, "check.error.internal", evidence={"error": str(e)}))
+
+
+def finding(check: Check, outcome: Outcome) -> Finding:
+    """The finding of ``check``, with its place in a family of checks as declared (version 0.4)."""
+    return Finding(check.id, check.category, check.weight, outcome, check.family, check.role, check.floor)
 
 
 async def _not_applicable(check: Check) -> Finding:
-    return Finding(check.id, check.category, check.weight, Outcome(Status.NA, "check.na.internal"))
+    return finding(check, Outcome(Status.NA, "check.na.internal"))
 
 
-async def scan(domain: str, checks: Iterable[Check], net: Network, timeout: float = 15.0,
-               now: datetime | None = None, internal: bool = False) -> ScanResult:
+async def _https_family(check: Check, ctx: CheckContext, timeout: float, deadline: float | None) -> Finding:
+    """A check of the HTTPS family: after the probe, run, or written by the engine when it cannot be measured."""
+    try:
+        probe = await https_probe.result(ctx, deadline)
+    except Exception as e:  # a bug in the probe must not break the scan
+        log.exception("HTTPS probe failed on %s", ctx.domain)
+        return finding(check, Outcome(Status.ERROR, "check.error.internal",
+                                      evidence={"error": f"{e.__class__.__name__}: {e}"}))
+    if check.role is Role.DEPENDENT:
+        written = https_probe.dependent_outcome(probe, check.category)
+        if written is not None:
+            return finding(check, written)
+    return await run_check(check, ctx, timeout)
+
+
+async def scan(domain: str, checks: Iterable[Check], net: Network, timeout: float = CHECK_TIMEOUT,
+               now: datetime | None = None, internal: bool = False,
+               probe_deadline: float | None = None, history: dict | None = None) -> ScanResult:
     """Runs ``checks`` on ``domain`` concurrently. ``domain`` must already be normalized.
 
     ``internal``: the scan runs in an internal perimeter; checks made for the
-    Internet only are reported as not applicable without running."""
+    Internet only are reported as not applicable without running.
+    ``probe_deadline``: the HTTPS probe's (default :data:`.https_probe.PROBE_DEADLINE`)."""
     started = now or datetime.now(UTC)
-    ctx = CheckContext(domain=domain, net=net, now=started, internal=internal)
+    ctx = CheckContext(domain=domain, net=net, now=started, internal=internal, history=history or {})
     clock = time.monotonic()
+
+    def start(check: Check) -> Awaitable[Finding]:
+        if internal and not check.internal:
+            return _not_applicable(check)
+        if check.family == HTTPS_FAMILY:
+            return _https_family(check, ctx, timeout, probe_deadline)
+        return run_check(check, ctx, timeout)
+
     try:
-        findings = await asyncio.gather(*(
-            _not_applicable(check) if internal and not check.internal else run_check(check, ctx, timeout)
-            for check in checks))
+        findings = await asyncio.gather(*(start(check) for check in checks))
     finally:
         # Work started for a check that timed out may still be running: stop it with the scan.
         ctx.close()

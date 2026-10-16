@@ -121,15 +121,35 @@ _LEGACY_DNS_TEXT = {
 
 
 def finding_summary(catalog: Catalog, lang: str, finding: Finding, domain: str) -> str:
-    """Translate an outcome, including incomplete legacy DNS observations."""
+    """The text of a finding in ``lang``: its verdict, then its notes. Every page and report shows
+    findings through here (plan, technical page, history, PDF, command line).
+
+    Notes are the other anomalies a check found besides the one its verdict describes
+    (``evidence["notes"]``: translation keys with their parameters). Incomplete legacy DNS
+    observations get a truthful generic wording."""
     values = {"domain": domain, **finding.outcome.params}
+    key = finding.outcome.summary
     if "zone" not in values:
         recorded_zone = finding.outcome.evidence.get("zone")
         if isinstance(recorded_zone, str) and recorded_zone:
             values["zone"] = recorded_zone
-        elif finding.outcome.summary in _LEGACY_DNS_TEXT:
-            return catalog.text(lang, _LEGACY_DNS_TEXT[finding.outcome.summary], values)
-    return catalog.text(lang, finding.outcome.summary, values)
+        elif key in _LEGACY_DNS_TEXT:
+            key = _LEGACY_DNS_TEXT[key]
+    return " ".join([catalog.text(lang, key, values), *_notes(catalog, lang, finding, domain)])
+
+
+def _notes(catalog: Catalog, lang: str, finding: Finding, domain: str) -> list[str]:
+    notes = finding.outcome.evidence.get("notes")
+    if not isinstance(notes, list):
+        return []
+    texts = []
+    for note in notes:
+        key = note.get("key") if isinstance(note, dict) else None
+        params = note.get("params") if isinstance(note, dict) else None
+        # A key this version does not know is left out rather than shown raw.
+        if isinstance(key, str) and (catalog.has(lang, key) or catalog.has("en", key)):
+            texts.append(catalog.text(lang, key, {"domain": domain, **(params if isinstance(params, dict) else {})}))
+    return texts
 
 
 def pick_locale(accept_language: str | None, default: str = "fr") -> str:

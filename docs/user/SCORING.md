@@ -87,3 +87,78 @@ Critical checks make the **priorities**, checks to improve the **improvements**,
 The weights and the score formula do not change. Scans already stored were computed again with these rules during the upgrade: their score does not change when their coverage reaches 50%; below, they become "Not evaluated"; an A obtained with less than 90% coverage becomes a B. A copy of the database from before the upgrade is kept in `backups/`.
 
 The check fixes of 0.2.0 (DMARC, SPF, framing, CSP… see the [CHANGELOG](../../CHANGELOG.md)) may, for their part, change the score of a new scan compared with the previous one: the diagnosis became more accurate, the domain did not change.
+
+## 7. What changed in 0.3.x, and why
+
+The weights, the score formula and the coverage rules do not change, and stored scans are not recalculated. These verdicts changed in 0.3.2; they may move the score of the next scan:
+
+| Situation | 0.3.1 | 0.3.2 | Reason |
+|---|---|---|---|
+| DMARC `p=reject; pct=0` (or any `pct` below 100) | Compliant | To improve | RFC 9989 made `pct` historic, but receivers that still follow RFC 7489 select only that share of the failing mail for the policy (with `p=reject`, the rest should be quarantined; with `p=quarantine`, it goes through the usual filtering) |
+| DMARC `pct=101`, `pct=abc` | Compliant | To improve (values to fix) | RFC 7489 §6.3: an integer from 0 to 100 |
+| `http://` redirects to another site, `https://domain/` answers with a valid certificate | Critical | Compliant | Sending visitors to another site is a business choice; the domain's own HTTPS works |
+| The same, `https://domain/` refuses the connection | Critical | Critical | The domain has no HTTPS of its own |
+| The same, `https://domain/` does not answer | Critical | Not evaluated | No answer is not a verdict: nothing was observed |
+
+The MTA-STS and TLS-RPT records are now read as their RFCs write them (extension fields, spaces around `;`): a record that 0.3.1 called invalid or missing may be found valid, and the reverse. Both stay "to improve" when they are not usable, so the score moves only when a record becomes valid.
+
+For a domain whose `http://` redirects to another site and whose own HTTPS never answers, the web and TLS checks are all not evaluated: the score may now be absent (coverage below 50 %) where 0.3.0 and 0.3.1 gave one by counting the redirect as failed without any answer.
+
+### DMARC: one verdict, notes
+
+A check gives one verdict. For DMARC, it is chosen in this order: invalid policy, testing mode `t=y`, monitoring `p=none`, values that do not follow the standard, `pct` below 100, subdomains left out (`sp=none`), local records ignored. Since 0.3.2, the other anomalies of the record are added after the verdict as notes, on the plan, the technical page, the history and the PDF reports. They change neither the status nor the score.
+
+Under `p=none`, the tool no longer offers to move to `p=quarantine` when no valid report address is published (new verdict "without a valid report address"): without reports, nothing can show that the real e-mail passes. It neither makes up nor chooses an address, and the record it offers is a full quarantine: no faulty value, no repeated tag, no `t` or `pct`; `sp` and `np` are kept as written. A repeated tag is reported: the DMARC syntax forbids it and some receivers may ignore the whole record (status and score unchanged in 0.3.2, a study is planned for 0.4).
+
+### Synthetic DMARC scenarios
+
+The healthy test world (100/100, A, coverage 100%), with only its DMARC record changed. These are test worlds, computed by the engine in `tests/test_dmarc_scenarios.py`, not measurements of real domains.
+
+| DMARC record | 0.3.1 | 0.3.2 | Score 0.3.1 → 0.3.2 |
+|---|---|---|---|
+| `p=reject` | Compliant | Compliant | 100 → 100 |
+| Inherited from a public suffix with `p=none` | To improve | To improve (advice: a policy of the domain's own) | 94 → 94 |
+| `p=reject; pct=50` | Compliant | To improve (partial rejection) | 100 → 94 |
+| `p=reject; pct=0` | Compliant | To improve (partial rejection) | 100 → 94 |
+| `p=quarantine; pct=0` | Compliant | To improve (partial quarantine) | 100 → 94 |
+| `p=reject; pct=abc` | Compliant | To improve (faulty values) | 100 → 94 |
+| `p=none; pct=abc` | To improve (monitoring) | To improve (monitoring without reports) + note "faulty values" | 94 → 94 |
+| `p=reject; t=y; pct=101` | To improve (testing) | To improve (testing) + note "faulty values" | 94 → 94 |
+| `p=reject; t=y; pct=50` | To improve (testing) | To improve (testing) + note "partial rejection" | 94 → 94 |
+| `p=quarantine; t=y; pct=50` | To improve (testing) | To improve (testing) + note "partial quarantine" | 94 → 94 |
+| `p=reject; pct=50; sp=none` | To improve (subdomains left out) | To improve (partial rejection) + note "subdomains left out" | 94 → 94 |
+| `p=none` without `rua` | To improve (monitoring) | To improve (monitoring without reports) | 94 → 94 |
+
+## 8. Version 0.4: HTTPS availability and diagnostic coverage
+
+The HTTPS root and its ten dependents share a per-address probe. A confirmed refusal
+on every published address blocks the ten dependents; they are neither scored nor
+counted as errors. Scoring coverage excludes them; diagnostic coverage includes their
+weight in its denominator. The score is not evidence that blocked checks succeeded.
+
+Three non-cumulative cap reasons share the same reference: dependency, certificate
+authentication, obsolete protocol. The reference keeps non-HTTPS results, assumes the
+HTTPS root compliant, and puts evaluated or blocked dependents at their declared floors.
+The final score is min(raw, reference), rounded only once. Category scores are uncapped.
+
+If no address supports modern TLS, at least one refuses or is obsolete, and another is
+inconclusive (including incomplete DNS discovery), the score is provisional without a
+grade. This is `undetermined`, not `not_evaluated`. It is not comparable to a graded
+score. An available modern-TLS address plus an unknown address retains its grade.
+
+Four indicators accompany the result: scoring coverage, diagnostic coverage, blocked
+checks, and discovered/attempted/conclusive (host, address) pairs. Counts do not imply
+complete DNS discovery. Sampling, incomplete discovery and deadlines are named.
+
+A HTTPS recheck reruns the complete enabled family with a fresh probe (9 seconds),
+then up to 15 seconds for its checks. All rechecks are saved together. The original
+findings remain unchanged; the current assessment includes the latest rechecks.
+Root fixes may have a gain interval and a provisional target because the blocked
+measurements are not yet known. A certificate fix has an exact gain when all its
+dependents were measured.
+
+HSTS history is local observation, not browser state. Only an HSTS header received
+with a verified certificate over modern TLS is retained. Its lifetime is capped at a
+year. `max-age=0` removes it; an absent or invalid header does not. An ancestor policy
+applies only with includeSubDomains. `preload` is an indication, not evidence of actual
+browser list membership. Neither history nor attribution changes any verdict or score.

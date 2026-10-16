@@ -64,7 +64,7 @@ class Config:
     @classmethod
     def from_env(cls) -> Config:
         nameservers = [s.strip() for s in _env("NAMESERVERS", "").split(",") if s.strip()]
-        return cls(
+        config = cls(
             data_dir=Path(_env("DATA_DIR", "./data")),
             cookie_secure=_env_bool("COOKIE_SECURE", False),
             frame_ancestors=_env("FRAME_ANCESTORS", "'self'"),
@@ -78,6 +78,8 @@ class Config:
             timezone=instance_zone(os.environ.get(ENV_PREFIX + "TIMEZONE"), os.environ.get("TZ")),
             session_cookie=_env("SESSION_COOKIE", DEFAULT_SESSION_COOKIE).strip(),
         )
+        check_dkim_selectors(_env("DKIM_SELECTORS", ""))
+        return config
 
 
 def check_cookie_name(name: str, *, secure: bool) -> None:
@@ -91,6 +93,17 @@ def check_cookie_name(name: str, *, secure: bool) -> None:
                          "(letters, digits, _ and -, at most 64)")
     if name.lower().startswith(("__host-", "__secure-")) and not secure:
         raise ValueError(f"POSTURE_COCKPIT_SESSION_COOKIE: {name!r} needs POSTURE_COCKPIT_COOKIE_SECURE=true")
+
+
+def check_dkim_selectors(value: str) -> None:
+    """A wrong POSTURE_COCKPIT_DKIM_SELECTORS stops the start, with its reason, rather than
+    making the DKIM check fail on every scan (0.3.1). The DKIM check reads the variable itself."""
+    from .checks.mail import dkim_selectors  # here: the checks are not needed to read the configuration
+
+    try:
+        dkim_selectors(value)
+    except ValueError as e:
+        raise ValueError(f"POSTURE_COCKPIT_DKIM_SELECTORS: {e}") from None
 
 
 def secret_key(data_dir: Path) -> str:

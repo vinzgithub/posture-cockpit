@@ -29,12 +29,12 @@ from .config import Config
 from .core import engine, scoring
 from .core.network import NetworkError
 from .core.registry import Registry
-from .i18n import LOCALES, Catalog
+from .i18n import LOCALES, Catalog, finding_summary
 from .scanner import Scanner
 from .security import MIN_PASSWORD_LENGTH, hash_password
 from .storage import Accounts, Database
 
-SYMBOLS = {"ok": "✓", "warn": "!", "fail": "✗", "na": "–", "info": "i", "error": "?"}
+SYMBOLS = {"blocked": "⊘", "ok": "✓", "warn": "!", "fail": "✗", "na": "–", "info": "i", "error": "?"}
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -90,14 +90,15 @@ def _scan(typed: str, as_json: bool, lang: str) -> int:
                                        for f in result.findings]}, ensure_ascii=False, indent=2))
         return 0
     catalog = Catalog(registry.messages)
-    verdict = (f"{assessment.score}/100 ({assessment.grade})" if assessment.score is not None
+    verdict = (f"{assessment.score}/100 ({assessment.grade or catalog.text(lang, 'v04.undetermined')})"
+               if assessment.score is not None
                else catalog.text(lang, "score.not_evaluated"))
     coverage = catalog.text(lang, "score.coverage", {"evaluated": assessment.evaluated,
                                                      "applicable": assessment.applicable,
                                                      "percent": assessment.coverage_percent})
     print(f"{domain} — {verdict} — {coverage} — {result.duration_ms} ms\n")
     for f in result.findings:
-        summary = catalog.text(lang, f.outcome.summary, {"domain": domain, **f.outcome.params})
+        summary = finding_summary(catalog, lang, f, domain)
         print(f"  {SYMBOLS[f.status.value]} {f.check_id:<22} {summary}")
     plan = scoring.plan(result.findings)
     if plan.priorities:

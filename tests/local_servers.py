@@ -175,14 +175,18 @@ class TestPki:
     def pem(self) -> str:
         return self.certificate.public_bytes(serialization.Encoding.PEM).decode()
 
-    def server_context(self, *names: str, days: int = 30) -> ssl.SSLContext:
-        """A TLS server context with a certificate for ``names``, signed by this authority."""
+    def server_context(self, *names: str, days: int = 30, valid_from_days: int = -1) -> ssl.SSLContext:
+        """A TLS server context with a certificate for ``names``, signed by this authority.
+
+        The certificate is valid from ``valid_from_days`` to ``days`` days from now: ``days=-3,
+        valid_from_days=-30`` gives one that expired three days ago."""
         key = ec.generate_private_key(ec.SECP256R1())
         now = dt.datetime.now(dt.UTC)
         cert = (x509.CertificateBuilder()
                 .subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, names[0])]))
                 .issuer_name(self._name).public_key(key.public_key()).serial_number(x509.random_serial_number())
-                .not_valid_before(now - dt.timedelta(days=1)).not_valid_after(now + dt.timedelta(days=days))
+                .not_valid_before(now + dt.timedelta(days=valid_from_days))
+                .not_valid_after(now + dt.timedelta(days=days))
                 .add_extension(x509.SubjectAlternativeName([x509.DNSName(n) for n in names]), critical=False)
                 .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
                 .add_extension(x509.AuthorityKeyIdentifier.from_issuer_public_key(self._key.public_key()),

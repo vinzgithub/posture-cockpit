@@ -51,7 +51,7 @@ code { font: 400 8.5pt "IBM Plex Mono", monospace; color: #5A554B; }
 .p-body h2 { font-size: 14pt; margin-bottom: 3pt; }
 .p-meta { margin-top: 4pt; color: #6B6559; font-size: 9pt; }
 .p-side { flex: none; text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 5pt; }
-.p-gain { font: 500 13pt "IBM Plex Mono"; }
+.p-gain { font: 500 13pt "IBM Plex Mono"; white-space: nowrap; }
 .badge { display: inline-block; padding: 1.5pt 7pt; border: 0.8pt solid #8A2C1D; border-radius: 9pt; color: #8A2C1D; font: 600 8pt "IBM Plex Sans"; }
 .badge-urgent { background: #8A2C1D; color: #FBF8F2; }
 .signature { margin-top: 26pt; text-align: right; font: italic 400 10.5pt "Newsreader"; color: #5A554B; }
@@ -65,7 +65,7 @@ code { font: 400 8.5pt "IBM Plex Mono", monospace; color: #5A554B; }
 
 .improvements { margin: 0; padding-left: 14pt; }
 .improvements li { margin: 0 0 5pt; font-size: 9.5pt; }
-.improvements .gain { color: #6B6559; font-family: "IBM Plex Mono"; font-size: 8.5pt; }
+.improvements .gain { color: #6B6559; font-family: "IBM Plex Mono"; font-size: 8.5pt; white-space: nowrap; }
 .method { font-size: 9pt; color: #5A554B; }
 .method-block { break-inside: avoid; page-break-inside: avoid; }
 
@@ -82,6 +82,9 @@ code { font: 400 8.5pt "IBM Plex Mono", monospace; color: #5A554B; }
 .pill-fail { background: #8A2C1D; color: #FBF8F2; }
 .pill-info, .pill-error { background: #ECE6DA; color: #5A554B; }
 .ref { color: #6B6559; font-size: 7.5pt; }
+
+/* Historical report: when the scan was made and when this PDF was, above the first page. */
+.history-stamp { margin: 0 0 8pt; padding: 3pt 7pt; border: 1pt solid #5A554B; color: #5A554B; font-family: "IBM Plex Mono"; font-size: 7.5pt; }
 
 /* Internal audit: restricted distribution, on the first page and in the footer. */
 .restricted { margin: 0 0 6pt; padding: 3pt 7pt; border: 1pt solid #8A2C1D; color: #8A2C1D; font-family: "IBM Plex Mono"; font-size: 8pt; letter-spacing: .04em; text-transform: uppercase; display: inline-block; }

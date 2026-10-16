@@ -1,5 +1,6 @@
 {# Copyright © 2026 Vincent Fournet · SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 -#}
 {% extends "base.html" %}
+{% from "_macros.html" import indicators with context %}
 {% block title %}{{ t('details.history') }} · {{ domain.name }}{% endblock %}
 {% block content %}
 <p class="small"><a href="/domains/{{ domain.name }}">← {{ t('details.back') }}</a></p>
@@ -9,14 +10,23 @@
   <p class="lead">{{ t('history.count', n=total) }}</p>
 </div>
 <section class="panel history-panel">
+{% if history | length > 1 %}<svg class="history-trend" viewBox="0 0 210 110" role="img" aria-label="{{ t('details.history') }}">
+{% for h in history | reverse %}{% if h.score is not none and h.id not in unreadable %}
+<circle class="trend-{{ 'provisional' if h.grade_withheld_reason else 'graded' }}" cx="{{ 5 + loop.index0 * 200 / ([history | length - 1, 1] | max) }}" cy="{{ 105 - h.score }}" r="3"><title>{{ h.started_at }} : {{ h.score }}/100{% if h.grade_withheld_reason %} · {{ t('v04.undetermined') }} {{ t('v04.nonconclusive.' ~ ('one' if h.addresses_attempted - h.addresses_conclusive == 1 else 'many'), n=h.addresses_attempted - h.addresses_conclusive) }}{% endif %}</title></circle>
+{% endif %}{% endfor %}</svg>{% endif %}
 <div class="table-scroll history-scroll"><table class="table history">
-<thead><tr><th>{{ t('details.history_date') }}</th><th>{{ t('details.history_result') }}</th><th>{{ t('details.history_coverage') }}</th><th>{{ t('details.history_version') }}</th><th>{{ t('history.actions') }}</th></tr></thead>
+<thead><tr><th>{{ t('details.history_date') }}</th><th>{{ t('details.history_result') }}</th><th>{{ t('details.history_coverage') }}</th><th>{{ t('history.origin') }}</th><th>{{ t('details.history_version') }}</th><th>{{ t('history.actions') }}</th></tr></thead>
 <tbody>
 {% for h in history %}
-<tr>
-  <td class="history-date"><time datetime="{{ h.started_at }}">{{ date(h.started_at) }} <span class="history-clock">{{ local_time(h.started_at) }}</span></time></td>
-  <td class="history-result">{% if h.score is not none %}<span class="grade grade-{{ h.grade }}">{{ h.grade }}</span> <span class="history-score">{{ h.score }}/100</span>{% else %}{{ t('score.not_evaluated') }}{% endif %}</td>
-  <td class="history-coverage {{ 'coverage-partial' if h.coverage < full_coverage }}" data-label="{{ t('details.history_coverage') }}">{{ (h.coverage * 100 + 0.000001) | int }}&nbsp;%</td>
+{% set r = results.get(h.id) %}
+<tr{% if h.id == latest_id %} aria-current="true"{% endif %}>
+  <td class="history-date"><time datetime="{{ h.started_at }}">{{ date(h.started_at) }} <span class="history-clock">{{ local_time(h.started_at) }}</span></time>
+    <span class="history-meta"><span class="muted">{{ t('history.number', id=h.id) }}</span>{% if h.id == latest_id %} <span class="badge badge-latest" title="{{ t('history.latest_label') }}">{{ t('history.latest') }}</span>{% endif %}</span></td>
+  <td class="history-result">{% if h.id in unreadable %}{{ t("error.scan_unreadable") }}{% elif h.score is not none and h.id not in unreadable %}<span class="grade grade-{{ h.grade or 'none' }}">{{ h.grade or '–' }}</span> <span class="history-score">{{ h.score }}/100</span>{% if h.grade_withheld_reason %}<p>{{ t("v04.undetermined") }}</p>{% endif %}{% else %}{{ t('score.not_evaluated') }}{% endif %}</td>
+  <td class="history-coverage {{ 'coverage-partial' if h.coverage < full_coverage }}" data-label="{{ t('details.history_coverage') }}"><span>{{ (h.coverage * 100 + 0.000001) | int }}&nbsp;%</span>
+    {% if r and h.diagnostic_coverage is not none %}{{ indicators(r, address_results.get(h.id, {})) }}{% elif h.diagnostic_coverage is none and h.id not in unreadable %}<span>{{ t('v04.addresses_unknown') }}</span>{% endif %}
+    {% if r %}<span class="history-evaluated muted">{{ t('history.evaluated', evaluated=r.evaluated, applicable=r.applicable) }}</span>{% endif %}</td>
+  <td class="history-origin" data-label="{{ t('history.origin') }}">{{ t('history.origin_perimeter', name=h.perimeter) if h.perimeter else t('history.origin_internet') }}</td>
   <td class="history-version" data-label="{{ t('details.history_version') }}">{{ h.version }}</td>
   <td class="history-actions"><a class="btn btn-secondary" href="/domains/{{ domain.name }}/history/{{ h.id }}">{{ t('history.view') }}</a> <a class="btn btn-secondary" href="/domains/{{ domain.name }}/history/{{ h.id }}/report.pdf">{{ t('history.pdf') }}</a></td>
 </tr>

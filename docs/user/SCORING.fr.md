@@ -87,3 +87,78 @@ Les contrôles critiques forment les **priorités**, les contrôles à améliore
 Les poids et la formule de la note ne changent pas. Les analyses déjà enregistrées ont été recalculées avec ces règles lors de la mise à jour : leur note chiffrée ne change pas quand leur couverture atteint 50 % ; en dessous, elles deviennent « Non évalué » ; un A obtenu avec moins de 90 % de couverture devient B. Une copie de la base d'avant la mise à jour est conservée dans `backups/`.
 
 Les corrections de contrôles de la 0.2.0 (DMARC, SPF, cadrage, CSP… voir le [CHANGELOG](../../CHANGELOG.md)) peuvent, elles, faire varier la note d'une nouvelle analyse par rapport à la précédente : c'est le diagnostic qui est devenu plus juste, pas le domaine qui a changé.
+
+## 7. Ce qui a changé en 0.3.x, et pourquoi
+
+Les poids, la formule de la note et les règles de couverture ne changent pas, et les analyses enregistrées ne sont pas recalculées. Ces verdicts ont changé en 0.3.2 ; ils peuvent faire varier la note de la prochaine analyse :
+
+| Situation | 0.3.1 | 0.3.2 | Raison |
+|---|---|---|---|
+| DMARC `p=reject; pct=0` (ou tout `pct` inférieur à 100) | Conforme | À améliorer | La RFC 9989 a rendu `pct` historique, mais les messageries qui suivent encore la RFC 7489 ne sélectionnent pour la politique que cette part des e-mails en échec (avec `p=reject`, les autres devraient être mis en quarantaine ; avec `p=quarantine`, ils passent par le filtrage habituel) |
+| DMARC `pct=101`, `pct=abc` | Conforme | À améliorer (valeurs à corriger) | RFC 7489 §6.3 : un entier de 0 à 100 |
+| `http://` renvoie vers un autre site, `https://domaine/` répond avec un certificat valide | Critique | Conforme | Envoyer les visiteurs vers un autre site est un choix ; le HTTPS du domaine fonctionne |
+| Idem, `https://domaine/` refuse la connexion | Critique | Critique | Le domaine n'a pas son propre HTTPS |
+| Idem, `https://domaine/` ne répond pas | Critique | Non évalué | Pas de réponse n'est pas un verdict : rien n'a été observé |
+
+Les enregistrements MTA-STS et TLS-RPT sont désormais lus comme leurs RFC les écrivent (champs d'extension, espaces autour de `;`) : un enregistrement que la 0.3.1 jugeait invalide ou absent peut être reconnu valide, et inversement. Les deux restent « à améliorer » quand ils ne sont pas utilisables : la note ne bouge que lorsqu'un enregistrement devient valide.
+
+Pour un domaine dont `http://` renvoie vers un autre site et dont le HTTPS ne répond jamais, aucun contrôle web ni TLS n'est évalué : la note peut désormais être absente (couverture inférieure à 50 %) là où la 0.3.0 et la 0.3.1 en donnaient une, en comptant la redirection en échec sans aucune réponse.
+
+### DMARC : un verdict, des notes
+
+Un contrôle ne donne qu'un verdict. Pour DMARC, il est choisi dans cet ordre : politique invalide, mode d'essai `t=y`, observation `p=none`, valeurs non conformes, `pct` inférieur à 100, sous-domaines exclus (`sp=none`), enregistrements locaux ignorés. Depuis la 0.3.2, les autres anomalies de l'enregistrement sont ajoutées après le verdict, sous forme de notes, sur le plan, la page technique, l'historique et les PDF. Elles ne changent ni le statut ni la note.
+
+Sous `p=none`, l'outil ne propose plus de passer à `p=quarantine` quand aucune adresse de rapports valide n'est publiée (nouveau verdict « sans adresse de rapports valide ») : sans rapports, rien ne permet de vérifier que les vrais e-mails passent. Il n'invente ni ne choisit d'adresse, et l'enregistrement qu'il propose est une quarantaine complète : sans valeur non conforme, sans balise répétée, sans `t` ni `pct` ; `sp` et `np` sont repris tels quels. Une balise répétée est signalée : la syntaxe DMARC l'interdit et certaines messageries peuvent ignorer l'enregistrement entier (statut et note inchangés en 0.3.2, étude prévue en 0.4).
+
+### Scénarios DMARC synthétiques
+
+Monde de test « sain » (100/100, A, couverture 100 %), dont seul l'enregistrement DMARC change. Ce sont des mondes de test, calculés par le moteur dans `tests/test_dmarc_scenarios.py`, pas des mesures de domaines réels.
+
+| Enregistrement DMARC | 0.3.1 | 0.3.2 | Note 0.3.1 → 0.3.2 |
+|---|---|---|---|
+| `p=reject` | Conforme | Conforme | 100 → 100 |
+| Hérité d'un suffixe public en `p=none` | À améliorer | À améliorer (conseil : politique propre au domaine) | 94 → 94 |
+| `p=reject; pct=50` | Conforme | À améliorer (rejet partiel) | 100 → 94 |
+| `p=reject; pct=0` | Conforme | À améliorer (rejet partiel) | 100 → 94 |
+| `p=quarantine; pct=0` | Conforme | À améliorer (quarantaine partielle) | 100 → 94 |
+| `p=reject; pct=abc` | Conforme | À améliorer (valeurs non conformes) | 100 → 94 |
+| `p=none; pct=abc` | À améliorer (observation) | À améliorer (observation sans rapports) + note « valeurs non conformes » | 94 → 94 |
+| `p=reject; t=y; pct=101` | À améliorer (mode d'essai) | À améliorer (mode d'essai) + note « valeurs non conformes » | 94 → 94 |
+| `p=reject; t=y; pct=50` | À améliorer (mode d'essai) | À améliorer (mode d'essai) + note « rejet partiel » | 94 → 94 |
+| `p=quarantine; t=y; pct=50` | À améliorer (mode d'essai) | À améliorer (mode d'essai) + note « quarantaine partielle » | 94 → 94 |
+| `p=reject; pct=50; sp=none` | À améliorer (sous-domaines exclus) | À améliorer (rejet partiel) + note « sous-domaines exclus » | 94 → 94 |
+| `p=none` sans `rua` | À améliorer (observation) | À améliorer (observation sans rapports) | 94 → 94 |
+
+## 8. Version 0.4 : HTTPS, blocages et couverture diagnostique
+
+La racine HTTPS et ses dix dépendants partagent une sonde par couple (nom, adresse).
+Un refus confirmé sur toutes les adresses publiées bloque les dépendants : ils ne sont
+ni notés, ni comptés comme erreurs. La couverture de notation les exclut ; la couverture
+diagnostique inclut leur poids dans son dénominateur.
+
+Trois raisons de plafond non cumulatives partagent une référence : dépendance,
+authentification du certificat, protocole obsolète. La référence conserve les résultats
+hors HTTPS, suppose la racine conforme et les dépendants évalués ou bloqués à leur
+plancher déclaré. La note finale est le minimum du brut et de la référence, arrondi une
+seule fois. Les notes par catégorie ne sont pas plafonnées.
+
+Sans adresse disponible en TLS moderne, avec au moins un refus confirmé ou du TLS
+obsolète et une adresse non concluante (découverte incomplète comprise), le score est
+provisoire, sans lettre : `undetermined`. Ce score n’est pas comparable à une note avec
+lettre. Une adresse disponible en TLS moderne et une autre inconnue conservent une lettre.
+
+Les quatre indicateurs sont la couverture de notation, la couverture diagnostique,
+les contrôles bloqués et les adresses découvertes/tentées/concluantes. La limite de
+4 adresses par famille, une découverte incomplète et une échéance atteinte sont signalées.
+
+Revérifier la racine ou un dépendant relance toute la famille activée avec une nouvelle
+sonde, puis enregistre les résultats et la note dans une transaction unique. Les
+constats initiaux restent inchangés. Le gain d’une correction de la racine peut être
+un intervalle : les mesures bloquées restent inconnues et la cible est provisoire.
+
+L’historique HSTS est un historique local d’observations, pas l’état des navigateurs.
+Seuls les en-têtes reçus avec un certificat vérifié en TLS moderne sont retenus, pour
+un an au maximum. `max-age=0` efface le signal ; l’absence ou un en-tête invalide ne
+l’efface pas. Une politique parente ne s’étend qu’avec includeSubDomains. `preload` ne
+prouve pas une présence dans la liste des navigateurs. L’historique et l’attribution
+n’ont aucun effet sur les statuts ni sur la note.

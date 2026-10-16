@@ -1,7 +1,7 @@
 {# Copyright © 2026 Vincent Fournet · SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 -#}
 {# Every check of the latest scan, with the raw values it saw: the page for the technician. #}
 {% extends "base.html" %}
-{% from "_macros.html" import status_icon %}
+{% from "_macros.html" import indicators with context %}
 {% block title %}{{ t('details.title') }} · {{ scan.domain }}{% endblock %}
 {% block content %}
 <p class="small"><a href="/domains/{{ scan.domain }}">← {{ t('details.back') }}</a></p>
@@ -11,38 +11,13 @@
   <p class="lead">{{ t('details.lead', date=date(scan.started_at), time=local_time(scan.started_at), seconds=(scan.duration_ms / 1000) | round(1), version=scan.version) }}</p>
   <p class="small"><a href="/domains/{{ scan.domain }}/history">{{ t("details.history") }}</a></p>
   <p class="coverage {{ 'coverage-partial' if result.partial or result.score is none }}">
-    {% if result.score is not none %}{{ t('details.result', score=result.score, grade=result.grade) }}{% else %}{{ t('score.not_evaluated') }}{% endif %}
+    {% if result.score is not none %}{{ t('v04.score_only', score=result.score) if result.undetermined else t('details.result', score=result.score, grade=result.grade) }}{% else %}{{ t('score.not_evaluated') }}{% endif %}
     · {{ t('score.coverage', evaluated=result.evaluated, applicable=result.applicable, percent=result.coverage_percent) }}
   </p>
 </div>
 
-{% for category, findings in categories.items() %}
-<section class="panel details" aria-labelledby="cat-{{ category }}">
-  <h2 id="cat-{{ category }}">{{ t('category.' ~ category) }}</h2>
-  <ul class="checks">
-    {% for f in findings %}
-    {% set check = registry.get(f.check_id) %}
-    <li class="check status-{{ f.status.value }}">
-      {{ status_icon(f.status.value) }}
-      <div class="check-body">
-        <p class="check-title"><strong>{{ t(f.check_id ~ '.title') }}</strong>
-          <span class="badge badge-{{ f.status.value }}">{{ t('status.' ~ f.status.value) }}</span>
-          {% if f.check_id in rechecks %}<span class="muted small">{{ t('details.rechecked', date=date(rechecks[f.check_id].checked_at)) }}</span>{% endif %}
-        </p>
-        <p>{{ t(f.outcome.summary, domain=scan.domain, **f.outcome.params) }}</p>
-        {% if f.outcome.evidence %}
-        <details>
-          <summary>{{ t('details.evidence') }}</summary>
-          <pre class="evidence">{{ f.outcome.evidence | tojson(indent=2) }}</pre>
-        </details>
-        {% endif %}
-      </div>
-      <code class="check-id muted small">{{ f.check_id }}{% if f.status.scored %} · {{ t('details.weight', n=f.weight) }}{% endif %}</code>
-    </li>
-    {% endfor %}
-  </ul>
-</section>
-{% endfor %}
+{{ indicators(result, scan.addresses()) }}
+{% include "_findings.html" %}
 
 {% if history | length > 1 %}
 <section class="panel" aria-labelledby="history-title">
@@ -54,7 +29,7 @@
     {% for h in history %}
     <tr{% if h.id == scan.id %} aria-current="true"{% endif %}>
       <td><a href="/domains/{{ scan.domain }}/history/{{ h.id }}">{{ date(h.started_at) }} {{ local_time(h.started_at) }}</a></td>
-      <td>{% if h.score is not none %}<span class="grade grade-{{ h.grade }}">{{ h.grade }}</span> {{ h.score }}/100{% else %}<span class="muted">{{ t('score.not_evaluated') }}</span>{% endif %}</td>
+      <td>{% if h.score is not none %}<span class="grade grade-{{ h.grade or 'none' }}">{{ h.grade or '–' }}</span> {{ h.score }}/100{% else %}<span class="muted">{{ t('score.not_evaluated') }}</span>{% endif %}</td>
       <td class="{{ 'coverage-partial' if h.coverage < full_coverage }}">{{ (h.coverage * 100 + 0.000001) | int }}&nbsp;%</td>
       <td class="muted small">{{ h.version }}</td>
     </tr>

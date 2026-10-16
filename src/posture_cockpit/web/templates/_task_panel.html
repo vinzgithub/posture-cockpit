@@ -14,7 +14,7 @@
     <p class="chips">
       <span class="chip">{{ t('plan.minutes', n=task.minutes) }}</span>
       <span class="chip chip-{{ task.effort }}">{{ task.effort_label }}</span>
-      {% if plan.score is not none %}<span class="chip chip-gain">{{ t('plan.gain', n=task.gain) if task.gain > 0 else t('plan.gain_under_one') }}</span>{% endif %}
+      {% if plan.score is not none %}<span class="chip chip-gain">{{ t('v04.gain', low=('%+d' | format(task.gain)), high=('%+d' | format(task.gain_max))) if task.gain_max is not none else (t('plan.gain', n=task.gain) if task.gain > 0 else t('plan.gain_under_one')) }}</span>{% endif %}
     </p>
   </header>
 

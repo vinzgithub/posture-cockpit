@@ -29,6 +29,9 @@
     url.searchParams.set("task", id);
     url.hash = "";
     history.replaceState(null, "", url);
+    // The language switch comes back to this task, not to the first one.
+    const back = document.querySelector("form.lang-switch input[name='back']");
+    if (back) back.value = url.pathname + url.search;
     // On a phone the panel is below the list: bring it into view.
     if (scroll && window.matchMedia("(max-width: 960px)").matches) {
       document.getElementById("task")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -62,28 +65,90 @@
   });
 
   // ------------------------------------------------------------ copy buttons
-  const copiedLabel = document.documentElement.lang === "fr" ? "Copié ✓" : "Copied ✓";
+  // navigator.clipboard only exists in secure contexts (HTTPS, localhost): at
+  // http://192.168.x.x it is undefined. The older copy command still works there
+  // when it runs during the click. If both fail, the value is selected on the page
+  // and a message says how to copy it by hand. The text never leaves the page.
+  const fr = document.documentElement.lang === "fr";
+  const copiedLabel = fr ? "Copié ✓" : "Copied ✓";
+  const manualText = fr
+    ? "Copie automatique impossible ici : le texte est sélectionné, copiez-le avec Ctrl+C (sur mobile : appui long, puis Copier)."
+    : "Automatic copy is not available here: the text is selected, copy it with Ctrl+C (on a phone: long press, then Copy).";
 
-  async function copy(button, text) {
+  function commandCopy(text) {
+    const focused = document.activeElement;
+    const area = document.createElement("textarea");
+    area.value = text;
+    area.readOnly = true;
+    area.className = "copy-buffer";
+    document.body.append(area);
+    area.select();
+    area.setSelectionRange(0, text.length);
+    let done = false;
     try {
-      await navigator.clipboard.writeText(text);
+      done = document.execCommand("copy");
     } catch (e) {
-      return; // clipboard refused (plain HTTP, old browser): the text stays selectable
+      done = false;
     }
-    const label = button.textContent;
+    area.remove();
+    if (focused && focused.focus) focused.focus();
+    return done;
+  }
+
+  function selectText(node) {
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }
+
+  function report(button, done, shown) {
+    const old = button.parentElement.querySelector(".copy-status");
+    if (old) old.remove();
+    if (!button.dataset.label) button.dataset.label = button.textContent;
+    clearTimeout(Number(button.dataset.timer || 0));
+    if (!done) {
+      button.textContent = button.dataset.label;
+      button.classList.remove("is-copied");
+      if (shown) selectText(shown);
+      const status = document.createElement("p");
+      status.className = "copy-status";
+      status.setAttribute("role", "status");
+      status.textContent = manualText;
+      button.after(status);
+      return;
+    }
     button.textContent = copiedLabel;
     button.classList.add("is-copied");
-    setTimeout(() => {
-      button.textContent = label;
+    button.dataset.timer = String(setTimeout(() => {
+      button.textContent = button.dataset.label;
       button.classList.remove("is-copied");
-    }, 1800);
+    }, 1800));
+  }
+
+  async function copy(button, text, shown) {
+    let done;
+    if (window.isSecureContext && navigator.clipboard) {
+      try {
+        await navigator.clipboard.writeText(text);
+        done = true;
+      } catch (e) {
+        done = commandCopy(text); // refused, in a frame without the permission for instance
+      }
+    } else {
+      done = commandCopy(text); // plain HTTP: no clipboard API, still inside the click
+    }
+    report(button, done, shown);
   }
 
   document.addEventListener("click", (event) => {
     const button = event.target.closest("[data-copy], [data-copy-from]");
     if (!button) return;
     const source = button.dataset.copyFrom ? document.getElementById(button.dataset.copyFrom) : null;
-    copy(button, source ? source.textContent : button.dataset.copy);
+    // What a person can select by hand: the source, or the value shown next to the button.
+    const shown = source || button.parentElement.querySelector("code");
+    copy(button, source ? source.textContent : button.dataset.copy, shown);
   });
 
   // ------------------------------------------------- confirmations and spinners

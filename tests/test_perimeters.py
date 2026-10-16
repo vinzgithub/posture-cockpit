@@ -198,6 +198,18 @@ def test_an_administrator_creates_a_perimeter_and_scans_an_intranet_site(admin):
     assert actions(admin)[0] == "report.internal"
 
 
+def test_the_history_of_an_internal_domain_names_its_perimeter_and_audits_old_reports(admin):
+    create_perimeter(admin)
+    add_internal_domain(admin)
+    scan_id = services(admin).scans.latest(services(admin).scans.domain(INTRANET)["id"]).id
+    assert 'data-label="Point de mesure">Périmètre Siège</td>' in admin.get(f"/domains/{INTRANET}/history").text
+    assert admin.get(f"/domains/{INTRANET}/history/{scan_id}/report.pdf").status_code == 200
+    entry = services(admin).audit.latest(1)[0]
+    # 0.3.1 did not say which stored scan the report was made from.
+    assert (entry["action"], entry["target"]) == ("report.internal", INTRANET)
+    assert entry["detail"] == {"perimeter": "Siège", "scan": scan_id}
+
+
 def test_a_perimeter_is_checked_and_its_name_is_unique(admin):
     r = create_perimeter(admin, networks="0.0.0.0/0")
     assert r.status_code == 400 and "plages privées" in r.text

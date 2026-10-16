@@ -27,7 +27,7 @@ from starlette.exceptions import HTTPException
 from .. import __version__
 from ..i18n import LOCALES, fmt_date, pick_locale
 from ..security import csrf_token, csrf_valid
-from ..storage import Row
+from ..storage import Row, Scan
 from ..timezones import local, local_date
 from .services import services
 
@@ -141,6 +141,29 @@ def visible_domain(request: Request, name: str, user: Row) -> Row:
     return row
 
 
+def number_or_404(text: str) -> int:
+    """A scan or page number taken from the address: 1 to 9 ASCII digits, not zero.
+
+    Anything else (``abc``, ``-1``, ``²``, a number SQLite cannot hold) names a page
+    that does not exist: a 404 page, never a JSON validation error or a crash."""
+    if not (text.isascii() and text.isdigit() and len(text) <= 9) or int(text) == 0:
+        raise HTTPException(404)
+    return int(text)
+
+
+def stored_scan(request: Request, domain: Row, number: str) -> Scan:
+    """Scan ``number`` of ``domain`` (already checked with :func:`visible_domain`), otherwise a 404."""
+    scan_id = number_or_404(number)
+    scans = services(request).scans
+    owner = scans.db.value("SELECT domain_id FROM scans WHERE id=?", (scan_id,))
+    if owner != domain["id"]:
+        raise HTTPException(404)
+    scan = scans.get(scan_id)
+    if scan is None:
+        raise HTTPException(404)
+    return scan
+
+
 # --------------------------------------------------------------------- audit
 def audit(request: Request, action: str, /, *, user: Row | None = None, target: str = "", **detail: Any) -> None:
     """Writes an entry in the audit log, with the address of the client. Never pass a secret."""
@@ -229,5 +252,7 @@ def render(request: Request, template: str, status: int = 200, **context: Any) -
         "date": day,
         "local_time": hour,
         "path": request.url.path,
+        # Where the language switch comes back to, with ?task= or ?page=.
+        "back": request.url.path + (f"?{request.url.query}" if request.url.query else ""),
     }
     return s.templates.TemplateResponse(request, template, {**base, **context}, status_code=status)

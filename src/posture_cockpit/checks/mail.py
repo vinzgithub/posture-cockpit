@@ -42,6 +42,7 @@ from ..core import (
 from ..core.egress import parse_address
 from . import LOCALES
 from .records import (
+    Dmarc,
     Spf,
     is_dmarc_candidate,
     is_spf,
@@ -51,6 +52,7 @@ from .records import (
     parse_dmarc,
     parse_mta_sts_policy,
     parse_spf,
+    tags,
     tls_rpt_problems,
 )
 
@@ -66,10 +68,14 @@ _DKIM_SELECTOR_PATTERN = re.compile(r"[a-z0-9](?:[a-z0-9_-]{0,61}[a-z0-9])?", re
 MAX_DKIM_SELECTORS = 30
 
 
-def dkim_selectors() -> tuple[str, ...]:
-    """Common names plus administrator-provided DNS selectors, bounded per scan."""
+def dkim_selectors(custom: str | None = None) -> tuple[str, ...]:
+    """Common names plus administrator-provided DNS selectors, bounded per scan.
+
+    ``custom``: the value of POSTURE_COCKPIT_DKIM_SELECTORS, read from the environment when None.
+    An invalid value raises ValueError; Config.from_env checks it when the instance starts."""
     values = list(DKIM_SELECTORS)
-    custom = os.environ.get("POSTURE_COCKPIT_DKIM_SELECTORS", "")
+    if custom is None:
+        custom = os.environ.get("POSTURE_COCKPIT_DKIM_SELECTORS", "")
     if custom:
         for raw in custom.split(","):
             selector = raw.strip().lower()
@@ -277,48 +283,132 @@ async def dmarc(ctx: CheckContext) -> Outcome:
             if not exists:
                 policy = record.non_existent_policy
     params: dict[str, str | int] = {"policy": policy or "", "parent": owner}
-    invalid_policy = policy is None or record.policy is None or any(
-        name in {"p", "sp", "np"} for name, _value in record.errors
-    )
-    if invalid_policy:
+    if record.errors:
         evidence["errors"] = [list(e) for e in record.errors]
+    # One check, one verdict, chosen in this order: invalid policy, t=y, p=none, faulty values,
+    # pct, sp=none, local records ignored. Each other anomaly of the record is kept as a note,
+    # shown after the verdict on every page and report (i18n.finding_summary): none disappears
+    # behind the verdict. Notes are translation keys with their parameters, never sentences.
+    enforced = policy in ("quarantine", "reject")
+    # An invalid policy (p, sp, np) is named by the verdict itself: the note lists the other faulty values.
+    policy_errors = tuple(e for e in record.errors if e[0] in {"p", "sp", "np"})
+    invalid_policy = policy is None or record.policy is None or bool(policy_errors)
+    repeated = _repeated_tags(valid[0])
+    # The values the syntax note lists: not those the verdict names, not the repeated tags (their own note).
+    other_errors = tuple(e for e in record.errors if e not in policy_errors and e[0] not in repeated)
+    anomalies: dict[str, tuple[str, dict[str, str | int]]] = {}
+    if other_errors:
+        anomalies["syntax"] = ("mail.dmarc.note.syntax", {"name": f"_dmarc.{owner}", "tags": _tags_text(other_errors)})
+    if repeated:
+        # RFC 9989 §4.7: DMARC records follow the tag-value syntax of DKIM, where a repeated tag makes
+        # the whole tag-list invalid (RFC 6376 §3.2). How receivers treat it varies: said, not scored
+        # differently in 0.3.2 (a study is planned for 0.4).
+        anomalies["repeated"] = ("mail.dmarc.note.repeated", {"name": f"_dmarc.{owner}", "tags": ", ".join(repeated)})
+    if enforced and record.pct < 100:  # pct only limits an enforced policy (RFC 7489 §6.6.4)
+        anomalies["partial"] = ("mail.dmarc.note.partial_reject" if policy == "reject" else "mail.dmarc.note.partial",
+                                {"pct": record.pct})
+    if enforced and not inherited and record.subdomain_policy == "none":
+        anomalies["subdomains_open"] = ("mail.dmarc.note.subdomains_open", {})
+    if ignored_local:
+        anomalies["multiple_local"] = ("mail.dmarc.note.multiple_local",
+                                       {"name": f"_dmarc.{ctx.domain}", "parent": owner})
+
+    def noted(shown: str) -> dict[str, object]:
+        """The evidence, with the anomalies other than ``shown`` (the one the verdict describes) as notes."""
+        notes = [{"key": key, "params": values} for name, (key, values) in anomalies.items() if name != shown]
+        if notes:
+            evidence["notes"] = notes
+        return evidence
+
+    if invalid_policy:
         # RFC 9989 §4.10.1: invalid p/sp/np disables enforcement even when
         # p=reject looks usable. A valid rua allows reporting-only treatment.
+        policy_tags = _tags_text(policy_errors) or "p"
         if record.rua:
-            return warn("mail.dmarc.invalid_monitoring", Remedy(10, Effort.EASY), evidence,
-                        name=f"_dmarc.{owner}")
+            return warn("mail.dmarc.invalid_monitoring", Remedy(10, Effort.EASY), noted("invalid"),
+                        name=f"_dmarc.{owner}", tags=policy_tags)
         return fail("mail.dmarc.invalid", Remedy(10, Effort.EASY, how="mail.dmarc.how", dns=() if inherited else (
             DnsChange("delete", "TXT", "_dmarc", valid[0]), DnsChange("add", "TXT", "_dmarc", first_step))),
-            evidence, name=f"_dmarc.{owner}")
+            noted("invalid"), name=f"_dmarc.{owner}", tags=policy_tags)
     if record.testing and policy != "none":
         # t=y requests one level less enforcement (reject -> quarantine;
         # quarantine -> none), not full protection at the declared level.
+        # RFC 9989 §4.7. Receivers that still follow RFC 7489 do not know t=y and apply the declared
+        # policy (limited by pct, kept as a note): the effective level is the RFC 9989 one.
         effective = "quarantine" if policy == "reject" else "none"
         evidence["effective_policy"] = effective
-        return warn("mail.dmarc.testing", Remedy(5, Effort.MEDIUM), evidence,
+        return warn("mail.dmarc.testing", Remedy(5, Effort.MEDIUM, how="mail.dmarc.testing.how"), noted("testing"),
                     policy=policy or "", effective=effective, parent=owner)
     if policy == "none":
         if inherited:
-            return warn("mail.dmarc.monitoring_inherited", Remedy(10, Effort.MEDIUM, how="mail.dmarc.monitoring.how"),
-                        evidence, **params)
-        # Next step once the reports show that legitimate mail passes: quarantine.
-        stricter = (re.sub(r"(?<![a-z])p\s*=\s*none", "p=quarantine", valid[0], count=1, flags=re.IGNORECASE)
-                    if "p" in record.tags else valid[0].rstrip("; ") + "; p=quarantine")
+            # The parent may not be the owner's to change (a public suffix such as gouv.fr): the step that
+            # is always in the owner's hands is a policy of the domain's own, with its own reports.
+            return warn("mail.dmarc.monitoring_inherited",
+                        Remedy(10, Effort.EASY, how="mail.dmarc.monitoring_inherited.how",
+                               dns=(DnsChange("add", "TXT", "_dmarc", first_step),)),
+                        noted("monitoring"), **params)
+        # Next step once the reports show that legitimate mail passes: quarantine. Decided on the record
+        # that would be published, not on the current one.
+        stricter = stricter_dmarc(valid[0], record)
+        if stricter is None:
+            # No report address that can be kept (none valid, or a repeated rua): nothing can show that
+            # legitimate mail passes, so no stricter record is offered, and no address is chosen or made up.
+            return warn("mail.dmarc.monitoring_no_reports",
+                        Remedy(10, Effort.MEDIUM, how="mail.dmarc.monitoring_no_reports.how"),
+                        noted("monitoring"), name=f"_dmarc.{owner}", **params)
         return warn("mail.dmarc.monitoring", Remedy(10, Effort.MEDIUM, how="mail.dmarc.monitoring.how",
                                                     dns=(DnsChange("delete", "TXT", "_dmarc", valid[0]),
                                                          DnsChange("add", "TXT", "_dmarc", stricter))),
-                    evidence)
+                    noted("monitoring"))
     if record.errors:
-        evidence["errors"] = [list(e) for e in record.errors]
-        return warn("mail.dmarc.syntax", Remedy(5, Effort.EASY, how="mail.dmarc.syntax.how"), evidence,
+        return warn("mail.dmarc.syntax", Remedy(5, Effort.EASY, how="mail.dmarc.syntax.how"), noted("syntax"),
                     tags=_tags_text(record.errors), name=f"_dmarc.{owner}", **params)
+    if record.pct < 100:
+        # Historic in RFC 9989, still applied by receivers that follow RFC 7489 (§6.6.4): only this
+        # share of the failing mail is selected for the policy. For p=reject, the rest SHOULD be
+        # quarantined; for p=quarantine, it goes through the receiver's usual filtering.
+        return warn("mail.dmarc.partial_reject" if policy == "reject" else "mail.dmarc.partial",
+                    Remedy(5, Effort.MEDIUM, how="mail.dmarc.partial.how"), noted("partial"),
+                    pct=record.pct, **params)
     if not inherited and record.subdomain_policy == "none":
         return warn("mail.dmarc.subdomains_open", Remedy(5, Effort.MEDIUM, how="mail.dmarc.subdomains_open.how"),
-                    evidence, **params)
+                    noted("subdomains_open"), **params)
     if ignored_local:
         return warn("mail.dmarc.multiple_inherited", Remedy(5, Effort.MEDIUM, how="mail.dmarc.multiple.how"),
-                    evidence, parent=owner, policy=policy or "", name=f"_dmarc.{ctx.domain}")
+                    noted("multiple_local"), parent=owner, policy=policy or "", name=f"_dmarc.{ctx.domain}")
     return ok("mail.dmarc.enforced_inherited" if inherited else "mail.dmarc.enforced", evidence, **params)
+
+
+def stricter_dmarc(text: str, record: Dmarc) -> str | None:
+    """The record to publish after ``text`` (p=none): a full quarantine, rebuilt from the valid tags.
+
+    - v=DMARC1 and p=quarantine come first;
+    - t and pct are never kept: t=y would turn the quarantine into none (RFC 9989 §4.7), pct below
+      100 would limit it (RFC 7489 §6.6.4), and t=n or pct=100 are the defaults;
+    - a repeated tag is left out entirely: no choice is made between two values;
+    - a tag with a faulty value is left out; rua and ruf keep their valid addresses;
+    - sp, np and the other valid tags are kept as written.
+
+    None when no report address would remain: the step relies on reports to check the real mail."""
+    faulty = {name for name, _value in record.errors}
+    repeated = set(_repeated_tags(text))
+    parts = ["v=DMARC1", "p=quarantine"]
+    for name, value in tags(text):
+        if name in ("v", "p", "t", "pct") or name in repeated:
+            continue
+        if name in ("rua", "ruf"):
+            good = [uri for uri in (u.strip() for u in value.split(",")) if uri and (name, uri) not in record.errors]
+            if good:
+                parts.append(f"{name}={','.join(good)}")
+        elif name not in faulty:
+            parts.append(f"{name}={value}")
+    return "; ".join(parts) if any(part.startswith("rua=") for part in parts) else None
+
+
+def _repeated_tags(text: str) -> list[str]:
+    """Tag names that appear more than once in a record, in order."""
+    names = [name for name, _value in tags(text)]
+    return [name for i, name in enumerate(names) if names.count(name) > 1 and name not in names[:i]]
 
 
 # ------------------------------------------------------------------- DKIM
@@ -360,14 +450,21 @@ async def mta_sts(ctx: CheckContext) -> Outcome:
     mx_hosts = await _mx_hosts(ctx)
     if not mx_hosts:
         return na("mail.no_inbound")
-    # Inspect every TXT at this dedicated name: malformed markers must not vanish.
-    records = await ctx.txt(f"_mta-sts.{ctx.domain}")
+    all_records = await ctx.txt(f"_mta-sts.{ctx.domain}")
     remedy = Remedy(30, Effort.DELEGATE, message="mail.mta_sts.message")
-    if not records:
-        return warn("mail.mta_sts.missing", remedy)
-    evidence: dict[str, object] = {"records": records}
-    if len(records) > 1 or not mta_sts_record_ok(records[0]):
-        return warn("mail.mta_sts.bad_record", remedy, evidence)  # §3.1: senders then ignore MTA-STS
+    # A TXT that does not name the protocol is not an MTA-STS record; one that does (v=STSv1,
+    # v=stsv1, v=STSv2...) must not vanish when senders cannot use it.
+    attempts = [r for r in all_records if r[:5].lower() == "v=sts"]
+    if not attempts:
+        return warn("mail.mta_sts.missing", remedy, {"ignored": all_records} if all_records else None)
+    evidence: dict[str, object] = {"records": attempts}
+    if len(attempts) < len(all_records):
+        evidence["ignored"] = [r for r in all_records if r not in attempts]
+    # §3.1: among several TXT records, those that do not begin with "v=STSv1;" are discarded;
+    # exactly one valid record must remain, otherwise senders ignore MTA-STS.
+    kept = all_records if len(all_records) == 1 else [r for r in all_records if r.startswith("v=STSv1;")]
+    if len(kept) != 1 or not mta_sts_record_ok(kept[0]):
+        return warn("mail.mta_sts.bad_record", remedy, evidence)
     host = f"mta-sts.{ctx.domain}"
     url = f"https://{host}/.well-known/mta-sts.txt"
     evidence["url"] = url
@@ -412,16 +509,24 @@ async def tls_rpt(ctx: CheckContext) -> Outcome:
     """TLS reports tell the domain when mail could not be delivered over an encrypted connection."""
     if not await _mx_hosts(ctx):
         return na("mail.no_inbound")
-    # RFC 8460 §3: non-policy TXT records MUST be discarded before
-    # counting policy records; a malformed recognised policy is still invalid.
     all_records = await ctx.txt(f"_smtp._tls.{ctx.domain}")
-    records = [record for record in all_records if record == "v=TLSRPTv1" or record.startswith("v=TLSRPTv1;")]
+    # A TXT that does not name the protocol is not a TLS-RPT record; one that does (v=TLSRPTv1,
+    # v=tlsrptv1...) is reported when senders cannot use it, not taken for absence.
+    attempts = [r for r in all_records if r[:8].lower() == "v=tlsrpt"]
     value = f"v=TLSRPTv1; rua=mailto:tls-reports@{ctx.domain}"
-    if not records:
+    if not attempts:
         return warn("mail.tls_rpt.missing", Remedy(5, Effort.EASY, dns=(DnsChange("add", "TXT", "_smtp._tls", value),),
                                                    how="mail.tls_rpt.how"), {"records": all_records})
-    problems = ["several records"] if len(records) > 1 else tls_rpt_problems(records[0])
-    if problems:  # RFC 8460 §3: senders then send no report at all
+    # RFC 8460 §3: among several TXT records, those that do not begin with "v=TLSRPTv1;" are
+    # discarded; exactly one valid record must remain, otherwise senders send no report at all.
+    kept = all_records if len(all_records) == 1 else [r for r in all_records if r.startswith("v=TLSRPTv1;")]
+    if len(kept) > 1:
+        problems = ["several records"]
+    elif kept:
+        problems = tls_rpt_problems(kept[0])
+    else:
+        problems = (tls_rpt_problems(attempts[0]) if len(attempts) == 1 else []) or ["v"]
+    if problems:
         return warn("mail.tls_rpt.invalid", Remedy(5, Effort.EASY, how="mail.tls_rpt.invalid.how"),
-                    {"records": all_records, "policies": records, "problems": problems}, problems=", ".join(problems))
-    return ok("mail.tls_rpt.present", {"record": records[0]})
+                    {"records": all_records, "policies": attempts, "problems": problems}, problems=", ".join(problems))
+    return ok("mail.tls_rpt.present", {"record": kept[0]})

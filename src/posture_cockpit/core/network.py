@@ -2,10 +2,15 @@
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Everything the checks may ask the outside world, behind one small interface.
 
-Checks never open a socket themselves: they call the four methods of
-:class:`Network`. This keeps every check *passive* (DNS queries, a TLS handshake,
-one HTTP GET without following redirects, nothing else) and lets the tests and
-the demo replace the network with recorded answers (:mod:`.fixture`).
+Checks never open a socket themselves: they call the methods of :class:`Network`.
+This keeps every check *passive* (DNS queries, a TLS handshake, one HTTP GET
+without following redirects, nothing else) and lets the tests and the demo
+replace the network with recorded answers (:mod:`.fixture`).
+
+Version 0.4 adds the same questions asked of one given address of a name
+(:meth:`LiveNetwork.tls_at`, :meth:`LiveNetwork.http_at`), for the HTTPS probe
+(:mod:`.https_probe`) and the checks that depend on it: every published address
+is tested, with the audited name as TLS SNI and HTTP ``Host``.
 
 :class:`LiveNetwork` is the real implementation. One instance is used per scan:
 
@@ -24,10 +29,11 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import errno
+import socket
 import ssl
-import warnings
 from collections.abc import Awaitable, Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import Any, Protocol, TypeVar
 
@@ -35,22 +41,47 @@ import dns.asyncresolver
 import dns.exception
 import dns.rdatatype
 import dns.resolver
+import h11
 import httpx
 from cryptography import x509
 from cryptography.hazmat.primitives.asymmetric import dsa, ec, ed448, ed25519, rsa
 from cryptography.x509.oid import NameOID
 
 from .. import __version__
+from . import legacy_tls
 from .egress import INTERNET, Address, DestinationBlocked, EgressPolicy, parse_address
-from .errors import ConnectionReset, ConnectionTimedOut, NetworkError, Refused, TLSHandshakeError
+from .errors import (
+    ConnectionClosed,
+    ConnectionReset,
+    ConnectionTimedOut,
+    LegacyUnsupported,
+    NetworkError,
+    Refused,
+    TLSAlert,
+    TLSHandshakeError,
+    Unreachable,
+)
 
 USER_AGENT = f"PostureCockpit/{__version__} (+https://github.com/vinzgithub/posture-cockpit)"
 MAX_BODY = 64 * 1024  # bytes of a web page kept for the checks
 TLS_VERSIONS = ("TLSv1", "TLSv1.1", "TLSv1.2", "TLSv1.3")
+# Version 0.4: what a TLS attempt on one address offers. "default" is a browser's offer, TLS 1.2 and 1.3.
+OFFERS: Mapping[str, tuple[str, str]] = {
+    "default": ("TLSv1.2", "TLSv1.3"),
+    "TLSv1.3": ("TLSv1.3", "TLSv1.3"),
+    "TLSv1.2": ("TLSv1.2", "TLSv1.2"),
+    "TLSv1.1": ("TLSv1.1", "TLSv1.1"),
+    "TLSv1": ("TLSv1", "TLSv1"),
+}
+_TLS_VERSION = {"TLSv1.2": ssl.TLSVersion.TLSv1_2, "TLSv1.3": ssl.TLSVersion.TLSv1_3}
+# No route from this machine: the address could not be tested from here (no IPv6, for instance).
+_UNREACHABLE = frozenset({errno.ENETUNREACH, errno.EAFNOSUPPORT, errno.EADDRNOTAVAIL})
+# Errors of this machine's own TLS library, before anything reached the server.
+_LOCAL_TLS = frozenset({"NO_PROTOCOLS_AVAILABLE", "NO_CIPHERS_AVAILABLE"})
 
 __all__ = [
-    "MAX_BODY", "TLS_VERSIONS", "USER_AGENT", "Certificate", "DestinationBlocked", "DnsAnswer", "HttpReply",
-    "Limits", "LiveNetwork", "Network", "NetworkError", "Refused", "UntrustedCertificate",
+    "MAX_BODY", "OFFERS", "TLS_VERSIONS", "USER_AGENT", "Certificate", "DestinationBlocked", "DnsAnswer",
+    "HttpReply", "Limits", "LiveNetwork", "Network", "NetworkError", "Refused", "TlsSession", "UntrustedCertificate",
 ]
 
 
@@ -94,6 +125,16 @@ class Certificate:
 
 
 @dataclass(frozen=True)
+class TlsSession:
+    """A TLS negotiation that succeeded on one address (version 0.4)."""
+
+    host: str
+    address: str
+    version: str              # negotiated, e.g. "TLSv1.2"
+    certificate: Certificate  # trusted and problem as a browser would judge it
+
+
+@dataclass(frozen=True)
 class HttpReply:
     url: str
     status: int
@@ -128,6 +169,34 @@ class Network(Protocol):
         MTA-STS requires), an invalid certificate raises :class:`UntrustedCertificate`."""
         ...
 
+    # Version 0.4: one given address of a name, the name as SNI and Host.
+    def tls_at(self, host: str, address: str, offer: str = "default", *, port: int = 443,
+               verify: bool = True) -> Awaitable[TlsSession]:
+        """One TLS negotiation with ``address``, offering :data:`OFFERS` ``[offer]``, then closed.
+
+        Never cached: each call is one attempt. With ``verify``, a certificate that fails
+        verification is still read (a second negotiation without verification) and returned
+        untrusted, with the problem. Raises a :class:`NetworkError` that says where it stopped."""
+        ...
+
+    def accepts_tls_at(self, host: str, address: str, version: str, *, port: int = 443) -> Awaitable[bool | None]:
+        """Whether ``address`` accepts this TLS version: a handshake only, closed at once.
+
+        None when this machine cannot offer it. A timeout or a closed port raises."""
+        ...
+
+    def http_at(self, url: str, address: str, *, offer: str = "default", cache: bool = True) -> Awaitable[HttpReply]:
+        """One GET of ``url`` on ``address``, without following redirects nor verifying the certificate.
+
+        ``offer``: for an ``https`` URL, the TLS offer that negotiated with this address (:data:`OFFERS`);
+        TLS 1.0 and 1.1 come from :mod:`.legacy_tls`, for an address that speaks nothing newer.
+        ``cache=False``: not shared, and stopped with the caller (the probe)."""
+        ...
+
+    def negotiated(self) -> frozenset[tuple[str, str]]:
+        """(name, address) of every TLS negotiation that succeeded so far in the scan."""
+        ...
+
 
 @dataclass(frozen=True)
 class Limits:
@@ -136,6 +205,8 @@ class Limits:
     dns_queries: int = 400
     connections: int = 80            # TLS handshakes and HTTP requests
     operation_seconds: float = 20.0  # one question, all attempts included
+    # Version 0.4: the HTTPS probe, by attempt; at worst 16 addresses, about 8 connections each.
+    probe_connections: int = 160
 
 
 T = TypeVar("T")
@@ -163,7 +234,9 @@ class LiveNetwork:
             self._resolver.nameservers = list(nameservers)
         self._resolver.lifetime = timeout
         self._cache: dict[tuple, asyncio.Future[Any]] = {}
-        self._spent = {"dns": 0, "connections": 0}
+        self._spent = {"dns": 0, "connections": 0, "probe": 0}
+        self._contexts: dict[tuple[str, bool], ssl.SSLContext | None] = {}
+        self._negotiated: set[tuple[str, str]] = set()
 
     async def _cached(self, key: tuple, make: Callable[[], Awaitable[T]]) -> T:
         # The task is shared: a second caller waits for the first answer.
@@ -174,7 +247,8 @@ class LiveNetwork:
         return await asyncio.shield(self._cache[key])
 
     def _spend(self, kind: str) -> None:
-        allowed = self.limits.dns_queries if kind == "dns" else self.limits.connections
+        allowed = {"dns": self.limits.dns_queries, "connections": self.limits.connections,
+                   "probe": self.limits.probe_connections}[kind]
         if self._spent[kind] >= allowed:
             raise NetworkError(f"limit of {allowed} {kind} per scan reached")
         self._spent[kind] += 1
@@ -254,6 +328,7 @@ class LiveNetwork:
             try:
                 _, writer = await asyncio.wait_for(
                     asyncio.open_connection(str(address), port, ssl=context, server_hostname=host), self.timeout)
+                self._negotiated.add((host, str(address)))
                 return writer
             except (ssl.SSLError, ConnectionResetError):
                 raise
@@ -309,16 +384,10 @@ class LiveNetwork:
         return await self._cached(("tls", host, version, port), lambda: self._accepts_tls(host, version, port))
 
     async def _accepts_tls(self, host: str, version: str, port: int) -> bool | None:
-        context = _unverified_context()  # only the protocol version matters here
-        tls_version = {"TLSv1": ssl.TLSVersion.TLSv1, "TLSv1.1": ssl.TLSVersion.TLSv1_1,
-                       "TLSv1.2": ssl.TLSVersion.TLSv1_2, "TLSv1.3": ssl.TLSVersion.TLSv1_3}[version]
-        try:
-            with warnings.catch_warnings():  # Python warns that TLS 1.0 is deprecated: that is the point
-                warnings.simplefilter("ignore", DeprecationWarning)
-                context.minimum_version = context.maximum_version = tls_version
-            if version in ("TLSv1", "TLSv1.1"):
-                context.set_ciphers("DEFAULT:@SECLEVEL=0")  # old versions need old ciphers
-        except (ValueError, ssl.SSLError):
+        # Only the protocol version matters here; old versions need the isolated legacy context.
+        context = (legacy_tls.context(version, version) if version in legacy_tls.VERSIONS
+                   else _unverified_context(version, version))
+        if context is None:
             return None
         try:
             writer = await self._connect(host, port, context)
@@ -358,12 +427,18 @@ class LiveNetwork:
                 try:
                     async with client.stream("GET", target.copy_with(host=str(address)), headers=headers,
                                              extensions=extensions) as response:
+                        if target.scheme == "https":
+                            self._negotiated.add((host, str(address)))
                         return await _read_reply(url, response)
                 except (httpx.ConnectError, httpx.ConnectTimeout) as e:
                     problem = _certificate_problem(e)
                     if problem is not None:
                         raise UntrustedCertificate(url, problem) from e
                     failure = e  # this address cannot be reached: try the next one
+                except httpx.TimeoutException as e:
+                    # Connected, but the reply did not come in time (read, write or pool timeout):
+                    # the same diagnosis as a connection that times out.
+                    raise ConnectionTimedOut(f"HTTP {url}: {e.__class__.__name__}") from e
                 except httpx.HTTPError as e:
                     raise NetworkError(f"HTTP {url}: {e.__class__.__name__}") from e
         if failure is not None and _caused_by(failure, ConnectionRefusedError):
@@ -375,7 +450,232 @@ class LiveNetwork:
         raise NetworkError(f"HTTP {url}: {failure.__class__.__name__ if failure else 'unreachable'}")
 
 
+    # ------------------------------------------------- one address (0.4)
+    def negotiated(self) -> frozenset[tuple[str, str]]:
+        return frozenset(self._negotiated)
+
+    def _offer_context(self, offer: str, verify: bool) -> ssl.SSLContext | None:
+        """The context of one offer; old versions come from :mod:`.legacy_tls` only."""
+        if (offer, verify) not in self._contexts:
+            low, high = OFFERS[offer]
+            if low in legacy_tls.VERSIONS:
+                built = legacy_tls.context(low, high, verify=verify, trusted_ca=self._trusted_ca)
+            elif verify:
+                built = ssl.create_default_context()
+                if self._trusted_ca:
+                    built.load_verify_locations(cadata=self._trusted_ca)
+                built.minimum_version, built.maximum_version = _TLS_VERSION[low], _TLS_VERSION[high]
+            else:
+                built = _unverified_context(low, high)
+            self._contexts[(offer, verify)] = built
+        return self._contexts[(offer, verify)]
+
+    async def _open_at(self, host: str, address: Address, port: int, context: ssl.SSLContext | None,
+                       stage: list[str]) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
+        """A connection to this very address, after the policy said yes; TLS when ``context`` is given,
+        with ``host`` as SNI. ``stage[0]`` follows the progress, for the caller's messages."""
+        self.policy.check(host, address, port)  # raises DestinationBlocked: nothing is sent
+        stage[0] = "tcp"
+        try:
+            sock = socket.socket(socket.AF_INET6 if address.version == 6 else socket.AF_INET, socket.SOCK_STREAM)
+        except OSError as e:  # this machine cannot even make the socket (IPv6 absent)
+            raise Unreachable(f"{host} ({address}) port {port}: {e.strerror or e}") from e
+        try:
+            sock.setblocking(False)
+            await asyncio.get_running_loop().sock_connect(sock, (str(address), port))
+            if context is None:
+                stage[0] = "http"
+                return await asyncio.open_connection(sock=sock)
+            stage[0] = "tls"
+            return await asyncio.open_connection(sock=sock, ssl=context, ssl_handshake_timeout=self.timeout,
+                                                 server_hostname=host)
+        except BaseException:
+            sock.close()  # a transport that took it over has closed it already: closing twice is harmless
+            raise
+
+    async def tls_at(self, host: str, address: str, offer: str = "default", *, port: int = 443,
+                     verify: bool = True) -> TlsSession:
+        self._spend("probe")
+        return await self._tls_at(host, address, offer, port, verify)
+
+    async def _tls_at(self, host: str, address: str, offer: str, port: int, verify: bool) -> TlsSession:
+        try:
+            return await self._session(host, address, offer, port, verify)
+        except ssl.SSLCertVerificationError as e:
+            # The server negotiated: its certificate is what failed. Read it without verification.
+            problem = e.verify_message or str(e)
+            session = await self._session(host, address, offer, port, verify=False)
+            return replace(session, certificate=replace(session.certificate, trusted=False, problem=problem))
+
+    async def _session(self, host: str, address: str, offer: str, port: int, verify: bool) -> TlsSession:
+        target = _address(address)
+        context = self._offer_context(offer, verify)
+        where = f"TLS {host} ({address}) port {port}, {offer}"
+        if context is None:
+            raise LegacyUnsupported(f"{where}: this machine cannot offer this version")
+        stage = ["tcp"]
+        writer: asyncio.StreamWriter | None = None
+        try:
+            async with asyncio.timeout(self.timeout):
+                _, writer = await self._open_at(host, target, port, context, stage)
+            ssl_object = writer.get_extra_info("ssl_object")
+            der = ssl_object.getpeercert(binary_form=True)
+            version = ssl_object.version() or ""
+        except ssl.SSLCertVerificationError:
+            if verify:
+                raise
+            raise TLSHandshakeError(f"{where}: certificate refused without verification") from None
+        except (DestinationBlocked, NetworkError):
+            raise
+        except BaseException as e:
+            if isinstance(e, asyncio.CancelledError):
+                raise
+            raise _classified(e, where, stage[0]) from e
+        finally:
+            if writer is not None:
+                writer.transport.abort()  # no close_notify to wait for: the attempt is over
+        if not der:
+            raise TLSHandshakeError(f"{where}: no certificate")
+        self._negotiated.add((host, address))
+        return TlsSession(host, address, version,
+                          _parse_certificate(host, der, version, trusted=verify))
+
+    async def accepts_tls_at(self, host: str, address: str, version: str, *, port: int = 443) -> bool | None:
+        return await self._cached(("tls_at", host, address, version, port),
+                                  lambda: self._accepts_tls_at(host, address, version, port))
+
+    async def _accepts_tls_at(self, host: str, address: str, version: str, port: int) -> bool | None:
+        try:
+            await self._tls_at(host, address, version, port, verify=False)
+        except LegacyUnsupported:
+            return None
+        except (TLSHandshakeError, ConnectionReset):  # an alert, a reset or a silent close: refused
+            return False
+        return True
+
+    async def http_at(self, url: str, address: str, *, offer: str = "default", cache: bool = True) -> HttpReply:
+        if not cache:
+            self._spend("probe")
+            return await self._http_at(url, address, offer)
+        return await self._cached(("http_at", url, address, offer), lambda: self._http_at(url, address, offer))
+
+    async def _http_at(self, url: str, address: str, offer: str) -> HttpReply:
+        try:
+            target = httpx.URL(url)
+        except httpx.InvalidURL as e:
+            raise NetworkError(f"HTTP {url}: invalid URL") from e
+        if target.scheme not in ("http", "https") or not target.raw_host:
+            raise NetworkError(f"HTTP {url}: only http and https URLs are fetched")
+        host = target.raw_host.decode("ascii")
+        port = target.port or (443 if target.scheme == "https" else 80)
+        context: ssl.SSLContext | None = None
+        if target.scheme == "https":
+            context = self._offer_context(offer, verify=False)
+            if context is None:
+                raise LegacyUnsupported(f"HTTP {url} ({address}): this machine cannot offer {offer}")
+        where = f"HTTP {url} ({address})"
+        stage = ["tcp"]
+        writer: asyncio.StreamWriter | None = None
+        try:
+            async with asyncio.timeout(self.timeout):
+                reader, writer = await self._open_at(host, _address(address), port, context, stage)
+                stage[0] = "http"
+                reply = await _exchange(url, reader, writer, _host_header(host, target.port),
+                                        target.raw_path.decode("ascii") or "/")
+        except (DestinationBlocked, NetworkError):
+            raise
+        except BaseException as e:
+            if isinstance(e, asyncio.CancelledError):
+                raise
+            raise _classified(e, where, stage[0]) from e
+        finally:
+            if writer is not None:
+                writer.transport.abort()
+        if context is not None:
+            self._negotiated.add((host, address))
+        return reply
+
+
 # ---------------------------------------------------------------- helpers
+def _address(text: str) -> Address:
+    address = parse_address(text)
+    if address is None:
+        raise NetworkError(f"{text}: not an address")
+    return address
+
+
+def _classified(error: BaseException, where: str, stage: str) -> NetworkError:
+    """What made a connection to one address fail, as a :class:`NetworkError` that keeps the stage."""
+    result: NetworkError
+    if isinstance(error, TimeoutError):
+        result = ConnectionTimedOut(f"{where}: no answer ({stage})")
+    elif isinstance(error, ConnectionRefusedError):
+        result = Refused(f"{where}: connection refused")
+    elif isinstance(error, ssl.SSLError):
+        reason = error.reason or ""
+        if reason in _LOCAL_TLS:
+            result = LegacyUnsupported(f"{where}: this machine cannot offer this version ({reason})")
+        elif isinstance(error, ssl.SSLEOFError) or reason == "UNEXPECTED_EOF_WHILE_READING":
+            result = ConnectionClosed(f"{where}: closed during the negotiation")
+        elif "ALERT" in reason or reason in ("UNSUPPORTED_PROTOCOL", "WRONG_VERSION_NUMBER", "TLSV1_UNRECOGNIZED_NAME"):
+            result = TLSAlert(f"{where}: {reason.lower()}", reason.lower())
+        else:
+            result = TLSHandshakeError(f"{where}: {reason or error}")
+    elif isinstance(error, ConnectionResetError):
+        # asyncio reports a connection closed during the negotiation as a reset without errno.
+        result = (ConnectionReset(f"{where}: connection reset") if error.errno
+                  else ConnectionClosed(f"{where}: connection closed"))
+    elif isinstance(error, (ConnectionAbortedError, BrokenPipeError, asyncio.IncompleteReadError, EOFError)):
+        result = ConnectionClosed(f"{where}: connection closed")
+    elif isinstance(error, h11.RemoteProtocolError):
+        result = NetworkError(f"{where}: not a valid HTTP reply ({error})")
+    elif isinstance(error, OSError) and error.errno in _UNREACHABLE:
+        result = Unreachable(f"{where}: {error.strerror or error}")
+    else:
+        result = NetworkError(f"{where}: {error.__class__.__name__} {error}".strip())
+    result.stage = stage
+    return result
+
+
+async def _exchange(url: str, reader: asyncio.StreamReader, writer: asyncio.StreamWriter, host: str,
+                    path: str) -> HttpReply:
+    """One GET on an open connection: status, headers and the first :data:`MAX_BODY` bytes of the body."""
+    connection = h11.Connection(h11.CLIENT)
+    request = h11.Request(method="GET", target=path, headers=[
+        ("Host", host), ("User-Agent", USER_AGENT), ("Accept", "*/*"), ("Connection", "close")])
+    writer.write(connection.send(request) + (connection.send(h11.EndOfMessage()) or b""))
+    await writer.drain()
+    response: h11.Response | None = None
+    body = b""
+    while len(body) < MAX_BODY:
+        try:
+            event = connection.next_event()
+        except h11.RemoteProtocolError:
+            if response is None:
+                raise
+            break  # a body cut short: the status and the headers are what the checks read
+        if event is h11.NEED_DATA:
+            data = await reader.read(65536)
+            if not data and response is None:
+                raise ConnectionClosed(f"HTTP {url}: closed before any reply")
+            connection.receive_data(data)
+            continue
+        if isinstance(event, h11.Response):
+            response = event
+        elif isinstance(event, h11.Data):
+            body += event.data
+        elif isinstance(event, (h11.EndOfMessage, h11.ConnectionClosed)):
+            break
+    if response is None:
+        raise ConnectionClosed(f"HTTP {url}: no reply")
+    headers: dict[str, str] = {}
+    for name, value in response.headers:
+        key = name.decode("latin-1").lower()
+        text = value.decode("latin-1")
+        headers[key] = f"{headers[key]}, {text}" if key in headers else text
+    return HttpReply(url, response.status_code, headers, body[:MAX_BODY].decode("utf-8", errors="replace"))
+
+
 async def _read_reply(url: str, response: httpx.Response) -> HttpReply:
     """Status, headers and the first :data:`MAX_BODY` bytes of the body."""
     body = b""
@@ -424,11 +724,17 @@ def _record_text(rdata) -> str:
     return rdata.to_text()
 
 
-def _unverified_context() -> ssl.SSLContext:
-    """For reading a certificate that failed verification, and for probing TLS versions."""
+def _unverified_context(minimum: str | None = None, maximum: str | None = None) -> ssl.SSLContext:
+    """For reading a certificate that failed verification, and for probing TLS 1.2 and 1.3.
+
+    TLS 1.0 and 1.1 are never set here: they come from :mod:`.legacy_tls` only."""
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     context.check_hostname = False
     context.verify_mode = ssl.CERT_NONE
+    if minimum is not None:
+        context.minimum_version = _TLS_VERSION[minimum]
+    if maximum is not None:
+        context.maximum_version = _TLS_VERSION[maximum]
     return context
 
 

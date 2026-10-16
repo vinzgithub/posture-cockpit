@@ -151,3 +151,40 @@ One test needs an IPv6 loopback address and is skipped on machines without one.
 - Code, names and comments in English; visible texts in French and English.
 - A module starts with a docstring that states its role; comments explain **why**, not what the line does.
 - `ruff check src tests examples`, `mypy` and `pytest` must pass before every merge (CI runs them).
+
+
+### 0.4 HTTPS persistence
+
+Migration 4 only adds nullable scan columns. It never calls scoring, rewrites findings,
+or backfills prior scans. Database startup backs up an existing schema before migration.
+The engine stores family metadata inside outcome JSON, so pre-0.4 findings keep their
+original scoring semantics. New saves and recheck groups update every metric in the
+same SQLite transaction as their findings.
+
+Scanner.recheck_group selects the entire enabled HTTPS family when a root or dependent
+is requested. A fresh network and shared probe serve the group. The web route commits
+all findings together, with one timestamp. No partial family update is exposed.
+
+The scanner receives a local history snapshot. The HTTPS root records authenticated
+modern-TLS HSTS headers per host and last availability. Before replacing a root recheck,
+the repository compacts `https_history_previous` to the last interpretable HSTS header
+(including zero max-age) and the last availability per host, each with its original date.
+The compact trail is bounded by the host count, independent of the number of rechecks. This is essential: a subsequent missing header must not resurrect
+a policy erased by an earlier recheck. `https_history` replays scan and recheck events
+chronologically without contacting the network or changing scores. An ancestor policy
+only covers a child with includeSubDomains. Preload is never treated as list membership.
+
+Validation uses fixture networks and loopback servers only. In execution environments
+that intercept custom local names, `POSTURE_TEST_LOOPBACK_TRANSPORT=1` enables a
+loopback-only test proxy. It serves the actual app and preserves the browser's insecure
+HTTP origin (including unavailable clipboard API); it does not stub application code.
+
+
+Only S1 (redirect) and S2 (unexpired authenticated HSTS history) announce HTTPS. DNS HTTPS
+records (S3), previous HTTPS availability (S4) and a preload request are hints only;
+they do not change a refusal remedy to restoration. The preload list is never queried.
+`Scans.https_history(now=...)` accepts a deterministic clock for tests.
+
+Stored finding decoding rejects non-finite floors, false HTTPS roots and invalid JSON.
+It raises CorruptScan at the repository boundary. Web handlers return localized HTTP 409
+pages or an error PDF; the API gives scan_unreadable. Lists isolate damaged analyses.
