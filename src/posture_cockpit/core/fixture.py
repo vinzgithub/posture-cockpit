@@ -27,8 +27,9 @@ server with nothing listening would; the value ``"timeout"`` (for a URL, a
 certificate or a DNS question) raises :class:`~.errors.ConnectionTimedOut`, as
 LiveNetwork does. ``http_get(url, verify=True)`` raises
 :class:`~.network.UntrustedCertificate` when the URL's host has a certificate
-listed with ``"trusted": false``. Certificate dates are given relative to ``now`` so a
-demo always looks the same, whatever the day.
+listed with ``"trusted": false``, or whose dates do not cover ``now`` (expired, or
+not yet valid), as TLS verification does on the real network. Certificate dates are
+given relative to ``now`` so a demo always looks the same, whatever the day.
 """
 
 from __future__ import annotations
@@ -75,14 +76,37 @@ class FixtureNetwork:
         if self._certificates[host] == "timeout":
             raise ConnectionTimedOut(f"TLS {host}:{port}: timeout")
         c = self._certificates[host]
-        expires = self.now + timedelta(days=float(c.get("expires_in_days", 90)))
+        not_before, not_after = self._validity(c)
+        problem = self._problem(c)
         return Certificate(
             host=host, subject=c.get("subject", host), names=tuple(c.get("names", [host])),
-            issuer=c.get("issuer", "Let's Encrypt"),
-            not_before=expires - timedelta(days=float(c.get("lifetime_days", 90))), not_after=expires,
+            issuer=c.get("issuer", "Let's Encrypt"), not_before=not_before, not_after=not_after,
             key_type=c.get("key_type", "EC"), key_bits=int(c.get("key_bits", 256)),
-            trusted=bool(c.get("trusted", True)), problem=c.get("problem", ""), protocol=c.get("protocol", "TLSv1.3"),
+            trusted=not problem, problem=problem, protocol=c.get("protocol", "TLSv1.3"),
         )
+
+    def _validity(self, c: Mapping[str, Any]) -> tuple[datetime, datetime]:
+        expires = self.now + timedelta(days=float(c.get("expires_in_days", 90)))
+        return expires - timedelta(days=float(c.get("lifetime_days", 90))), expires
+
+    def _problem(self, c: Mapping[str, Any]) -> str:
+        """Why verification refuses this certificate, as the real network words it; "" when it does not.
+
+        In order: a ``problem`` given by the world, with or without ``"trusted": false``;
+        then ``"trusted": false`` alone (a generic problem); then the dates, as TLS verification
+        checks them (until 0.3.2 an expired certificate was still trusted here). ``"trusted": true``
+        never overrides the dates: the real network has no such switch."""
+        problem = str(c.get("problem") or "")
+        if problem:
+            return problem
+        if not c.get("trusted", True):
+            return "certificate not trusted"
+        not_before, not_after = self._validity(c)
+        if self.now > not_after:
+            return "certificate has expired"
+        if self.now < not_before:
+            return "certificate is not yet valid"
+        return ""
 
     async def accepts_tls(self, host: str, version: str, port: int = 443) -> bool | None:
         self.asked.append(f"tls {host} {version}")
@@ -98,8 +122,9 @@ class FixtureNetwork:
             raise ConnectionTimedOut(f"HTTP {url}: ReadTimeout")
         host = urlsplit(url).hostname or ""
         certificate = self._certificates.get(host, {})
-        if verify and url.startswith("https:") and not certificate.get("trusted", True):
-            raise UntrustedCertificate(url, certificate.get("problem", "certificate not trusted"))
+        problem = self._problem(certificate) if isinstance(certificate, Mapping) else ""
+        if verify and url.startswith("https:") and problem:
+            raise UntrustedCertificate(url, problem)
         r = self._http[url]
         headers = {name.lower(): value for name, value in r.get("headers", {}).items()}
         return HttpReply(url, int(r.get("status", 200)), headers, r.get("body", ""))
