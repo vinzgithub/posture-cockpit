@@ -98,9 +98,15 @@ def http_only_with_redirect_elsewhere() -> dict:
 
 
 def redirect_elsewhere_https_refused() -> dict:
-    """The same, but HTTPS on the domain refuses the connection: the redirect fails, 67/100 at 54 %."""
+    """The same, but HTTPS on the domain refuses the connection (0.3.2: 67/100 at 54 %).
+
+    Version 0.4: port 443 of the domain refuses (no certificate listed: the recorded network answers
+    with a TCP refusal on every attempt), ``www`` still gives no answer: a refusal confirmed on the
+    domain, the availability of HTTPS not established (matrix M30). The score stays 67, without a
+    global grade. Until 0.3.2 only the ``https://`` URL was removed, which 0.3.2's root read alone."""
     data = http_only_with_redirect_elsewhere()
     del data["http"][f"https://{DOMAIN}/"]
+    del data["certificates"][DOMAIN]
     return data
 
 

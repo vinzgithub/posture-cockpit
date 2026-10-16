@@ -19,7 +19,7 @@ from posture_cockpit.checks.records import mx_matches, parse_dkim, parse_dmarc, 
 from posture_cockpit.core import engine, scoring
 from posture_cockpit.core.egress import DestinationBlocked
 from posture_cockpit.core.fixture import FixtureNetwork
-from posture_cockpit.core.model import Status
+from posture_cockpit.core.model import Signal, Status
 from posture_cockpit.core.registry import Registry
 from worlds import (
     DOMAIN,
@@ -428,7 +428,8 @@ def test_a_redirection_chain_over_http_inside_the_domain_is_fine():
         f"http://{DOMAIN}/": {"status": 301, "headers": {"Location": f"https://www.{DOMAIN}/"}}})
     f = one(data, "web.https_redirect")
     assert verdict(f) == (Status.OK, "web.https_redirect.ok")
-    assert f.outcome.evidence[f"www.{DOMAIN}"].endswith(f"https://www.{DOMAIN}/")
+    # 0.4: the redirection is read on each address of each host (here 192.0.2.10).
+    assert f.outcome.evidence["redirection"][f"www.{DOMAIN}"]["192.0.2.10"].endswith(f"https://www.{DOMAIN}/")
 
 
 @pytest.mark.parametrize("http", [
@@ -454,51 +455,69 @@ def _redirect_elsewhere_scan(data):
 
 def test_external_redirect_is_fine_when_the_host_also_answers_over_https():
     """0.3.1: FAIL. example.org → https://www.example.com is a business choice: what matters for the
-    audited domain is that https://example.org/ itself answers with a valid certificate."""
+    audited domain is that https://example.org/ itself answers (matrix M4; the certificate is judged by
+    tls.certificate alone since 0.4)."""
     data = changed(healthy(), http={f"http://{DOMAIN}/": ELSEWHERE, f"http://www.{DOMAIN}/": ELSEWHERE})
     f, asked = _redirect_elsewhere_scan(data)
     assert verdict(f) == (Status.OK, "web.https_redirect.ok")
-    assert f.outcome.evidence[DOMAIN] == \
-        f"301 http://{DOMAIN}/ → https://elsewhere.example.net/ ; https://{DOMAIN}/ tested"
-    assert f"http https://{DOMAIN}/" in asked
+    assert f.outcome.evidence["redirection"][DOMAIN]["192.0.2.10"] == \
+        f"301 http://{DOMAIN}/ → https://elsewhere.example.net/"
+    assert {"key": "web.https_redirect.note.external",
+            "params": {"host": DOMAIN, "target": "https://elsewhere.example.net/"}} in f.outcome.evidence["notes"]
+    assert f"http https://{DOMAIN}/ @192.0.2.10" in asked  # the audited host itself, on its address
     assert not any("elsewhere.example.net" in line for line in asked)  # the other site is never fetched
 
 
 def test_external_redirect_without_https_on_the_host_fails():
-    """A third-party HTTPS page cannot prove HTTPS for the audited domain."""
+    """A third-party HTTPS page cannot prove HTTPS for the audited domain (matrix M18, M29: port 443 of
+    the domain refuses every attempt; www answers)."""
     data = changed(healthy(), http={f"http://{DOMAIN}/": ELSEWHERE, f"http://www.{DOMAIN}/": ELSEWHERE})
     del data["http"][f"https://{DOMAIN}/"]
+    del data["certificates"][DOMAIN]
     f, _asked = _redirect_elsewhere_scan(data)
     assert verdict(f) == (Status.FAIL, "web.https_redirect.external")
     assert f.outcome.params["host"] == DOMAIN
     assert f.outcome.remedy.message == "web.https_redirect.external.message"
 
 
-def test_external_redirect_with_an_untrusted_certificate_on_the_host_fails():
+def test_external_redirect_with_an_untrusted_certificate_on_the_host_is_judged_by_the_certificate():
+    """0.3.2: the root FAIL (bad_certificate), on top of tls.certificate: two critical for one fault.
+    0.4 (matrix M43): the root is compliant, the target noted; tls.certificate alone is critical."""
     data = changed(healthy(), http={f"http://{DOMAIN}/": ELSEWHERE})
     data["certificates"][DOMAIN]["trusted"] = False
     f, _asked = _redirect_elsewhere_scan(data)
-    assert verdict(f) == (Status.FAIL, "web.https_redirect.bad_certificate")
+    assert verdict(f) == (Status.OK, "web.https_redirect.ok")
+    assert {"key": "web.https_redirect.note.certificate", "params": {}} in f.outcome.evidence["notes"]
+    assert verdict(one(data, "tls.certificate"))[0] is Status.FAIL
 
 
 def test_external_redirect_with_a_silent_host_is_not_evaluated():
-    """The domain as it was on 13 October 2026: no answer is not a verdict."""
+    """The domain as it was on 13 October 2026: no answer is not a verdict (matrix M42; 0.4 names the
+    cause: no conclusive HTTPS answer, instead of the generic network timeout)."""
     data = changed(healthy(), http={f"http://{DOMAIN}/": ELSEWHERE, f"https://{DOMAIN}/": "timeout"})
     f, _asked = _redirect_elsewhere_scan(data)
-    assert (f.status, f.outcome.summary) == (Status.ERROR, "check.error.network_timeout")
+    assert (f.status, f.outcome.summary) == (Status.ERROR, "web.https_redirect.unknown")
+    assert f.outcome.evidence["cause"] == "network"
     # With every web and TLS check unanswered, too little is evaluated for a score (0.3.1: 67/100).
     assessment = scoring.assess(list(run(http_only_with_redirect_elsewhere()).values()))
     assert assessment.score is None and assessment.coverage < 0.5
+    # The domain refuses, www gives nothing (matrix M30): 67 as in 0.3.2, without a global grade.
     refused = scoring.assess(list(run(redirect_elsewhere_https_refused()).values()))
-    assert (refused.score, refused.grade) == (67, "C")
+    assert (refused.score, refused.grade, refused.grade_withheld_reason) == \
+        (67, None, scoring.WITHHELD_HTTPS_UNDETERMINED)
 
 
-def test_https_redirect_rejects_invalid_certificate():
+def test_an_invalid_certificate_is_judged_by_the_certificate_check_only():
+    """0.3.2: the root FAIL too. 0.4 (matrix M9, option Q4-B): HTTPS answers, the root is compliant and
+    refers to tls.certificate, which is critical and caps the score (authentication)."""
     data = changed(healthy(), http={
         f"http://{DOMAIN}/": {"status": 301, "headers": {"Location": f"https://{DOMAIN}/"}},
     })
     data["certificates"][DOMAIN]["trusted"] = False
-    assert verdict(one(data, "web.https_redirect")) == (Status.FAIL, "web.https_redirect.bad_certificate")
+    assert verdict(one(data, "web.https_redirect")) == (Status.OK, "web.https_redirect.ok")
+    certificate = one(data, "tls.certificate")
+    assert certificate.status is Status.FAIL
+    assert certificate.outcome.signals == {Signal.CERTIFICATE_UNAUTHENTICATED}
 
 
 def test_https_redirect_timeout_does_not_create_compliance():
@@ -509,21 +528,27 @@ def test_https_redirect_timeout_does_not_create_compliance():
 
 
 def test_https_redirect_requires_reachable_https():
+    """Port 443 of the domain refuses every attempt, www answers (matrix M29): critical for the domain."""
     data = changed(healthy(), http={
         f"http://{DOMAIN}/": {"status": 301, "headers": {"Location": f"https://{DOMAIN}/"}},
     })
     del data["http"][f"https://{DOMAIN}/"]
-    assert verdict(one(data, "web.https_redirect")) == (Status.FAIL, "web.https_redirect.https_unavailable")
+    del data["certificates"][DOMAIN]
+    f = one(data, "web.https_redirect")
+    assert verdict(f) == (Status.FAIL, "web.https_redirect.refused")
+    assert f.outcome.params == {"host": DOMAIN, "addresses": "192.0.2.10"}
 
 
 def test_closed_http_port_does_not_excuse_unreachable_https():
+    """Ports 80 and 443 of the domain both refuse (matrix M16): no web service answers there."""
     data = healthy()
     del data["http"][f"http://{DOMAIN}/"]
     del data["http"][f"https://{DOMAIN}/"]
-    assert verdict(one(data, "web.https_redirect")) == (Status.FAIL, "web.https_redirect.https_unavailable")
+    del data["certificates"][DOMAIN]
+    assert verdict(one(data, "web.https_redirect")) == (Status.FAIL, "web.https_redirect.no_service")
 
 class BlockingNetwork(FixtureNetwork):
-    """Recorded answers, with some URLs refused by the egress policy."""
+    """Recorded answers, with some URLs refused by the egress policy (asked by URL or on an address)."""
 
     def __init__(self, data, blocked):
         super().__init__(data, NOW)
@@ -533,6 +558,11 @@ class BlockingNetwork(FixtureNetwork):
         if url in self.blocked:
             raise DestinationBlocked(urlsplit(url).hostname or "", ip_address("10.0.0.8"), 80, "private")
         return await super().http_get(url, verify=verify)
+
+    async def http_at(self, url, address, *, offer="default", cache=True):
+        if url in self.blocked:
+            raise DestinationBlocked(urlsplit(url).hostname or "", ip_address(address), 80, "private")
+        return await super().http_at(url, address, offer=offer, cache=cache)
 
 
 def test_a_refused_destination_is_not_a_closed_port():

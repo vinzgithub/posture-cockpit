@@ -9,6 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from posture_cockpit.config import Config
+from posture_cockpit.core import https_probe
 from posture_cockpit.core.fixture import FixtureNetwork
 from posture_cockpit.scanner import DEMO_DOMAIN, demo_data
 from posture_cockpit.web.app import create_app
@@ -25,6 +26,13 @@ class Clock:
 
     def advance(self, seconds):
         self.now += seconds
+
+
+@pytest.fixture(autouse=True)
+def short_probe_pause(monkeypatch):
+    """The HTTPS probe waits 1 s between two confirmation attempts: 1 ms in the tests, except in
+    the one that checks the real pause (test_https_probe.py)."""
+    monkeypatch.setattr(https_probe, "RETRY_PAUSE", 0.001)
 
 
 @pytest.fixture

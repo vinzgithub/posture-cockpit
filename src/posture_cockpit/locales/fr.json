@@ -488,5 +488,18 @@
   "history.is_latest": "C'est la dernière analyse du domaine, celle que montre le plan d'action.",
   "history.newer_exists": "Une analyse plus récente existe, du {date} à {time} : le plan d'action montre celle-là.",
   "history.current_plan": "Voir le plan d'action actuel →",
-  "check.error.network_timeout": "Délai dépassé lors de la connexion au serveur : ce point n'a pas pu être évalué."
+  "check.error.network_timeout": "Délai dépassé lors de la connexion au serveur : ce point n'a pas pu être évalué.",
+
+  "status.blocked": "Bloqué",
+  "check.blocked": "Bloqué — dépend de : Redirection HTTPS (refus observé). HTTPS est refusé sur toutes les adresses publiées du site : il n'y a rien à mesurer ici tant qu'il ne répond pas.",
+  "check.error.dependency": "Non évalué : ce point dépend de HTTPS, dont l'accessibilité n'a pas pu être établie depuis l'analyseur.",
+  "check.error.budget": "Non évalué : la sonde HTTPS a atteint sa limite de temps avant de conclure.",
+  "check.dependency.discovery": "La recherche des adresses de {hosts} n'a pas abouti.",
+  "check.dependency.sample": "{count:adresse non testée|adresses non testées}, limite de 4 par famille ({addresses}).",
+  "check.dependency.deadline": "{count:adresse interrompue|adresses interrompues} à l'échéance de {seconds} secondes ({addresses}).",
+  "check.dependency.no_route": "{count:adresse injoignable|adresses injoignables} depuis l'analyseur, faute de route ({addresses}).",
+  "check.dependency.legacy": "HTTPS refusé en TLS 1.2 et 1.3, et l'analyseur ne sait pas essayer TLS 1.0 ou 1.1 ({addresses}).",
+  "check.dependency.policy": "{count:adresse exclue|adresses exclues} par la règle réseau de l'analyse ({addresses}).",
+  "check.dependency.timeout": "{count:adresse sans réponse concluante|adresses sans réponse concluante} ({addresses}).",
+  "check.dependency.no_http": "{count:adresse négocie|adresses négocient} TLS sans répondre en HTTP ({addresses})."
 }

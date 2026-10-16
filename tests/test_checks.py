@@ -241,10 +241,14 @@ def test_no_website_means_nothing_to_check():
 
 
 def test_unreachable_website_is_not_a_failure():
+    """Port 443 refused on every published address of both hosts (matrix M13): the certificate cannot
+    be measured. 0.3.2 said "not evaluated (refused)"; 0.4 says blocked by the HTTPS root, which carries
+    the one critical verdict."""
     data = healthy()
     data["certificates"] = {}
     f = one(data, "tls.certificate")
-    assert f.status is Status.ERROR and f.outcome.summary == "check.error.refused"
+    assert f.status is Status.BLOCKED and f.outcome.summary == "check.blocked"
+    assert f.outcome.evidence["blocked_by"] == "web.https_redirect"
 
 
 def test_obsolete_tls_versions():

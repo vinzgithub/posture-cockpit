@@ -91,9 +91,11 @@ def test_a_problem_given_by_the_world_wins_over_the_dates():
 
 
 def test_the_expired_certificate_world_scores_as_on_the_real_network():
-    """0.3.2 rules: the HTTPS check refuses the certificate and the certificate check finds it expired."""
+    """The certificate check finds it expired. Until step 2 the HTTPS root refused it too (78 B, two
+    critical for one fault); from step 3 (matrix M39, option Q4-B) the root is compliant and the
+    authentication cap applies: 79 B."""
     findings = run(with_certificate(expires_in_days=-3))
     assert findings["tls.certificate"].outcome.summary == "tls.certificate.expired"
-    assert findings["web.https_redirect"].outcome.summary == "web.https_redirect.bad_certificate"
+    assert findings["web.https_redirect"].outcome.summary == "web.https_redirect.ok"
     result = scoring.assess(list(findings.values()))
-    assert (result.score, result.grade) == (78, "B")
+    assert (result.score, result.grade, result.cap_reasons) == (79, "B", (scoring.CAP_AUTHENTICATION,))

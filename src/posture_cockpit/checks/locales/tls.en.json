@@ -35,5 +35,8 @@
   "tls.key.ref": "ANSSI, « Guide de sélection d'algorithmes cryptographiques »",
   "tls.key.weak": "The certificate key of {host} is too short ({key}).",
   "tls.key.message": "Hello,\n\nThe certificate of {host} uses a {key} key, which is too short. Could you issue a new one with an RSA key of at least 2048 bits or an ECDSA P-256 key?\n\nThank you.",
-  "tls.key.ok": "{key} key: strong."
+  "tls.key.ok": "{key} key: strong.",
+
+  "tls.certificate.note.seclevel": "On {addresses}, reachable only over obsolete TLS, verification runs at the security level 0 these versions require: a weak signature may pass there.",
+  "tls.protocols.note.no_modern": "{addresses}: neither TLS 1.2 nor TLS 1.3."
 }

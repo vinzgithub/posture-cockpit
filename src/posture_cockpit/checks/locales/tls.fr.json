@@ -35,5 +35,8 @@
   "tls.key.ref": "ANSSI, « Guide de sélection d'algorithmes cryptographiques »",
   "tls.key.weak": "La clé du certificat de {host} est trop courte ({key}).",
   "tls.key.message": "Bonjour,\n\nLe certificat de {host} utilise une clé {key}, trop courte. Pourriez-vous en générer un nouveau avec une clé RSA d'au moins 2048 bits ou une clé ECDSA P-256 ?\n\nMerci d'avance.",
-  "tls.key.ok": "Clé {key} : solide."
+  "tls.key.ok": "Clé {key} : solide.",
+
+  "tls.certificate.note.seclevel": "Sur {addresses}, joignables seulement en TLS obsolète, la vérification se fait au niveau de sécurité 0 imposé par ces versions : une signature faible peut y passer.",
+  "tls.protocols.note.no_modern": "{addresses} : ni TLS 1.2 ni TLS 1.3."
 }
