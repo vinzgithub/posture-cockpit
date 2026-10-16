@@ -1,8 +1,47 @@
 # Changelog
 
+## 0.4.0 — unreleased
+
+Counter-review corrections: S4 and preload are hints only; HSTS recheck history is compacted
+without losing zero-max-age events or dates. Stored data corruption is isolated per scan,
+with localized pages/error PDFs and explicit API errors. Legacy API metrics use stored
+scores/coverage without recalculation; legacy history rows keep their former presentation.
+Provisional results name the number of inconclusive addresses in French and English.
+
+- HTTPS is probed per published (host, address), with confirmed refusals, obsolete TLS,
+  incomplete discovery and bounded deadlines distinguished. External redirects are never fetched.
+- Blocked HTTPS dependents are separate from errors. Raw, reference-cap and final scores,
+  diagnostic coverage, blocked counts and address completeness are retained.
+- HTTPS root/dependent rechecks rerun the entire enabled family with one shared fresh probe,
+  and persist all results and metrics atomically. Other checks remain independent.
+- Schema 4 adds nullable columns using ALTER TABLE only. Schema 3 data and scores are not
+  recalculated; automatic pre-migration backups remain enabled.
+- API compatibility: `score` can now be present with `grade: null` and
+  `evaluation: "undetermined"`. `grade_withheld_reason` explains this state.
+  New score/cap/coverage/address fields are additive. Consumers must not infer a grade from a score.
+- Pages, history and PDF show diagnostic indicators, blocked rows, cap reasons and provisional gains.
+  Non-comparable history scores are hollow markers, without a comparative delta.
+- HSTS announcements use only authenticated modern-TLS observations; max-age=0 clears the
+  stored signal, absence does not, expiry is capped at one year, includeSubDomains is scoped.
+  Historical announcements affect advice only, never status or score.
+- Includes the pending 0.3.2 recette corrections listed below.
+
+
 ## 0.3.2 — unreleased
 
 Corrections from the audit of 0.3.1. No database migration, no configuration change required, stored scans and their scores are not recalculated. The verdicts below may move the score of the next scan: the diagnosis became more accurate, the domain did not change (see [SCORING](docs/user/SCORING.md#7-what-changed-in-03x-and-why)).
+
+### Security
+
+- **Session of a deleted account** (present since 0.1.0): SQLite gives the id of a deleted account to the next account created, which started with the default session epoch. A browser of the deleted account still carrying that epoch (signed in with its temporary password and never changed, within the 7 days of the cookie) was taken for the new account, could choose its password and, if it was an administrator, administer. Each account now gets a session epoch of its own when it is created, in the same transaction.
+
+### Interface
+
+- **"Copier" buttons on a page in plain HTTP** (`http://192.168.x.x:8080`): `navigator.clipboard` only exists on HTTPS and `localhost`, so they did nothing and said nothing. They now fall back to the browser's copy command; if that fails too, the value is selected and a message says how to copy it by hand. Two quick clicks no longer leave "Copié ✓" on the button.
+- The language switch comes back to the task shown and to the history page, instead of the first task.
+- On a phone, or a window where the steps sit beside the score card, the four steps go two by two without a connecting line leading nowhere.
+- The first step counts the checks evaluated ("19 contrôles évalués", as the coverage), not every check including the informational ones ("20 contrôles"). Scores unchanged.
+- PDF: a gain such as "(+1 pt)" is no longer cut at the end of a line.
 
 ### Checks
 
@@ -33,6 +72,7 @@ Corrections from the audit of 0.3.1. No database migration, no configuration cha
 - The checks of the technical page and of a stored scan come from one template; the two history style blocks are merged.
 - Timeouts: a real HTTP reply that does not come in time (read, write or pool timeout) is now reported as a timeout ("Délai dépassé…"), like a connection that times out; 0.3.1 reported it as a plain network error. The recorded timeouts of the tests raise the same error.
 - Synthetic DMARC scenarios (`tests/test_dmarc_scenarios.py`) back the table of SCORING §7.
+- Browser tests (`tests/browser`, Playwright and Chromium) in their own CI job: copy buttons on a page in plain HTTP and in a secure context, the API key copied without a trace, the language switch, the steps at every width from 320 to 1300 px in French and English.
 
 ### Planned for 0.4
 

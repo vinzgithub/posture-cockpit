@@ -151,6 +151,9 @@ svg.icon-check { width: 16px; height: 16px; fill: none; stroke: currentColor; st
 }
 .btn-copy-strong { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 .btn-copy.is-copied { background: var(--ok-soft); border-color: var(--ok-line); color: var(--ok-text); }
+/* Copy without the clipboard API (plain HTTP): a text area off screen, removed at once. */
+.copy-buffer { position: fixed; top: 0; left: -9999px; opacity: 0; font-size: 16px; }
+.copy-status { flex: 1 0 100%; margin: 0; color: var(--warn-text); font-size: 13px; font-weight: 600; }
 .spinner { width: 16px; height: 16px; border-radius: 50%; border: 2.5px solid rgba(255, 255, 255, .35); border-top-color: currentColor; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -262,7 +265,8 @@ details > summary { cursor: pointer; }
 .eyebrow-ok { color: var(--ok-text); font-size: 13px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
 
 .plan-hero { display: flex; gap: 24px; flex-wrap: wrap; align-items: stretch; }
-.plan-hero-text { flex: 1 1 560px; display: flex; flex-direction: column; justify-content: center; gap: 10px; }
+.plan-hero-text { flex: 1 1 560px; display: flex; flex-direction: column; justify-content: center; gap: 10px;
+                  container-type: inline-size; }
 .plan-hero-text h1 { font-size: 38px; line-height: 1.12; letter-spacing: -.025em; }
 .plan-hero-text .lead { margin-bottom: 8px; }
 
@@ -277,6 +281,20 @@ details > summary { cursor: pointer; }
 .step-text { display: flex; flex-direction: column; line-height: 1.25; white-space: nowrap; }
 .step-text small { color: var(--muted); font-size: 12.5px; }
 .step-todo .step-text strong { color: var(--muted); }
+/* Four steps on one line need about 520 px without their details (phones), 680 px with them.
+   Narrower, a line would end with a connecting line leading nowhere: two by two, without the lines. */
+@media (max-width: 720px) {
+  @container (max-width: 539px) {
+    .stepper { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; }
+    .step:not(:last-child)::after { display: none; }
+  }
+}
+@media (min-width: 721px) {
+  @container (max-width: 699px) {
+    .stepper { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; }
+    .step:not(:last-child)::after { display: none; }
+  }
+}
 
 .scorecard { flex: 0 1 440px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 22px 24px; display: flex; flex-direction: column; gap: 12px; box-shadow: var(--shadow); }
 .scorecard-top { display: flex; align-items: flex-end; gap: 12px; }
@@ -370,7 +388,7 @@ span.side-link-icon svg { width: 13px; height: 13px; }
 .record { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
 .record-title { padding: 10px 16px; background: var(--surface-2); color: var(--muted); font-size: 13px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
 .record dl { margin: 0; }
-.record dl > div { display: flex; align-items: center; gap: 14px; padding: 11px 16px; border-top: 1px solid var(--line-soft); }
+.record dl > div { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; padding: 11px 16px; border-top: 1px solid var(--line-soft); }
 .record dt { flex: 0 0 88px; color: var(--muted); font-size: 13px; font-weight: 700; }
 .record dd { flex: 1; min-width: 0; margin: 0; overflow-wrap: anywhere; }
 .record code { font-size: 14px; color: var(--ink); }
@@ -499,3 +517,13 @@ span.side-link-icon svg { width: 13px; height: 13px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* HTTPS diagnostics remain distinct from scored failures. */
+.v04-indicators { display: flex; flex-wrap: wrap; gap: .4rem 1rem; font-size: .85rem; margin: .75rem 0; }
+.status-blocked { border-left: 3px solid #68778d; padding-left: .7rem; }
+.badge-blocked { color: #34425a; background: #e7edf4; }
+.grade-none { color: #596575; background: transparent; border: 2px solid currentColor; }
+
+.history-trend { width: min(100%, 34rem); height: 10rem; }
+.trend-graded { fill: #285ea6; stroke: #285ea6; }
+.trend-provisional { fill: none; stroke: #65758b; stroke-width: 1.5; }

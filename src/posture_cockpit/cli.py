@@ -34,7 +34,7 @@ from .scanner import Scanner
 from .security import MIN_PASSWORD_LENGTH, hash_password
 from .storage import Accounts, Database
 
-SYMBOLS = {"ok": "✓", "warn": "!", "fail": "✗", "na": "–", "info": "i", "error": "?"}
+SYMBOLS = {"blocked": "⊘", "ok": "✓", "warn": "!", "fail": "✗", "na": "–", "info": "i", "error": "?"}
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -90,7 +90,8 @@ def _scan(typed: str, as_json: bool, lang: str) -> int:
                                        for f in result.findings]}, ensure_ascii=False, indent=2))
         return 0
     catalog = Catalog(registry.messages)
-    verdict = (f"{assessment.score}/100 ({assessment.grade})" if assessment.score is not None
+    verdict = (f"{assessment.score}/100 ({assessment.grade or catalog.text(lang, 'v04.undetermined')})"
+               if assessment.score is not None
                else catalog.text(lang, "score.not_evaluated"))
     coverage = catalog.text(lang, "score.coverage", {"evaluated": assessment.evaluated,
                                                      "applicable": assessment.applicable,

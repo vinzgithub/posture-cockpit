@@ -22,7 +22,7 @@ from ...core import scoring
 from ...core.model import Finding, Status
 from ...scanner import InternalScansDisabled
 from ...security import token_hash
-from ...storage import Row, Scan
+from ...storage import CorruptScan, Row, Scan
 from ..deps import client_key
 from ..limits import TooManyScans
 from ..scanning import perimeter_of, scan_and_save
@@ -59,13 +59,27 @@ def _summary(scan: Scan) -> dict:
     current = scan.current()
     counts = scoring.counts(current)
     result = scan.assessment()
-    evaluation = "not_evaluated" if not result.evaluated_ok else "partial" if result.partial else "complete"
+    evaluation = result.evaluation
+    modern = any(f.family is not None for f in current)
     return {
         "domain": scan.domain,
         "score": result.score,
         "grade": result.grade,
         "evaluation": evaluation,
         "coverage": round(result.coverage, 3),
+        "diagnostic_coverage": result.diagnostic_coverage if modern else round(scan.coverage, 3),
+        "checks_blocked": result.blocked if modern else 0,
+        "score_raw": result.score_raw if modern else (scan.score / 100 if scan.score is not None else None),
+        "score_cap": result.score_cap if modern else None,
+        "score_final": result.score_final if modern else (scan.score / 100 if scan.score is not None else None),
+        "cap_reasons": list(result.cap_reasons),
+        "grade_withheld_reason": result.grade_withheld_reason,
+        "addresses": scan.addresses(),
+        "addresses_discovered": scan.addresses().get("discovered"),
+        "addresses_attempted": scan.addresses().get("attempted"),
+        "addresses_conclusive": scan.addresses().get("conclusive"),
+        "address_sampling_limited": scan.addresses().get("sampling_limited"),
+        "address_discovery_complete": scan.addresses().get("discovery_complete"),
         "checks_evaluated": result.evaluated,
         "checks_applicable": result.applicable,
         "scanned_at": scan.started_at,
@@ -85,8 +99,16 @@ async def domains(request: Request):
         return _unauthorized()
     s = services(request)
     rows = s.scans.domains(internal=bool(user["is_admin"]))
-    scans = (s.scans.get(row["scan_id"]) for row in rows if row["scan_id"])
-    return {"domains": [_summary(scan) for scan in scans if scan is not None]}
+    results = []
+    for row in rows:
+        if row["scan_id"]:
+            try:
+                scan = s.scans.get(row["scan_id"])
+                if scan is not None:
+                    results.append(_summary(scan))
+            except CorruptScan as error:
+                results.append({"domain": row["name"], "error": "scan_unreadable", "scan_id": error.scan_id})
+    return {"domains": results}
 
 
 @router.post("/domains/{name}/scan")

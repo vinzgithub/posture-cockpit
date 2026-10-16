@@ -128,3 +128,37 @@ Monde de test « sain » (100/100, A, couverture 100 %), dont seul l'enregistrem
 | `p=quarantine; t=y; pct=50` | À améliorer (mode d'essai) | À améliorer (mode d'essai) + note « quarantaine partielle » | 94 → 94 |
 | `p=reject; pct=50; sp=none` | À améliorer (sous-domaines exclus) | À améliorer (rejet partiel) + note « sous-domaines exclus » | 94 → 94 |
 | `p=none` sans `rua` | À améliorer (observation) | À améliorer (observation sans rapports) | 94 → 94 |
+
+## 8. Version 0.4 : HTTPS, blocages et couverture diagnostique
+
+La racine HTTPS et ses dix dépendants partagent une sonde par couple (nom, adresse).
+Un refus confirmé sur toutes les adresses publiées bloque les dépendants : ils ne sont
+ni notés, ni comptés comme erreurs. La couverture de notation les exclut ; la couverture
+diagnostique inclut leur poids dans son dénominateur.
+
+Trois raisons de plafond non cumulatives partagent une référence : dépendance,
+authentification du certificat, protocole obsolète. La référence conserve les résultats
+hors HTTPS, suppose la racine conforme et les dépendants évalués ou bloqués à leur
+plancher déclaré. La note finale est le minimum du brut et de la référence, arrondi une
+seule fois. Les notes par catégorie ne sont pas plafonnées.
+
+Sans adresse disponible en TLS moderne, avec au moins un refus confirmé ou du TLS
+obsolète et une adresse non concluante (découverte incomplète comprise), le score est
+provisoire, sans lettre : `undetermined`. Ce score n’est pas comparable à une note avec
+lettre. Une adresse disponible en TLS moderne et une autre inconnue conservent une lettre.
+
+Les quatre indicateurs sont la couverture de notation, la couverture diagnostique,
+les contrôles bloqués et les adresses découvertes/tentées/concluantes. La limite de
+4 adresses par famille, une découverte incomplète et une échéance atteinte sont signalées.
+
+Revérifier la racine ou un dépendant relance toute la famille activée avec une nouvelle
+sonde, puis enregistre les résultats et la note dans une transaction unique. Les
+constats initiaux restent inchangés. Le gain d’une correction de la racine peut être
+un intervalle : les mesures bloquées restent inconnues et la cible est provisoire.
+
+L’historique HSTS est un historique local d’observations, pas l’état des navigateurs.
+Seuls les en-têtes reçus avec un certificat vérifié en TLS moderne sont retenus, pour
+un an au maximum. `max-age=0` efface le signal ; l’absence ou un en-tête invalide ne
+l’efface pas. Une politique parente ne s’étend qu’avec includeSubDomains. `preload` ne
+prouve pas une présence dans la liste des navigateurs. L’historique et l’attribution
+n’ont aucun effet sur les statuts ni sur la note.

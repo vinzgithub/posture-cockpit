@@ -152,6 +152,7 @@ class CheckContext:
     net: Network
     now: datetime
     internal: bool = False  # the scan runs inside an internal perimeter
+    history: dict = field(default_factory=dict)  # read-only snapshot, never mutated by checks
     _memo: dict[str, asyncio.Future[Any]] = field(default_factory=dict, repr=False)
 
     def fqdn(self, label: str) -> str:

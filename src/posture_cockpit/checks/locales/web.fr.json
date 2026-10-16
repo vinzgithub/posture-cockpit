@@ -75,7 +75,6 @@
   "web.https_redirect.external.action": "Ouvrir HTTPS sur {host}",
   "web.https_redirect.external.message": "Bonjour,\n\nhttp://{host} redirige vers un autre site, mais https://{host}/ refuse la connexion : les liens et favoris en https:// ne fonctionnent pas.\n\nPourriez-vous ouvrir HTTPS sur {host}, avec un certificat valide, et faire partir la même redirection de https://{host}/ ?\n\nMerci d'avance.",
   "web.https_redirect.external.why": "Sans HTTPS sur {host}, les adresses en https:// (liens, favoris, navigateurs qui essaient HTTPS d'abord) ne mènent nulle part : seule la version non chiffrée renvoie vers l'autre site.",
-
   "web.https_redirect.refused": "Depuis l'analyseur, HTTPS est refusé par {host} sur toutes ses adresses publiées ({addresses}) : les visiteurs ne peuvent pas ouvrir le site en https://.",
   "web.https_redirect.refused.action": "Rétablir HTTPS sur {host}",
   "web.https_redirect.refused_partial": "Depuis l'analyseur, HTTPS est refusé par {host} sur une partie de ses adresses ({addresses}) : les visiteurs dirigés vers celles-ci ne peuvent pas ouvrir le site.",
@@ -124,5 +123,8 @@
   "web.https_redirect.refused_undetermined_discovery": "Depuis l'analyseur, HTTPS est refusé par {host} sur {tested:adresse testée|adresses testées} ({addresses}) ; la recherche de ses autres adresses n'a pas abouti.",
   "web.https_redirect.refused_undetermined_discovery.action": "Rétablir HTTPS sur {host}",
   "web.https_redirect.obsolete_undetermined_discovery": "Sur {host}, HTTPS n'est accepté qu'en TLS obsolète sur {tested:adresse testée|adresses testées} ({addresses}) ; la recherche de ses autres adresses n'a pas abouti.",
-  "web.https_redirect.obsolete_undetermined_discovery.action": "Activer TLS 1.2 et 1.3 sur {host}"
+  "web.https_redirect.obsolete_undetermined_discovery.action": "Activer TLS 1.2 et 1.3 sur {host}",
+  "web.https_redirect.announced.hsts_history": "Un en-tête HSTS authentifié encore valide annonce HTTPS pour {host}.",
+  "web.https_redirect.announced.https_history": "Indice pour {host} : HTTPS a répondu lors d’une analyse précédente ; cela ne prouve pas sa disponibilité actuelle.",
+  "web.https_redirect.announced.preload": "Indice pour {host} : l’en-tête demande le préchargement ; la liste de préchargement n’est pas consultée."
 }

@@ -387,12 +387,13 @@ LAB = "lab.example"
 ZONE = {LAB: {"A": [LOOPBACK]}, f"www.{LAB}": {}}
 
 
-def _legacy_server_context(pki: TestPki) -> ssl.SSLContext | None:
+def _legacy_server_context(pki: TestPki, version: str = "TLSv1") -> ssl.SSLContext | None:
     context = pki.server_context(LAB)
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", DeprecationWarning)
-            context.minimum_version = context.maximum_version = ssl.TLSVersion.TLSv1
+            context.minimum_version = context.maximum_version = {
+                "TLSv1": ssl.TLSVersion.TLSv1, "TLSv1.1": ssl.TLSVersion.TLSv1_1}[version]
         context.set_ciphers("DEFAULT:@SECLEVEL=0")
     except (ValueError, ssl.SSLError):
         return None
@@ -438,16 +439,17 @@ def test_real_network_reset_on_every_attempt_is_a_confirmed_refusal():
     assert all(t.result == "reset" for t in a.attempts)
 
 
-def test_real_network_tls_1_0_only_is_obsolete(tmp_path):
+@pytest.mark.parametrize("version", ["TLSv1", "TLSv1.1"])
+def test_real_network_legacy_tls_only_is_obsolete(tmp_path, version):
     pki = TestPki(tmp_path)
-    context = _legacy_server_context(pki)
+    context = _legacy_server_context(pki, version)
     if context is None:
-        pytest.skip("this machine's TLS library cannot serve TLS 1.0")
+        pytest.skip(f"this machine's TLS library cannot serve {version}")
     result, _ = asyncio.run(_probe_lab(_answer, tls=context, trusted_ca=pki.pem))
     a = result.hosts[0].addresses[0]
     if a.kind is Kind.UNTESTABLE and a.reason == "legacy":
-        pytest.skip("this machine's TLS library cannot offer TLS 1.0")
-    assert (a.kind, a.version, a.page.status) == (Kind.OBSOLETE, "TLSv1", 200)
+        pytest.skip(f"this machine's TLS library cannot offer {version}")
+    assert (a.kind, a.version, a.page.status) == (Kind.OBSOLETE, version, 200)
     assert a.certificate.trusted  # verified with the legacy context, at security level 0
 
 

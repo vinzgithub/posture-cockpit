@@ -75,7 +75,6 @@
   "web.https_redirect.external.action": "Open HTTPS on {host}",
   "web.https_redirect.external.message": "Hello,\n\nhttp://{host} redirects to another website, but https://{host}/ refuses the connection: https:// links and bookmarks do not work.\n\nCould you open HTTPS on {host}, with a valid certificate, and have the same redirect start from https://{host}/?\n\nThank you.",
   "web.https_redirect.external.why": "Without HTTPS on {host}, https:// addresses (links, bookmarks, browsers that try HTTPS first) lead nowhere: only the unencrypted version redirects to the other website.",
-
   "web.https_redirect.refused": "From the scanner, HTTPS is refused by {host} on all its published addresses ({addresses}): visitors cannot open the website over https://.",
   "web.https_redirect.refused.action": "Restore HTTPS on {host}",
   "web.https_redirect.refused_partial": "From the scanner, HTTPS is refused by {host} on some of its addresses ({addresses}): visitors sent to them cannot open the website.",
@@ -124,5 +123,8 @@
   "web.https_redirect.refused_undetermined_discovery": "From the scanner, HTTPS is refused by {host} on {tested:tested address|tested addresses} ({addresses}); looking up its other addresses did not succeed.",
   "web.https_redirect.refused_undetermined_discovery.action": "Restore HTTPS on {host}",
   "web.https_redirect.obsolete_undetermined_discovery": "On {host}, HTTPS is accepted only over obsolete TLS on {tested:tested address|tested addresses} ({addresses}); looking up its other addresses did not succeed.",
-  "web.https_redirect.obsolete_undetermined_discovery.action": "Enable TLS 1.2 and 1.3 on {host}"
+  "web.https_redirect.obsolete_undetermined_discovery.action": "Enable TLS 1.2 and 1.3 on {host}",
+  "web.https_redirect.announced.hsts_history": "An authenticated, unexpired HSTS policy announces HTTPS for {host}.",
+  "web.https_redirect.announced.https_history": "Hint for {host}: HTTPS answered in a previous scan; this does not establish current availability.",
+  "web.https_redirect.announced.preload": "Hint for {host}: the header requests preloading; the preload list is not consulted."
 }

@@ -49,6 +49,7 @@ class Prescription:
     who: str
     minutes: int
     gain: int
+    gain_max: int | None
     deadline: str   # "Avant le 21 octobre 2026", or ""
 
 
@@ -84,7 +85,8 @@ def report_context(catalog: Catalog, lang: str, scan: Scan, author: str = "", tz
                                 {"domain": scan.domain, **f.outcome.params}),
             summary=_text(catalog, lang, f.outcome.summary, f, scan.domain),
             who=_who(catalog, lang, f), minutes=f.outcome.remedy.minutes if f.outcome.remedy else 0,
-            gain=item.gain, deadline=t("report.deadline", date=fmt_date(str(expires), lang)) if expires else "",
+            gain=item.gain, gain_max=item.gain_max,
+            deadline=t("report.deadline", date=fmt_date(str(expires), lang)) if expires else "",
         ))
     improvements = [
         {"title": catalog.first(lang, [f"{i.finding.outcome.summary}.action", f"{i.finding.check_id}.action"],
@@ -125,8 +127,18 @@ def report_context(catalog: Catalog, lang: str, scan: Scan, author: str = "", tz
         categories.append({"label": t(f"category.{category}"), "score": assessment.score,
                            "partial": assessment.partial, "comment": comment})
 
-    gaps = [{"title": t(f"{f.check_id}.title"), "reason": _text(catalog, lang, f.outcome.summary, f, scan.domain)}
-            for f in findings if f.status is Status.ERROR]
+    gaps = [{"cause": f.outcome.evidence.get("cause", "dependency" if f.status is Status.BLOCKED else "network"),
+             "title": t(f"{f.check_id}.title"), "reason": _text(catalog, lang, f.outcome.summary, f, scan.domain)}
+            for f in findings if f.status in {Status.ERROR, Status.BLOCKED}]
+
+    root = next((f for f in findings if f.check_id == "web.https_redirect"), None)
+    if root is not None:
+        for host, observation in root.outcome.evidence.get("observation", {}).get("hosts", {}).items():
+            for address, observed in observation.get("addresses", {}).items():
+                if observed["class"] in {"unknown", "untestable", "tls_only"}:
+                    cause = observed.get("cause", "network")
+                    gaps.append({"cause": cause, "title": f"{host} ({address})",
+                                 "reason": t("v04.cause." + cause)})
 
     annex = []
     for f in findings:
@@ -154,7 +166,9 @@ def report_context(catalog: Catalog, lang: str, scan: Scan, author: str = "", tz
         "perimeter": scan.perimeter,
         "diagnosis": diagnosis, "conclusion": conclusion, "prescriptions": prescriptions,
         "improvements": improvements, "categories": categories, "annex": annex, "gaps": gaps,
-        "checks_count": len(findings),
+        "checks_count": len(findings), "addresses": scan.addresses(), "plan": plan,
+        "gap_groups": {cause: [g for g in gaps if g["cause"] == cause]
+                       for cause in ("network", "dependency", "tool", "policy", "budget")},
     }
 
 
@@ -175,3 +189,16 @@ def build_pdf(catalog: Catalog, lang: str, scan: Scan, author: str = "", tz: tzi
         raise ReportUnavailable(str(e)) from e
     html = render_html(catalog, lang, scan, author, tz, historical=historical)
     return HTML(string=html, base_url=str(REPORT_DIR)).write_pdf()
+
+
+def build_unreadable_pdf(catalog: Catalog, lang: str) -> bytes:
+    """A localized error document; never render untrusted stored outcomes as a report."""
+    from html import escape
+
+    try:
+        from weasyprint import HTML
+    except (ImportError, OSError) as error:
+        raise ReportUnavailable(str(error)) from error
+    message = escape(catalog.text(lang, "error.scan_unreadable"))
+    html = f'<html lang="{escape(lang)}"><meta charset="utf-8"><body><p>{message}</p></body></html>'
+    return HTML(string=html).write_pdf()

@@ -2,7 +2,7 @@
 {# Small pieces used by several pages. #}
 
 {% macro grade_pill(grade, size='') -%}
-<span class="grade grade-{{ grade }} {{ size }}">{{ grade }}</span>
+<span class="grade grade-{{ grade or 'none' }} {{ size }}">{{ grade or '–' }}</span>
 {%- endmacro %}
 
 {# Horizontal score bar: the score in solid blue, what the plan would add hatched.
@@ -60,4 +60,18 @@
   </tbody>
 </table>
 </div>
+{%- endmacro %}
+
+{% macro indicators(result, addresses) -%}
+<div class="v04-indicators" aria-label="{{ t('plan.your_score') }}">
+  <span>{{ t('score.coverage', evaluated=result.evaluated, applicable=result.applicable, percent=result.coverage_percent) }}</span>
+  <span>{{ t('v04.diagnostic', percent=((result.diagnostic_coverage or 0) * 100) | int) }}</span>
+  <span>{{ t('v04.blocked', n=result.blocked) }}</span>
+  <span>{% if addresses %}{{ t('v04.addresses', discovered=addresses.discovered, attempted=addresses.attempted, conclusive=addresses.conclusive) }}{% else %}{{ t('v04.addresses_unknown') }}{% endif %}</span>
+  {% if addresses.sampling_limited %}<span>{{ t('v04.sampling') }}</span>{% endif %}
+  {% if addresses and not addresses.discovery_complete %}<span>{{ t('v04.discovery') }}</span>{% endif %}
+  {% if addresses.deadline_reached %}<span>{{ t('v04.deadline') }}</span>{% endif %}
+</div>
+{% if result.undetermined %}<p class="coverage-partial">{{ t('v04.undetermined') }} {{ t('v04.nonconclusive.' ~ ('one' if addresses.attempted - addresses.conclusive == 1 else 'many'), n=addresses.attempted - addresses.conclusive) }}</p>{% endif %}
+{% for reason in result.cap_reasons %}<p class="small cap-reason">{{ t('v04.cap.' ~ reason) }}</p>{% endfor %}
 {%- endmacro %}

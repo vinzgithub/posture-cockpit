@@ -7,13 +7,14 @@
   <h2 id="cat-{{ category }}">{{ t('category.' ~ category) }}</h2>
   <ul class="checks">
     {% for f in findings %}
-    <li class="check status-{{ f.status.value }}">
+    <li class="check status-{{ f.status.value }}" id="{{ f.check_id }}">
       {{ status_icon(f.status.value) }}
       <div class="check-body">
         <p class="check-title"><strong>{{ t(f.check_id ~ '.title') }}</strong>
           <span class="badge badge-{{ f.status.value }}">{{ t('status.' ~ f.status.value) }}</span>
           {% if f.check_id in rechecks %}<span class="muted small">{{ t('details.rechecked', date=date(rechecks[f.check_id].checked_at)) }}</span>{% endif %}
         </p>
+        {% if f.status.value == 'blocked' %}<p><a href="#web.https_redirect">{{ t('v04.blocked_by') }}</a></p>{% endif %}
         <p>{{ summary(f, scan.domain) }}</p>
         {% if f.outcome.evidence %}
         <details>

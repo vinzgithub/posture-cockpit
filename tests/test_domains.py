@@ -3,6 +3,7 @@
 """Domains in the web interface: scan, plan, recheck, expert view, report, API."""
 
 import re
+from html.parser import HTMLParser
 
 import pytest
 
@@ -60,6 +61,95 @@ def test_plan_of_the_demo_domain(signed_in):
     # the first task is shown, the others are hidden until chosen
     assert re.search(r'data-panel="tls.certificate"[^>]*>', page).group(0).find("hidden") == -1
     assert "hidden" in re.search(r'data-panel="mail.dmarc"[^>]*>', page).group(0)
+    page = signed_in.get(f"/domains/{DEMO}?task=mail.dmarc").text
+    assert "hidden" not in re.search(r'data-panel="mail.dmarc"[^>]*>', page).group(0)
+
+
+def test_the_first_step_counts_the_checks_evaluated(signed_in):
+    """The step said "20 contrôles" (the MX information included) next to "19 contrôles
+    évalués sur 19": both now count the checks evaluated. The score does not change."""
+    scan(signed_in, DEMO)
+    page = signed_in.get(f"/domains/{DEMO}").text
+    assert "<small>19 contrôles évalués</small>" in page
+    assert "19 contrôles évalués sur" in page and "20 contrôles" not in page
+    post(signed_in, "/lang", f"/domains/{DEMO}", lang="en", back=f"/domains/{DEMO}")
+    assert "<small>19 checks evaluated</small>" in signed_in.get(f"/domains/{DEMO}").text
+
+
+_VOID = frozenset({"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "wbr"})
+
+
+class _Tree(HTMLParser):
+    """The elements of a page with their parent, enough to look around a button."""
+
+    def __init__(self, html):
+        super().__init__()
+        self.root = {"tag": "", "attrs": {}, "children": [], "text": [], "parent": None}
+        self.stack = [self.root]
+        self.feed(html)
+
+    def handle_starttag(self, tag, attrs):
+        node = {"tag": tag, "attrs": dict(attrs), "children": [], "text": [], "parent": self.stack[-1]}
+        self.stack[-1]["children"].append(node)
+        if tag not in _VOID:
+            self.stack.append(node)
+
+    def handle_endtag(self, tag):
+        while len(self.stack) > 1 and self.stack.pop()["tag"] != tag:
+            pass
+
+    def handle_data(self, data):
+        for node in self.stack:
+            node["text"].append(data)
+
+    def all(self, node=None):
+        node = node or self.root
+        for child in node["children"]:
+            yield child
+            yield from self.all(child)
+
+
+def _copy_buttons_and_what_they_show(html):
+    tree = _Tree(html)
+    by_id = {n["attrs"]["id"]: n for n in tree.all() if "id" in n["attrs"]}
+    found = []
+    for button in tree.all():
+        attrs = button["attrs"]
+        if "data-copy-from" in attrs:
+            source = by_id.get(attrs["data-copy-from"])
+            found.append((None, "".join(source["text"]) if source else None))
+        elif "data-copy" in attrs:
+            shown = [n for n in tree.all(button["parent"]) if n["tag"] == "code"]
+            found.append((attrs["data-copy"], "".join(shown[0]["text"]) if shown else None))
+    return found
+
+
+def test_every_copy_button_has_its_value_shown_next_to_it(signed_in):
+    """Without the clipboard API (a page in plain HTTP) and without the older copy command,
+    app.js selects the value for a copy by hand: it must be on the page, next to the button."""
+    scan(signed_in, DEMO)
+    plan = _copy_buttons_and_what_they_show(signed_in.get(f"/domains/{DEMO}").text)
+    assert ("v=DMARC1; p=none; rua=mailto:dmarc@menuiserie-dupont.example",
+            "v=DMARC1; p=none; rua=mailto:dmarc@menuiserie-dupont.example") in plan
+    r = post(signed_in, "/settings/token", "/settings", name="Home Assistant")
+    settings = _copy_buttons_and_what_they_show(r.text)
+    assert len(settings) == 1
+    for copied, shown in plan + settings:
+        assert shown, copied
+        if copied is not None:
+            assert shown == copied
+
+
+def test_the_language_switch_comes_back_to_the_task_and_the_page(signed_in):
+    """0.3.2 recette: going to English showed the first task again, not the one chosen."""
+    scan(signed_in, DEMO)
+    for path in (f"/domains/{DEMO}?task=mail.dmarc", f"/domains/{DEMO}/history?page=1"):
+        page = signed_in.get(path).text
+        back = re.search(r'name="back" value="([^"]+)"', page).group(1)
+        assert back == path
+        r = post(signed_in, "/lang", path, lang="en", back=back)
+        assert r.headers["location"] == path
+        post(signed_in, "/lang", path, lang="fr", back=back)
     page = signed_in.get(f"/domains/{DEMO}?task=mail.dmarc").text
     assert "hidden" not in re.search(r'data-panel="mail.dmarc"[^>]*>', page).group(0)
 

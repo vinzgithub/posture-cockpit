@@ -2,7 +2,7 @@
 {# The plan of fixes for one domain: score, steps, tasks on the left, the selected task on the right.
    Without JavaScript, each task is a link (?task=…); app.js switches them in place. #}
 {% extends "base.html" %}
-{% from "_macros.html" import grade_pill, scorebar, check_icon with context %}
+{% from "_macros.html" import grade_pill, scorebar, check_icon, indicators with context %}
 {% block title %}{{ plan.domain }} · Posture Cockpit{% endblock %}
 {% block content %}
 {% set n_prio = plan.priorities | length %}
@@ -31,7 +31,7 @@
         <span class="scorecard-score"><strong>{{ plan.score }}</strong><span>/100</span></span>
       </div>
       {{ grade_pill(plan.grade) }}
-      <span class="scorecard-target">{{ t('plan.target') }}<br><strong>{{ plan.target_score }} · {{ plan.target_grade }}</strong></span>
+      <span class="scorecard-target">{{ t('plan.target') }}<br><strong>{{ plan.target_score }}{% if plan.target_max_score is not none %}–{{ plan.target_max_score }}{% endif %}{% if plan.target_grade %} · {{ plan.target_grade }}{% endif %}{% if plan.provisional %}<br>{{ t("v04.provisional") }}{% endif %}</strong></span>
     </div>
     {{ scorebar(plan.score, plan.target_score, t('plan.scorebar_label', score=plan.score, target=plan.target_score)) }}
     {% else %}
@@ -46,6 +46,7 @@
     <p class="coverage {{ 'coverage-partial' if plan.now.partial or plan.score is none }}">
       {{ t('score.coverage', evaluated=plan.now.evaluated, applicable=plan.now.applicable, percent=plan.now.coverage_percent) }}
     </p>
+    {{ indicators(plan.now, plan.scan.addresses()) }}
     <p class="scorecard-note">{{ plan.score_note }}</p>
     {% if plan.gaps %}
     <details class="gaps">
@@ -58,6 +59,9 @@
   </div>
 </section>
 
+{% if plan.now.blocked %}<section class="panel"><ul class="checks">
+{% for f in plan.scan.current() if f.status.value == 'blocked' %}<li class="status-blocked"><strong>{{ t(f.check_id ~ '.title') }}</strong> — <a href="/domains/{{ plan.domain }}/details#web.https_redirect">{{ t('v04.blocked_by') }}</a></li>{% endfor %}
+</ul></section>{% endif %}
 <div class="plan-grid">
   <aside class="task-list" aria-label="{{ t('plan.tasks') }}">
     {% if plan.priorities %}

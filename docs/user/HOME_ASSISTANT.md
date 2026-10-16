@@ -96,3 +96,25 @@ Without Home Assistant, the same monthly scan runs from cron:
 ```bash
 curl -fsS -X POST -H "Authorization: Bearer YOUR_KEY" http://localhost:8080/api/v1/domains/my-domain.com/scan
 ```
+
+### API additions in 0.4
+
+Keep `score` and `grade` nullable independently. A provisional score can have a null
+letter, `evaluation: "undetermined"` and
+`grade_withheld_reason: "https_availability_undetermined"`. Do not compare it with a
+graded score, infer a letter, or treat it as a failed scan.
+
+New fields: `score_raw`, `score_cap`, `score_final` (unrounded 0–1),
+`diagnostic_coverage`, `checks_blocked`, `cap_reasons`, `addresses_discovered`,
+`addresses_attempted`, `addresses_conclusive`, `address_sampling_limited`,
+`address_discovery_complete`, plus the `addresses` object (including deadline status).
+For 0.3.x scans, without recalculation or database backfill, diagnostic_coverage equals
+stored coverage (with the same API rounding), checks_blocked is 0, score_raw and score_final equal stored score/100
+(or null when no score exists), and score_cap is null. Address counts remain null. `not_evaluated` counts only errors, excluding
+blocked checks. Existing keys and authentication remain unchanged.
+
+
+An unreadable stored analysis is isolated. The domains endpoint keeps returning valid
+summaries for other domains and returns an entry with `domain`, `scan_id` and
+`error: "scan_unreadable"` for the damaged one. Single-analysis requests return HTTP 409
+with the same error code. No score is inferred from corrupted findings.

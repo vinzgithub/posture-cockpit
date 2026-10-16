@@ -2,6 +2,9 @@
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Security of the web application itself: redirects, sign-in, scan limits, headers, files."""
 
+import logging
+import re
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -132,6 +135,27 @@ def test_response_headers(tmp_path):
         assert client.get("/healthz").headers["strict-transport-security"] == "max-age=31536000"
 
 
+# ------------------------------------------------------------------ API keys
+def test_an_api_key_is_shown_once_and_kept_nowhere_in_clear(client, caplog):
+    """The key is on the page that creates it, once with its copy button, and nowhere else:
+    not on the next page, not in the audit log, not in the logs, not in the data folder."""
+    setup_account(client)
+    with caplog.at_level(logging.DEBUG):
+        r = post(client, "/settings/token", "/settings", name="Home Assistant")
+    token = re.search(r'<code class="secret">([^<]+)</code>', r.text).group(1)
+    assert r.text.count(token) == 2  # the value shown and the copy button that copies it
+    assert f'data-copy="{token}"' in r.text
+    assert r.headers["cache-control"] == "no-store"
+    assert token not in client.get("/settings").text
+    rows = client.app.state.services.db.all("SELECT * FROM audit_log")
+    assert rows and not any(token in str(tuple(row)) for row in rows)
+    assert token not in caplog.text
+    data = client.app.state.services.config.data_dir
+    for path in data.rglob("*"):
+        if path.is_file():
+            assert token.encode() not in path.read_bytes(), path.name
+
+
 # --------------------------------------------------------------------- files
 def test_the_data_folder_and_its_secrets_are_private(tmp_path):
     folder = tmp_path / "data"
@@ -147,5 +171,5 @@ def test_package_version_matches_project_metadata_and_healthz(client):
     from posture_cockpit import __version__
 
     project = tomllib.loads((Path(__file__).resolve().parents[1] / "pyproject.toml").read_text())
-    assert __version__ == project["project"]["version"] == "0.3.2"
+    assert __version__ == project["project"]["version"] == "0.4.0"
     assert client.get("/healthz").json()["version"] == __version__

@@ -8,8 +8,19 @@ from .accounts import Accounts
 from .audit import AuditLog
 from .database import Database, Row
 from .perimeters import Perimeter, PerimeterError, Perimeters
-from .scans import Scan, Scans
+from .scans import CorruptScan, Scan, Scans
 from .settings import InstanceSettings
 
-__all__ = ["Accounts", "AuditLog", "Database", "InstanceSettings", "Perimeter", "PerimeterError", "Perimeters", "Row",
-           "Scan", "Scans"]
+__all__ = [
+           "Accounts",
+           "AuditLog",
+           "CorruptScan",
+           "Database",
+           "InstanceSettings",
+           "Perimeter",
+           "PerimeterError",
+           "Perimeters",
+           "Row",
+           "Scan",
+           "Scans",
+]

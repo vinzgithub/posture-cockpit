@@ -28,7 +28,7 @@
           <circle cx="60" cy="60" r="56" fill="none" stroke="#8A2C1D" stroke-width="2.2"/>
           <circle cx="60" cy="60" r="49" fill="none" stroke="#8A2C1D" stroke-width="1" stroke-dasharray="1.5 3.5"/>
           {% if result.score is not none %}
-          <text x="60" y="72" text-anchor="middle" font-family="Newsreader" font-weight="600" font-size="50" fill="#8A2C1D">{{ result.grade }}</text>
+          <text x="60" y="72" text-anchor="middle" font-family="Newsreader" font-weight="600" font-size="50" fill="#8A2C1D">{{ result.grade or '–' }}</text>
           <text x="60" y="93" text-anchor="middle" font-family="IBM Plex Mono" font-size="10" fill="#8A2C1D">{{ result.score }} / 100</text>
           {% else %}
           <text x="60" y="70" text-anchor="middle" font-family="Newsreader" font-weight="600" font-size="40" fill="#8A2C1D">–</text>
@@ -38,6 +38,16 @@
       </div>
     </header>
 
+    <div class="v04-indicators">
+      <p>{{ t('v04.diagnostic', percent=((result.diagnostic_coverage or 0) * 100) | int) }} · {{ t('v04.blocked', n=result.blocked) }}</p>
+      <p>{% if addresses %}{{ t('v04.addresses', discovered=addresses.discovered, attempted=addresses.attempted, conclusive=addresses.conclusive) }}{% else %}{{ t('v04.addresses_unknown') }}{% endif %}</p>
+      {% if addresses.sampling_limited %}<p>{{ t('v04.sampling') }}</p>{% endif %}
+      {% if addresses and not addresses.discovery_complete %}<p>{{ t('v04.discovery') }}</p>{% endif %}
+      {% if addresses.deadline_reached %}<p>{{ t('v04.deadline') }}</p>{% endif %}
+    </div>
+    {% if result.undetermined %}<p>{{ t('v04.undetermined') }} {{ t('v04.nonconclusive.' ~ ('one' if scan.nonconclusive() == 1 else 'many'), n=scan.nonconclusive()) }}</p>{% endif %}
+    {% for reason in result.cap_reasons %}<p>{{ t('v04.cap.' ~ reason) }}</p>{% endfor %}
+    {% if plan.provisional %}<p>{{ t('v04.provisional') }} : {{ plan.target.score }}–{{ plan.target_max.score }}/100</p>{% endif %}
     <p class="section-label">{{ t('report.diagnosis') }}</p>
     <p class="diagnosis">{{ diagnosis }}{% if conclusion %} <em>{{ conclusion }}</em>{% endif %}</p>
 
@@ -53,7 +63,7 @@
           <p class="p-meta">{{ t('report.who', who=p.who) }} · {{ t('report.minutes', n=p.minutes) }}</p>
         </div>
         <div class="p-side">
-          {% if result.score is not none %}<span class="p-gain">{{ t('report.points', n=p.gain) if p.gain > 0 else t('report.points_under_one') }}</span>{% endif %}
+          {% if result.score is not none %}<span class="p-gain">{{ t('v04.gain', low=('%+d' | format(p.gain)), high=('%+d' | format(p.gain_max))) if p.gain_max is not none else (t('report.points', n=p.gain) if p.gain > 0 else t('report.points_under_one')) }}</span>{% endif %}
           {% if p.deadline %}<span class="badge badge-urgent">{{ p.deadline }}</span>{% else %}<span class="badge">{{ t('status.fail') }}</span>{% endif %}
         </div>
       </li>
@@ -90,10 +100,9 @@
     {% endif %}
 
     {% if gaps %}
-    <p class="section-label">{{ t('report.gaps') }}</p>
-    <ul class="improvements">
-      {% for g in gaps %}<li><strong>{{ g.title }}</strong> — {{ g.reason }}</li>{% endfor %}
-    </ul>
+    <p class="section-label">{{ t('v04.gaps') }}</p>
+    {% for cause, group in gap_groups.items() if group %}<h3>{{ t('v04.cause.' ~ cause) }}</h3>
+    <ul class="improvements">{% for g in group %}<li><strong>{{ g.title }}</strong> — {{ g.reason }}</li>{% endfor %}</ul>{% endfor %}
     {% endif %}
 
     <div class="method-block">

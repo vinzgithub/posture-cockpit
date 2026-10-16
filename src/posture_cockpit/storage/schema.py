@@ -178,4 +178,17 @@ MIGRATIONS: list[Migration] = [
     CREATE INDEX audit_log_by_time ON audit_log(at);
     """,
     _scores_with_coverage,
+    # 4 — additive only: old observations are never recalculated.
+    """
+    ALTER TABLE scans ADD COLUMN score_raw REAL;
+    ALTER TABLE scans ADD COLUMN score_cap REAL;
+    ALTER TABLE scans ADD COLUMN score_final REAL;
+    ALTER TABLE scans ADD COLUMN diagnostic_coverage REAL;
+    ALTER TABLE scans ADD COLUMN checks_blocked INTEGER;
+    ALTER TABLE scans ADD COLUMN addresses_discovered INTEGER;
+    ALTER TABLE scans ADD COLUMN addresses_attempted INTEGER;
+    ALTER TABLE scans ADD COLUMN addresses_conclusive INTEGER;
+    ALTER TABLE scans ADD COLUMN grade_withheld_reason TEXT;
+    ALTER TABLE scans ADD COLUMN cap_reasons TEXT;
+    """,
 ]

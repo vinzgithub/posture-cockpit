@@ -128,3 +128,37 @@ The healthy test world (100/100, A, coverage 100%), with only its DMARC record c
 | `p=quarantine; t=y; pct=50` | To improve (testing) | To improve (testing) + note "partial quarantine" | 94 → 94 |
 | `p=reject; pct=50; sp=none` | To improve (subdomains left out) | To improve (partial rejection) + note "subdomains left out" | 94 → 94 |
 | `p=none` without `rua` | To improve (monitoring) | To improve (monitoring without reports) | 94 → 94 |
+
+## 8. Version 0.4: HTTPS availability and diagnostic coverage
+
+The HTTPS root and its ten dependents share a per-address probe. A confirmed refusal
+on every published address blocks the ten dependents; they are neither scored nor
+counted as errors. Scoring coverage excludes them; diagnostic coverage includes their
+weight in its denominator. The score is not evidence that blocked checks succeeded.
+
+Three non-cumulative cap reasons share the same reference: dependency, certificate
+authentication, obsolete protocol. The reference keeps non-HTTPS results, assumes the
+HTTPS root compliant, and puts evaluated or blocked dependents at their declared floors.
+The final score is min(raw, reference), rounded only once. Category scores are uncapped.
+
+If no address supports modern TLS, at least one refuses or is obsolete, and another is
+inconclusive (including incomplete DNS discovery), the score is provisional without a
+grade. This is `undetermined`, not `not_evaluated`. It is not comparable to a graded
+score. An available modern-TLS address plus an unknown address retains its grade.
+
+Four indicators accompany the result: scoring coverage, diagnostic coverage, blocked
+checks, and discovered/attempted/conclusive (host, address) pairs. Counts do not imply
+complete DNS discovery. Sampling, incomplete discovery and deadlines are named.
+
+A HTTPS recheck reruns the complete enabled family with a fresh probe (9 seconds),
+then up to 15 seconds for its checks. All rechecks are saved together. The original
+findings remain unchanged; the current assessment includes the latest rechecks.
+Root fixes may have a gain interval and a provisional target because the blocked
+measurements are not yet known. A certificate fix has an exact gain when all its
+dependents were measured.
+
+HSTS history is local observation, not browser state. Only an HSTS header received
+with a verified certificate over modern TLS is retained. Its lifetime is capped at a
+year. `max-age=0` removes it; an absent or invalid header does not. An ancestor policy
+applies only with includeSubDomains. `preload` is an indication, not evidence of actual
+browser list membership. Neither history nor attribution changes any verdict or score.

@@ -61,6 +61,7 @@ class TaskView:
     how: str = ""
     done: bool = False          # checked again and now OK
     checked_at: str = ""        # when it was checked again, if it was
+    gain_max: int | None = None
     still_failing: bool = False  # checked again and still not OK
 
 
@@ -97,6 +98,8 @@ class PlanView:
     dns_host: str                            # id of the selected host
     detected_host: str                       # name of the detected host, "" if unknown
     nameservers: list[str]
+    target_max_score: int | None = None
+    provisional: bool = False
     headline: str = ""
     subline: str = ""
     score_note: str = ""
@@ -119,7 +122,7 @@ class PlanView:
         """The score once every priority is fixed, never below the current one."""
         if self.target.score is None or self.now.score is None:
             return None
-        return max(self.target.score, self.now.score)
+        return self.target.score if self.provisional else max(self.target.score, self.now.score)
 
     @property
     def target_grade(self) -> str | None:
@@ -156,7 +159,7 @@ def dns_host_steps(catalog: Catalog, lang: str, host_id: str, change: DnsChange,
 
 
 def task_view(catalog: Catalog, lang: str, scan: Scan, finding: Finding, number: int, gain: int,
-              host_ids: list[str]) -> TaskView:
+              host_ids: list[str], gain_max: int | None = None) -> TaskView:
     """One item of the plan, in the reader's language."""
     remedy = finding.outcome.remedy
     assert remedy is not None
@@ -175,7 +178,7 @@ def task_view(catalog: Catalog, lang: str, scan: Scan, finding: Finding, number:
         why=catalog.first(lang, [f"{finding.outcome.summary}.why", f"{finding.check_id}.why"], params),
         category=text(f"category.{finding.category}"),
         minutes=remedy.minutes, effort=remedy.effort.value, effort_label=text(EFFORT_KEYS[remedy.effort.value]),
-        gain=gain,
+        gain=gain, gain_max=gain_max,
         records=[RecordView(c, scan.domain if c.name == "@" else f"{c.name}.{scan.domain}") for c in remedy.dns],
         how=text(remedy.how) if remedy.how else "",
         done=recheck is not None and current.status is Status.OK,
@@ -211,7 +214,7 @@ def plan_view(catalog: Catalog, lang: str, scan: Scan, domain_row: Row) -> PlanV
              for h in (*providers.DNS_HOSTS, providers.OTHER)]
 
     def views(items: list[scoring.PlanItem], first: int) -> list[TaskView]:
-        return [task_view(catalog, lang, scan, item.finding, first + i, item.gain, host_ids)
+        return [task_view(catalog, lang, scan, item.finding, first + i, item.gain, host_ids, item.gain_max)
                 for i, item in enumerate(items)]
 
     priorities = views(plan.priorities, 1)
@@ -219,7 +222,8 @@ def plan_view(catalog: Catalog, lang: str, scan: Scan, domain_row: Row) -> PlanV
     now = scan.assessment()
     counts = scoring.counts(current)
     view = PlanView(
-        domain=scan.domain, scan=scan, now=now, start=plan.now, target=plan.target,
+        domain=scan.domain, scan=scan, now=now, start=plan.now, target=plan.target, provisional=plan.provisional,
+        target_max_score=plan.target_max.score if plan.target_max is not None else None,
         grade_label=catalog.text(lang, scoring.grade_label(now.grade)) if now.grade else "",
         priorities=priorities, improvements=improvements,
         counts={status.value: counts.get(status, 0) for status in Status},
@@ -282,7 +286,7 @@ def _tell_the_story(catalog: Catalog, lang: str, view: PlanView) -> None:
                                                              applicable=now.applicable), "active")
         fix_state = check_state = "todo"
     else:
-        scan_step = StepperStep(text("plan.step.scan"), text("plan.step.scan_detail", n=len(view.scan.findings)),
+        scan_step = StepperStep(text("plan.step.scan"), text("plan.step.scan_detail", n=now.evaluated),
                                 "done")
         fix_state, check_state = ("done", "active") if all_done else ("active", "todo")
     view.steps = [

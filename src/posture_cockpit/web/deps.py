@@ -153,8 +153,13 @@ def number_or_404(text: str) -> int:
 
 def stored_scan(request: Request, domain: Row, number: str) -> Scan:
     """Scan ``number`` of ``domain`` (already checked with :func:`visible_domain`), otherwise a 404."""
-    scan = services(request).scans.get(number_or_404(number))
-    if scan is None or scan.domain_id != domain["id"]:
+    scan_id = number_or_404(number)
+    scans = services(request).scans
+    owner = scans.db.value("SELECT domain_id FROM scans WHERE id=?", (scan_id,))
+    if owner != domain["id"]:
+        raise HTTPException(404)
+    scan = scans.get(scan_id)
+    if scan is None:
         raise HTTPException(404)
     return scan
 
@@ -247,5 +252,7 @@ def render(request: Request, template: str, status: int = 200, **context: Any) -
         "date": day,
         "local_time": hour,
         "path": request.url.path,
+        # Where the language switch comes back to, with ?task= or ?page=.
+        "back": request.url.path + (f"?{request.url.query}" if request.url.query else ""),
     }
     return s.templates.TemplateResponse(request, template, {**base, **context}, status_code=status)

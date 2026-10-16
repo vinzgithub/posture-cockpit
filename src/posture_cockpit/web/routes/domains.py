@@ -25,7 +25,7 @@ from ...core.model import Finding, Status
 from ...core.network import NetworkError
 from ...i18n import finding_summary
 from ...scanner import DEMO_DOMAIN, InternalScansDisabled
-from ...storage import Row, Scan
+from ...storage import CorruptScan, Row, Scan
 from ..deps import (
     audit,
     checked_form,
@@ -51,7 +51,15 @@ HISTORY_PAGE_SIZE = 20  # the default of Scans.history_page
 
 
 def list_page(request: Request, user: Row, status: int = 200, **context):
-    domains = services(request).scans.domains(internal=bool(user["is_admin"]))
+    scans = services(request).scans
+    domains = [dict(row) for row in scans.domains(internal=bool(user["is_admin"]))]
+    for domain in domains:
+        domain["unreadable"] = False
+        if domain["scan_id"]:
+            try:
+                scans.get(domain["scan_id"])
+            except CorruptScan:
+                domain.update(unreadable=True, score=None, grade=None)
     return render(request, "domains.html", status=status, domains=domains, demo_domain=DEMO_DOMAIN,
                   full_coverage=scoring.FULL_COVERAGE, **context)
 
@@ -130,18 +138,19 @@ async def verify(request: Request, name: str, check_id: str, user: Row = Depends
         raise HTTPException(404)
     perimeter = perimeter_of(s, domain)
     try:
-        finding = await recheck(s, name, check_id, user, perimeter=perimeter, client=client_key(request))
+        findings = await recheck(s, name, check_id, user, perimeter=perimeter, client=client_key(request))
     except InternalScansDisabled:
         flash(request, "error", "error.internal_disabled")
         return redirect(f"/domains/{name}?task={check_id}#task")
     except TooManyScans as e:
         flash(request, "error", f"error.scan_{e.reason}")
         return redirect(f"/domains/{name}?task={check_id}#task")
+    finding = next((f for f in findings if f.check_id == check_id), None)
     if finding is None:
         raise HTTPException(404)
     audit(request, "scan.internal.recheck" if perimeter else "scan.recheck", user=user, target=name, check=check_id)
     before = scan.assessment()
-    after = s.scans.save_recheck(scan.id, finding)
+    after = s.scans.save_rechecks(scan.id, findings)
     if finding.status is Status.OK and before.score is not None and after.score is not None:
         points = after.score - before.score
         if points > 0:
@@ -208,11 +217,19 @@ async def history_page(request: Request, name: str, page: str = "1", user: Row =
         raise HTTPException(404)
     # How many checks each scan could evaluate: the stored coverage alone does not say it.
     results = {}
+    address_results = {}
+    unreadable = set()
     for row in rows:
-        scan = s.scans.get(row["id"])
+        try:
+            scan = s.scans.get(row["id"])
+        except CorruptScan:
+            unreadable.add(row["id"])
+            continue
         if scan is not None:
             results[row["id"]] = scan.assessment()
-    return render(request, "history.html", domain=domain, history=rows, results=results, page=number,
+            address_results[row["id"]] = scan.addresses()
+    return render(request, "history.html", domain=domain, history=rows, results=results,
+                  address_results=address_results, unreadable=unreadable, page=number,
                   pages=pages, total=total, latest_id=s.scans.latest_id(domain["id"]),
                   full_coverage=scoring.FULL_COVERAGE)
 

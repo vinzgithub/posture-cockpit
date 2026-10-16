@@ -128,14 +128,14 @@ async def _https_family(check: Check, ctx: CheckContext, timeout: float, deadlin
 
 async def scan(domain: str, checks: Iterable[Check], net: Network, timeout: float = CHECK_TIMEOUT,
                now: datetime | None = None, internal: bool = False,
-               probe_deadline: float | None = None) -> ScanResult:
+               probe_deadline: float | None = None, history: dict | None = None) -> ScanResult:
     """Runs ``checks`` on ``domain`` concurrently. ``domain`` must already be normalized.
 
     ``internal``: the scan runs in an internal perimeter; checks made for the
     Internet only are reported as not applicable without running.
     ``probe_deadline``: the HTTPS probe's (default :data:`.https_probe.PROBE_DEADLINE`)."""
     started = now or datetime.now(UTC)
-    ctx = CheckContext(domain=domain, net=net, now=started, internal=internal)
+    ctx = CheckContext(domain=domain, net=net, now=started, internal=internal, history=history or {})
     clock = time.monotonic()
 
     def start(check: Check) -> Awaitable[Finding]:

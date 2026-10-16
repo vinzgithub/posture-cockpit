@@ -1,0 +1,12 @@
+# syntax=docker/dockerfile:1
+# Copyright © 2026 Vincent Fournet
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# An isolated test image, based on the exact runtime image built for recette.
+FROM posture-cockpit:v040-recette
+USER root
+RUN pip install --no-cache-dir "pytest>=8"
+WORKDIR /checks
+COPY --chown=10001:10001 tests /checks
+USER cockpit
+ENTRYPOINT ["python", "-m", "pytest", "-q", "-rs", "-p", "no:cacheprovider"]
+CMD ["test_https_probe.py::test_real_network_legacy_tls_only_is_obsolete", "test_https_probe.py::test_real_network_old_version_requests_carry_nothing_but_the_essentials", "test_https_probe.py::test_real_network_the_rule_is_checked_before_an_old_version_connection", "test_https_probe.py::test_real_network_the_deadline_closes_the_connection_on_the_server_side"]

@@ -181,12 +181,21 @@ def _attribution(ctx: CheckContext, probe: ProbeResult, refused: list[AddressRes
             "elements": [f"{h} ({a})" for h, a in others]}
 
 
-def _announced(host: HostResult, redirection: _Redirection) -> dict[str, Any]:
-    """HTTPS announced for this host (section 7): S1 from this scan; the history (S2, S4) comes later."""
+def _announced(host: HostResult, redirection: _Redirection, ctx: CheckContext) -> dict[str, Any]:
+    """S1/S2 announce HTTPS; DNS, previous availability and preload are hints only."""
     signals = (["redirect"] if redirection.to_same_host else [])
+    from ..core.https_history import announced
+
+    history = announced(host.name, ctx.history, ctx.now)
+    if history.get("hsts"):
+        signals.append("hsts_history")
     hints = (["https_record"] if host.hints else [])
+    if history.get("last_available"):
+        hints.append("https_history")
+    if history.get("preload"):
+        hints.append("preload")
     level = "announced" if signals else "hints" if hints else "not_announced"
-    return {"level": level, "signals": signals, "hints": hints, "history": "not_read"}
+    return {"level": level, "signals": signals, "hints": hints, "history": history}
 
 
 # ------------------------------------------------------------------ the root
@@ -224,6 +233,12 @@ async def https_redirect(ctx: CheckContext) -> Outcome:
             notes.append({"key": "web.https_redirect.note.external", "params": {"host": host.name, "target": target}})
     notes += _address_notes(probe)
     evidence: dict[str, Any] = {
+        "https_history": {h.name: {
+            "available": any(a.kind in {Kind.AVAILABLE, Kind.TLS_ONLY} for a in h.addresses),
+            "hsts": [a.page.header("strict-transport-security") for a in h.addresses
+                     if a.page is not None and a.certificate is not None and a.certificate.trusted
+                     and a.kind is Kind.AVAILABLE and a.page.header("strict-transport-security")],
+        } for h in probe.hosts},
         "observation": probe.evidence(),
         "redirection": {h.name: {"value": redirections[h.name].value, **redirections[h.name].chains} for h in hosts},
         "addresses": probe.exhaustivity(),
@@ -238,7 +253,7 @@ async def https_redirect(ctx: CheckContext) -> Outcome:
             refused = [a for h in refused_hosts for a in h.of(Kind.REFUSED)]
             attribution = _attribution(ctx, probe, refused) if refused else {"level": "undetermined", "elements": []}
             first = refused_hosts[0]
-            announced = _announced(first, redirections[first.name])
+            announced = _announced(first, redirections[first.name], ctx)
             evidence["attribution"], evidence["announced"] = attribution, announced
             extra += _attribution_notes(first, refused, attribution, announced)
             remedy = _refusal_remedy(key, attribution, announced)
@@ -347,9 +362,11 @@ def _attribution_notes(host: HostResult, refused: list[AddressResult], attributi
         else:
             notes.append({"key": "web.https_redirect.attribution.undetermined", "params": {"host": host.name}})
     if announced["level"] == "announced":
-        notes.append({"key": "web.https_redirect.announced.redirect", "params": {"host": host.name}})
-    elif announced["level"] == "hints":
-        notes.append({"key": "web.https_redirect.announced.hints", "params": {"host": host.name}})
+        for signal in announced["signals"]:
+            notes.append({"key": "web.https_redirect.announced." + signal, "params": {"host": host.name}})
+    for hint in announced["hints"]:
+        key = "hints" if hint == "https_record" else hint
+        notes.append({"key": "web.https_redirect.announced." + key, "params": {"host": host.name}})
     return notes
 
 

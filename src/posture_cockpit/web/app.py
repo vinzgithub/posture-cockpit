@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.exceptions import HTTPException
@@ -23,7 +23,7 @@ from ..core.registry import Registry
 from ..i18n import Catalog
 from ..scanner import Scanner
 from ..security import LoginThrottle
-from ..storage import Accounts, AuditLog, Database, InstanceSettings, Perimeters, Scans
+from ..storage import Accounts, AuditLog, CorruptScan, Database, InstanceSettings, Perimeters, Scans
 from . import deps
 from .limits import ScanLimiter
 from .routes import account, admin, api, auth, domains, perimeters, report
@@ -107,6 +107,20 @@ def _add_error_pages(app: FastAPI) -> None:
 
     for exc_class, (url, status, message) in redirects.items():
         app.add_exception_handler(exc_class, redirect_handler(url, status, message))
+
+    @app.exception_handler(CorruptScan)
+    async def corrupt_scan(request: Request, exc: CorruptScan):
+        if _wants_json(request):
+            return JSONResponse({"error": "scan_unreadable", "scan_id": exc.scan_id}, status_code=409)
+        if request.url.path.endswith("/report.pdf"):
+            from ..report import ReportUnavailable, build_unreadable_pdf
+
+            try:
+                pdf = build_unreadable_pdf(request.app.state.services.catalog, deps.lang_of(request))
+                return Response(pdf, status_code=409, media_type="application/pdf")
+            except ReportUnavailable:
+                pass
+        return deps.render(request, "error.html", status=409, message=deps.t(request, "error.scan_unreadable"))
 
     @app.exception_handler(deps.CsrfError)
     async def csrf_error(request: Request, exc: deps.CsrfError):

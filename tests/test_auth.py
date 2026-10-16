@@ -214,6 +214,52 @@ def test_admin_deletes_an_account_after_typing_its_name(client):
     assert post(client, "/admin/users/1/delete", "/admin", confirm="vincent").status_code == 400  # not yourself
 
 
+def test_a_new_account_never_opens_with_the_cookie_of_a_deleted_one(app, client):
+    """0.1.0 to 0.3.1: SQLite gave the id of the deleted account to the next one, which started
+    with the default session epoch. A browser of the deleted account, signed in with its temporary
+    password, was then taken for the new account and could choose its password, then administer."""
+    setup_account(client)
+    confirm_admin(client)
+    post(client, "/admin/users", "/admin", username="steph", password=TEMP, password2=TEMP)
+    steph_id = accounts(client).by_name("steph")["id"]
+    with TestClient(app) as old_browser, TestClient(app) as eve_browser:
+        log_in(old_browser, "steph", TEMP)  # and never chooses a password
+        assert old_browser.get("/domains", follow_redirects=False).headers["location"] == "/account/password"
+        post(client, f"/admin/users/{steph_id}/delete", f"/admin/users/{steph_id}", confirm="steph")
+        assert old_browser.get("/domains", follow_redirects=False).headers["location"] == "/login"
+
+        post(client, "/admin/users", "/admin", username="eve", password=TEMP, password2=TEMP, is_admin="on")
+        eve = accounts(client).by_name("eve")
+        assert eve["id"] == steph_id and eve["is_admin"]  # the case that was open: same id, an administrator
+
+        assert old_browser.get("/domains", follow_redirects=False).headers["location"] == "/login"
+        assert old_browser.get("/account/password", follow_redirects=False).headers["location"] == "/login"
+        r = post(old_browser, "/account/password", "/login", new=OWN, new2=OWN)  # its own CSRF token
+        assert r.headers["location"] == "/login"
+        assert old_browser.get("/admin", follow_redirects=False).headers["location"] == "/login"
+        assert accounts(client).by_name("eve")["must_change_password"]  # nothing was changed for eve
+
+        # eve signs in normally with the password the administrator gave her
+        assert log_in(eve_browser, "eve", TEMP).headers["location"] == "/domains"
+        assert eve_browser.get("/domains", follow_redirects=False).headers["location"] == "/account/password"
+        r = post(eve_browser, "/account/password", "/account/password", new=OWN, new2=OWN)
+        assert r.headers["location"] == "/domains"
+        assert eve_browser.get("/domains").status_code == 200
+
+
+def test_an_account_and_its_session_epoch_are_created_together(client, monkeypatch):
+    setup_account(client)
+    store = accounts(client)
+
+    def failing(user_id):
+        raise RuntimeError("disk full")
+
+    monkeypatch.setattr(store, "new_session_epoch", failing)
+    with pytest.raises(RuntimeError):
+        store.create("steph", "hash")
+    assert store.by_name("steph") is None and store.count() == 1  # no account without its epoch
+
+
 def test_admin_turns_an_extension_off(client):
     setup_account(client)
     confirm_admin(client)

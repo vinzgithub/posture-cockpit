@@ -34,7 +34,7 @@ async def scan_and_save(s: Services, domain: str, user: Row | None, *, perimeter
     The caller has checked that ``user`` may scan this domain in this perimeter.
     Raises TooManyScans over the limits."""
     with s.scan_limiter.slot(_who(user, client)):
-        result = await s.scanner.scan(domain, perimeter)
+        result = await s.scanner.scan(domain, perimeter, history=s.scans.https_history(domain))
     user_id = user["id"] if user else None
     domain_id = s.scans.add_domain(domain, user_id, perimeter.id if perimeter else None)
     scan_id = s.scans.save(domain_id, result, __version__, user_id, perimeter.name if perimeter else "")
@@ -44,7 +44,7 @@ async def scan_and_save(s: Services, domain: str, user: Row | None, *, perimeter
 
 
 async def recheck(s: Services, domain: str, check_id: str, user: Row, *, perimeter: Perimeter | None = None,
-                  client: str = "") -> Finding | None:
+                  client: str = "") -> list[Finding]:
     """Runs one check again (see Scanner.recheck). It takes a slot, not a share of the hourly quota."""
     with s.scan_limiter.slot(_who(user, client), counts=False):
-        return await s.scanner.recheck(domain, check_id, perimeter)
+        return await s.scanner.recheck_group(domain, check_id, perimeter, history=s.scans.https_history(domain))

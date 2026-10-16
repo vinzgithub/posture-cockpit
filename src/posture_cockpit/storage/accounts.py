@@ -23,11 +23,19 @@ class Accounts:
 
     def create(self, username: str, pw_hash: str, *, is_admin: bool = False,
                must_change_password: bool = False, lang: str = "fr") -> int:
-        cur = self.db.execute(
-            "INSERT INTO users(username, pw_hash, created_at, is_admin, must_change_password, lang)"
-            " VALUES(?, ?, ?, ?, ?, ?)",
-            (username, pw_hash, utcnow(), int(is_admin), int(must_change_password), lang))
-        return int(cur.lastrowid or 0)
+        """A new account, with a session epoch of its own.
+
+        SQLite gives the id of a deleted account to the next one. Without a fresh epoch,
+        the new account would start with the default one, which the session cookies of
+        the deleted account may still carry: they would open the new account."""
+        with self.db.transaction():
+            cur = self.db.execute(
+                "INSERT INTO users(username, pw_hash, created_at, is_admin, must_change_password, lang)"
+                " VALUES(?, ?, ?, ?, ?, ?)",
+                (username, pw_hash, utcnow(), int(is_admin), int(must_change_password), lang))
+            user_id = int(cur.lastrowid or 0)
+            self.new_session_epoch(user_id)
+        return user_id
 
     def get(self, user_id: int) -> Row | None:
         return self.db.one("SELECT * FROM users WHERE id = ?", (user_id,))
