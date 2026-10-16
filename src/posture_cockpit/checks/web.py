@@ -29,6 +29,7 @@ from ..core import (
     Outcome,
     Refused,
     Remedy,
+    Status,
     UntrustedCertificate,
     fail,
     load_messages,
@@ -38,6 +39,10 @@ from ..core import (
 )
 from ..core.egress import DestinationBlocked
 from . import LOCALES
+
+# Version 0.4: the verdicts each HTTPS check can give (the scoring caps use the lowest non-critical one).
+ROOT_VERDICTS = frozenset({Status.OK, Status.FAIL})
+PAGE_VERDICTS = frozenset({Status.OK, Status.WARN})  # a missing or weak header is never critical
 
 extension = Extension("web", name="Website", version=__version__,
                       description="HTTPS redirection, HSTS, CSP and the other protection headers, security.txt.",
@@ -119,7 +124,7 @@ def _csp_policies(page: HttpReply) -> list[dict[str, list[str]]]:
 
 
 # ------------------------------------------------------------------ HTTPS
-@extension.check("https_redirect", category="web", weight=8)
+@extension.check("https_redirect", category="web", weight=8, provides="https", verdicts=ROOT_VERDICTS)
 async def https_redirect(ctx: CheckContext) -> Outcome:
     """Credit HTTPS only after a reachable, certificate-verified same-site endpoint.
 
@@ -217,7 +222,8 @@ def _hsts_max_age(header: str) -> int | None:
     return None
 
 
-@extension.check("hsts", category="web", weight=6)
+@extension.check("hsts", category="web", weight=6, requires="https",
+                 verdicts=PAGE_VERDICTS)
 async def hsts(ctx: CheckContext) -> Outcome:
     """HSTS makes browsers remember to use HTTPS only, even if a link says http://."""
     pages = await _pages(ctx)
@@ -261,7 +267,8 @@ def _script_weakness(page: HttpReply) -> str | None:
     return weaknesses[0]
 
 
-@extension.check("csp", category="web", weight=4)
+@extension.check("csp", category="web", weight=4, requires="https",
+                 verdicts=PAGE_VERDICTS)
 async def csp(ctx: CheckContext) -> Outcome:
     """A Content-Security-Policy that limits where scripts may come from."""
     pages = await _pages(ctx)
@@ -294,7 +301,8 @@ def _framing(page: HttpReply) -> str:
     return "missing"
 
 
-@extension.check("framing", category="web", weight=3)
+@extension.check("framing", category="web", weight=3, requires="https",
+                 verdicts=PAGE_VERDICTS)
 async def framing(ctx: CheckContext) -> Outcome:
     """Other sites must not be able to show the site in a frame (clickjacking)."""
     pages = await _pages(ctx)
@@ -310,7 +318,8 @@ async def framing(ctx: CheckContext) -> Outcome:
 
 
 # ------------------------------------------------------- the other headers
-@extension.check("nosniff", category="web", weight=2)
+@extension.check("nosniff", category="web", weight=2, requires="https",
+                 verdicts=PAGE_VERDICTS)
 async def nosniff(ctx: CheckContext) -> Outcome:
     """X-Content-Type-Options: nosniff, so the browser does not guess file types."""
     pages = await _pages(ctx)
@@ -330,7 +339,8 @@ def _referrer_policy(page: HttpReply) -> str | None:
     return known[-1] if known else None
 
 
-@extension.check("referrer", category="web", weight=1)
+@extension.check("referrer", category="web", weight=1, requires="https",
+                 verdicts=PAGE_VERDICTS)
 async def referrer(ctx: CheckContext) -> Outcome:
     """Referrer-Policy limits the address sent to the sites a visitor goes to next."""
     pages = await _pages(ctx)
@@ -346,7 +356,8 @@ async def referrer(ctx: CheckContext) -> Outcome:
     return ok("web.referrer.ok", evidence)
 
 
-@extension.check("server_banner", category="web", weight=2)
+@extension.check("server_banner", category="web", weight=2, requires="https",
+                 verdicts=PAGE_VERDICTS)
 async def server_banner(ctx: CheckContext) -> Outcome:
     """Software versions in the headers tell attackers which known flaws to try."""
     pages = await _pages(ctx)
@@ -381,7 +392,8 @@ def _expiry(value: str) -> datetime | None:
     return moment if moment.tzinfo else None  # RFC 9116 §2.5.5: a date with its time zone
 
 
-@extension.check("security_txt", category="web", weight=1, internal=False)
+@extension.check("security_txt", category="web", weight=1, internal=False, requires="https",
+                 verdicts=PAGE_VERDICTS)
 async def security_txt(ctx: CheckContext) -> Outcome:
     """security.txt tells whoever finds a flaw how to report it (RFC 9116)."""
     hosts = await ctx.web_hosts()

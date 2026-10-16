@@ -21,6 +21,7 @@ from ..core import (
     NetworkError,
     Outcome,
     Remedy,
+    Status,
     fail,
     load_messages,
     na,
@@ -34,6 +35,10 @@ from . import LOCALES
 extension = Extension("tls", name="TLS", version=__version__,
                       description="Certificate validity and expiry, TLS versions, key strength.",
                       messages=load_messages(LOCALES, "tls"))
+
+# Version 0.4: the verdicts each check can give (the scoring caps use the lowest non-critical one).
+THREE_VERDICTS = frozenset({Status.OK, Status.WARN, Status.FAIL})
+KEY_VERDICTS = frozenset({Status.OK, Status.FAIL})  # a key is long enough or it is not
 
 # Days before expiry. Certificates renewed automatically are replaced well before
 # these limits (Let's Encrypt: 30 days before), so reaching them means renewal failed.
@@ -65,7 +70,7 @@ def _days_left(ctx: CheckContext, cert: Certificate) -> int:
     return (cert.not_after - ctx.now).days
 
 
-@extension.check("certificate", category="tls", weight=10)
+@extension.check("certificate", category="tls", weight=10, requires="https", verdicts=THREE_VERDICTS)
 async def certificate(ctx: CheckContext) -> Outcome:
     """The certificate must be trusted by browsers and must not be about to expire."""
     certs = await _certificates(ctx)
@@ -93,7 +98,7 @@ async def certificate(ctx: CheckContext) -> Outcome:
     return ok("tls.certificate.ok", evidence, **params)
 
 
-@extension.check("protocols", category="tls", weight=5)
+@extension.check("protocols", category="tls", weight=5, requires="https", verdicts=THREE_VERDICTS)
 async def protocols(ctx: CheckContext) -> Outcome:
     """TLS 1.0 and 1.1 are obsolete; TLS 1.3 is preferred, TLS 1.2 accepted."""
     hosts = list(await _certificates(ctx))
@@ -121,7 +126,7 @@ async def protocols(ctx: CheckContext) -> Outcome:
     return ok("tls.protocols.ok", evidence)
 
 
-@extension.check("key", category="tls", weight=3)
+@extension.check("key", category="tls", weight=3, requires="https", verdicts=KEY_VERDICTS)
 async def key(ctx: CheckContext) -> Outcome:
     """The certificate's key must be long enough: RSA 2048 bits, or an elliptic curve of 256 bits."""
     certs = await _certificates(ctx)

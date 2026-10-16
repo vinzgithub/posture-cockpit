@@ -84,11 +84,20 @@ async def run_check(check: Check, ctx: CheckContext, timeout: float) -> Finding:
     except Exception as e:  # a bug in a check must not break the scan
         log.exception("check %s failed on %s", check.id, ctx.domain)
         outcome = Outcome(Status.ERROR, "check.error.internal", evidence={"error": f"{e.__class__.__name__}: {e}"})
-    return Finding(check.id, check.category, check.weight, outcome)
+    try:
+        return finding(check, outcome)
+    except ValueError as e:  # e.g. a signal this check may not report: a bug, never a verdict
+        log.error("check %s gave an outcome its declaration does not allow: %s", check.id, e)
+        return finding(check, Outcome(Status.ERROR, "check.error.internal", evidence={"error": str(e)}))
+
+
+def finding(check: Check, outcome: Outcome) -> Finding:
+    """The finding of ``check``, with its place in a family of checks as declared (version 0.4)."""
+    return Finding(check.id, check.category, check.weight, outcome, check.family, check.role, check.floor)
 
 
 async def _not_applicable(check: Check) -> Finding:
-    return Finding(check.id, check.category, check.weight, Outcome(Status.NA, "check.na.internal"))
+    return finding(check, Outcome(Status.NA, "check.na.internal"))
 
 
 async def scan(domain: str, checks: Iterable[Check], net: Network, timeout: float = 15.0,
