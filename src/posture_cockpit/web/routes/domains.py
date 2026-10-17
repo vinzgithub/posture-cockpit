@@ -20,6 +20,7 @@ from starlette.datastructures import FormData
 from starlette.exceptions import HTTPException
 
 from ...core import providers, scoring
+from ...core.compare import Snapshot, compare
 from ...core.engine import normalize_domain
 from ...core.model import Finding, Status
 from ...core.network import NetworkError
@@ -228,7 +229,18 @@ async def history_page(request: Request, name: str, page: str = "1", user: Row =
         if scan is not None:
             results[row["id"]] = scan.assessment()
             address_results[row["id"]] = scan.addresses()
+    # Comparison of immutable observations; no old score is recalculated.
+    # Unreadable historical values produce an explicit non-comparable state.
+    comparison = None
+    try:
+        recent = s.scans.latest_states(domain["id"])
+        if recent:
+            comparison = compare(Snapshot.from_row(recent[1]) if len(recent) > 1 else None,
+                                 Snapshot.from_row(recent[0]))
+    except (ValueError, TypeError, KeyError):
+        comparison = None
     return render(request, "history.html", domain=domain, history=rows, results=results,
+                  comparison=comparison,
                   address_results=address_results, unreadable=unreadable, page=number,
                   pages=pages, total=total, latest_id=s.scans.latest_id(domain["id"]),
                   full_coverage=scoring.FULL_COVERAGE)
