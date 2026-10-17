@@ -22,6 +22,32 @@
 
 ---
 
+## ⚡ Quick start — Docker
+
+**Posture Cockpit v0.4.1 installs without Git, Python or a local build.** Docker Engine and Docker Compose 2.24+ are required. The official GHCR image supports AMD64 and ARM64.
+
+```bash
+mkdir posture-cockpit && cd posture-cockpit
+curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.4.1/compose.yaml
+docker compose up -d
+```
+
+Get the one-time first-account setup code with `docker compose logs posture-cockpit`, then visit `http://<server>:8080/setup` to create the administrator account. **Do not expose the service publicly over plain HTTP**: configure an HTTPS reverse proxy for remote access.
+
+Configuration uses an optional [`.env` file](.env.example). For upgrades, backups, restore and rollback, follow the [installation guide](docs/user/INSTALLATION.md). The image is pinned to **0.4.1**, so an installation will not silently upgrade.
+
+### What's new in v0.4.1
+
+- **Official ready-to-run Docker image** on GHCR, versioned for AMD64 and ARM64.
+- **Protected first start:** an initialization code is required before creating the first administrator.
+- **Safer maintenance:** consistent live SQLite backup, verification and guarded restoration, including the session key.
+- **Simpler configuration:** optional `.env`, with hardened unprivileged, read-only Docker defaults.
+- **Improved bilingual PDF reports**, with existing v0.4.0 databases remaining compatible (schema 4).
+
+See the [v0.4.1 release notes](https://github.com/vinzgithub/posture-cockpit/releases/tag/v0.4.1).
+
+---
+
 ## 🚀 At a glance
 
 <table>
