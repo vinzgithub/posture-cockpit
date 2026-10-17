@@ -92,3 +92,35 @@ def test_corrupted_check_statuses_are_refused():
             "at": "now", "origin": "scan", "engine": 4, "score": 75,
             "coverage": 1.0, "evaluation": "complete", "checks": '["not a mapping"]',
         })
+
+
+def test_negative_delta_is_not_hidden():
+    before = state(score=82, checks={"mail.spf": "ok", "mail.dmarc": "ok"})
+    after = state(score=57, checks={"mail.spf": "ok", "mail.dmarc": "fail"})
+    result = compare(before, after)
+    assert result.comparable and result.score_delta == -25
+    assert [(c.check_id, c.kind) for c in result.changes] == [("mail.dmarc", "regressed")]
+
+
+def test_no_false_security_improvement_from_failed_probe():
+    before = state(score=60, checks={"mail.spf": "ok", "mail.dmarc": "fail"})
+    after = state(score=70, checks={"mail.spf": "ok", "mail.dmarc": "error"})
+    result = compare(before, after)
+    assert result.comparable and result.score_delta == 10
+    assert [(c.check_id, c.kind) for c in result.changes] == [("mail.dmarc", "unmeasured")]
+
+
+def test_legacy_as_reference_never_exposes_delta():
+    before = state(origin="legacy", score=80)
+    after = state(score=60)
+    assert compare(before, after).reason == "legacy"
+
+
+def test_same_scores_different_check_outcomes_are_visible():
+    before = state(checks={"mail.spf": "ok", "mail.dmarc": "fail"})
+    after = state(checks={"mail.spf": "warn", "mail.dmarc": "warn"})
+    result = compare(before, after)
+    assert result.score_delta == 0
+    assert {c.check_id: c.kind for c in result.changes} == {
+        "mail.spf": "regressed", "mail.dmarc": "improved",
+    }
