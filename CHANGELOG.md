@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.4.1 — unreleased
+## 0.4.1 — 2026-10-17
 
 Maintenance release: simple installation and update with Docker Compose, consistent backups,
 a protected first start. Scoring rules, checks, statuses and the API contract are unchanged;
