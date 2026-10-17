@@ -24,7 +24,7 @@ from ..core.registry import Registry
 from ..i18n import Catalog
 from ..scanner import Scanner
 from ..security import LoginThrottle
-from ..storage import Accounts, AuditLog, CorruptScan, Database, InstanceSettings, Perimeters, Scans
+from ..storage import Accounts, AuditLog, CorruptScan, Database, InstanceSettings, Perimeters, Scans, instance_lock
 from . import deps, first_run
 from .limits import ScanLimiter
 from .routes import account, admin, api, auth, domains, perimeters, report
@@ -46,8 +46,19 @@ def create_app(config: Config | None = None, registry: Registry | None = None,
         # A folder the application cannot write, an unknown schema or a damaged key stop the start
         # here, with a message saying what to do, rather than with an error on the first request.
         prepare_data_dir(config.data_dir)
-        db = Database(config.db_path)
-        session_key = secret_key(config.data_dir)
+        # Shared with the commands, never with a restoration (storage/instance_lock.py): kept until
+        # the application stops.
+        try:
+            folder_lock = instance_lock.shared(config.data_dir)
+        except instance_lock.Busy:
+            raise StartupError(f"A restoration is in progress on {config.data_dir}: start again once it is "
+                               "finished.") from None
+        try:
+            db = Database(config.db_path)
+            session_key = secret_key(config.data_dir)
+        except BaseException:
+            folder_lock.release()
+            raise
     except StartupError as error:
         log.error("Posture Cockpit cannot start: %s", error)
         raise
@@ -64,6 +75,8 @@ def create_app(config: Config | None = None, registry: Registry | None = None,
 
     app = FastAPI(title="Posture Cockpit", version=__version__, docs_url=None, redoc_url=None, openapi_url=None)
     app.state.services = services
+    app.state.folder_lock = folder_lock
+    app.router.on_shutdown.append(folder_lock.release)
     # While no account exists, /setup asks for a one-time code written to the log (first_run.py).
     app.state.setup_code = None
     if services.accounts.count() == 0:

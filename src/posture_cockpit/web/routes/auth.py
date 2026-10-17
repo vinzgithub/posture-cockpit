@@ -80,10 +80,11 @@ async def setup(request: Request, form: FormData = Depends(checked_form)):
     if problem:
         return render(request, "setup.html", status=400, min_length=MIN_PASSWORD_LENGTH, username=username,
                       setup_code=code, error=t(request, problem, n=MIN_PASSWORD_LENGTH))
-    if not first_run.consume(s.db, code):  # another request created the first account meanwhile
+    # The first account administers the others. Created with the consumption of the code, in one
+    # transaction; None: another request created the first account meanwhile.
+    uid = first_run.create_administrator(s.db, s.accounts, code, username, hash_password(password), lang_of(request))
+    if uid is None:
         return redirect("/login")
-    # The first account administers the others.
-    uid = s.accounts.create(username, hash_password(password), is_admin=True, lang=lang_of(request))
     user = s.accounts.get(uid)
     assert user is not None
     audit(request, "setup", user=user)

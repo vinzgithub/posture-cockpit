@@ -20,7 +20,7 @@ import logging
 import secrets
 
 from ..config import normalize_setup_code
-from ..storage import Database
+from ..storage import Accounts, Database
 
 META_KEY = "setup_code"
 # Without 0/O and 1/I, which are read one for the other. 12 characters: 60 bits.
@@ -71,3 +71,16 @@ def consume(db: Database, code: str) -> bool:
     if not normalize_setup_code(code):
         return False
     return db.execute("DELETE FROM meta WHERE key = ? AND value = ?", (META_KEY, _digest(code))).rowcount == 1
+
+
+def create_administrator(db: Database, accounts: Accounts, code: str, username: str, pw_hash: str,
+                         lang: str) -> int | None:
+    """Consumes the code and creates the first account in one transaction: both happen, or neither.
+
+    None when an account already exists or the code is not (or no longer) the right one; the
+    write lock is taken first, so that two requests, from two processes even, run one after
+    the other and only one succeeds. Any error rolls both back: the code stays valid."""
+    with db.transaction(immediate=True):
+        if accounts.count() > 0 or not consume(db, code):
+            return None
+        return accounts.create(username, pw_hash, is_admin=True, lang=lang)

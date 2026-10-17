@@ -25,7 +25,6 @@ from starlette.datastructures import FormData
 from starlette.exceptions import HTTPException
 
 from .. import __version__
-from ..core.model import HTTPS_ROOT_CHECK
 from ..i18n import LOCALES, fmt_date, pick_locale
 from ..security import csrf_token, csrf_valid
 from ..storage import Row, Scan
@@ -252,7 +251,6 @@ def render(request: Request, template: str, status: int = 200, **context: Any) -
         "t": text,
         "date": day,
         "local_time": hour,
-        "root_check": HTTPS_ROOT_CHECK,  # the check the blocked ones depend on: one name everywhere
         "path": request.url.path,
         # Where the language switch comes back to, with ?task= or ?page=.
         "back": request.url.path + (f"?{request.url.query}" if request.url.query else ""),

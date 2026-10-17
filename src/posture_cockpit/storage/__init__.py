@@ -4,6 +4,7 @@
 (schema.py) and one repository per subject (accounts.py, scans.py,
 perimeters.py, audit.py, settings.py)."""
 
+from . import instance_lock
 from .accounts import Accounts
 from .audit import AuditLog
 from .database import Database, Row, UnsupportedSchema
@@ -24,4 +25,5 @@ __all__ = [
            "Scan",
            "Scans",
            "UnsupportedSchema",
+           "instance_lock",
 ]

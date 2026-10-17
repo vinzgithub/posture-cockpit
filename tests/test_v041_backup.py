@@ -93,8 +93,9 @@ def test_replacing_an_instance_keeps_a_copy_of_its_data(tmp_path, network):
     (tmp_path / "b" / "posture_cockpit.db-wal").write_bytes(b"stale journal")
     result = backup.restore(tmp_path / "b", out, replace=True)
     assert not (tmp_path / "b" / "posture_cockpit.db-wal").exists()
-    kept = [p for p in result["kept"] if p.endswith(".db")]
-    assert len(kept) == 1 and backup.counts(tmp_path / "b" / "backups" / kept[0].split("/")[-1])["scans"] == 0
+    assert len(result["kept"]) == 1 and result["kept"][0].endswith(".tar.gz")  # a restorable backup
+    with open(result["kept"][0], "rb") as former:
+        assert backup.check(former, tmp_path / "scratch")["counts"]["scans"] == 0
     assert backup.counts(tmp_path / "b" / "posture_cockpit.db")["scans"] == 1
 
 

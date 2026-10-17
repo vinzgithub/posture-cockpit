@@ -42,7 +42,7 @@ from .core.registry import Registry
 from .i18n import LOCALES, Catalog, finding_summary
 from .scanner import Scanner
 from .security import MIN_PASSWORD_LENGTH, hash_password
-from .storage import Accounts, Database, backup
+from .storage import Accounts, Database, backup, instance_lock
 from .storage.schema import MIGRATIONS
 
 SYMBOLS = {"blocked": "⊘", "ok": "✓", "warn": "!", "fail": "✗", "na": "–", "info": "i", "error": "?"}
@@ -158,8 +158,27 @@ def _data_dir() -> Path:
     return Config.from_env().data_dir
 
 
+def _shared(data_dir: Path) -> instance_lock.Held:
+    """The lock a command that uses the database shares with the server (storage/instance_lock.py)."""
+    try:
+        return instance_lock.shared(data_dir)
+    except instance_lock.Busy:
+        raise backup.BackupError(f"A restoration is in progress on {data_dir}: "
+                                 "try again once it is finished.") from None
+
+
 def _backup(output: str | None) -> int:
     data_dir = _data_dir()
+    if data_dir.is_dir():
+        held = _shared(data_dir)
+        try:
+            return _write_backup(data_dir, output)
+        finally:
+            held.release()
+    return _write_backup(data_dir, output)
+
+
+def _write_backup(data_dir: Path, output: str | None) -> int:
     if output == "-":
         if sys.stdout.isatty():
             print("posture-cockpit: the backup is binary: redirect it to a file (> backup.tar.gz), "
@@ -200,6 +219,8 @@ def _restore(source: str, *, replace: bool = False, check_only: bool = False) ->
     print(f"Backup restored into {data_dir}: {summary}.")
     for path in result["kept"]:
         print(f"The former data is kept in {path}.")
+    if result["new_key"]:
+        print("The backup holds no session key: a new one was made, every browser signs in again.")
     if result["schema"] < len(MIGRATIONS):
         print(f"The database will be migrated from schema {result['schema']} to {len(MIGRATIONS)} "
               "at the next start (a copy is made first).")
@@ -228,7 +249,16 @@ def _info() -> int:
 
 # ------------------------------------------------------------------ accounts
 def _account(command: str, username: str) -> int:
-    accounts = Accounts(Database(Config.from_env().db_path))
+    config = Config.from_env()
+    held = _shared(config.data_dir) if config.data_dir.is_dir() else None
+    try:
+        return _change_account(Accounts(Database(config.db_path)), command, username)
+    finally:
+        if held:
+            held.release()
+
+
+def _change_account(accounts: Accounts, command: str, username: str) -> int:
     user = accounts.by_name(username)
     if user is None:
         print(f"Unknown user: {username}", file=sys.stderr)

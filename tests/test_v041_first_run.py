@@ -3,12 +3,15 @@
 """0.4.1: the first account needs the one-time setup code written to the server log."""
 
 import logging
+import sqlite3
+import threading
 
 import pytest
 from fastapi.testclient import TestClient
 
 from helpers import PASSWORD, log_in, page_csrf, setup_account, setup_code
 from posture_cockpit.config import Config
+from posture_cockpit.storage import Accounts, Database
 from posture_cockpit.web import first_run
 from posture_cockpit.web.app import create_app
 
@@ -102,3 +105,64 @@ def test_generated_codes():
     for code in codes:
         assert len(code) == 14 and code.count("-") == 2
         assert not set(code.replace("-", "")) - set(first_run.ALPHABET)
+
+
+# ------------------------------------------------- one transaction (counter-review P1)
+def test_a_failure_while_creating_the_account_keeps_the_code_valid(client, monkeypatch):
+    code = setup_code(client.app)
+    db = client.app.state.services.db
+    accounts_class = type(accounts(client))
+    real_create = accounts_class.create
+
+    def failing_create(self, *args, **kwargs):
+        real_create(self, *args, **kwargs)  # the row is written, then the failure comes
+        raise sqlite3.OperationalError("disk I/O error")
+
+    monkeypatch.setattr(accounts_class, "create", failing_create)
+    with TestClient(client.app, raise_server_exceptions=False) as other:
+        r = other.post("/setup", data=form(other, code), follow_redirects=False)
+    assert r.status_code == 500
+    assert accounts(client).count() == 0 and first_run.matches(db, code)  # both rolled back
+    monkeypatch.setattr(accounts_class, "create", real_create)
+    assert client.post("/setup", data=form(client, code), follow_redirects=False).status_code == 303
+    assert accounts(client).count() == 1 and db.get_meta(first_run.META_KEY) is None
+
+
+def test_a_failure_after_consuming_the_code_rolls_it_back(tmp_path, monkeypatch):
+    app = create_app(Config(data_dir=tmp_path))
+    services = app.state.services
+    code = app.state.setup_code
+    real_consume = first_run.consume
+
+    def consumed_then_fails(db, given):
+        assert real_consume(db, given)  # the code is deleted...
+        raise RuntimeError("power cut between the two writes")  # ...and the account never comes
+
+    monkeypatch.setattr(first_run, "consume", consumed_then_fails)
+    with pytest.raises(RuntimeError):
+        first_run.create_administrator(services.db, services.accounts, code, "vincent", "hash", "fr")
+    assert first_run.matches(services.db, code) and services.accounts.count() == 0
+
+
+@pytest.mark.parametrize("connections", ["shared", "separate"])
+def test_simultaneous_requests_create_one_administrator(tmp_path, connections):
+    app = create_app(Config(data_dir=tmp_path))
+    code = app.state.setup_code
+    databases = ([app.state.services.db] * 8 if connections == "shared"
+                 else [Database(tmp_path / "posture_cockpit.db") for _ in range(8)])  # like separate processes
+    start = threading.Barrier(len(databases))
+    results = []
+
+    def attempt(n, db):
+        start.wait()
+        results.append(first_run.create_administrator(db, Accounts(db), code, f"admin{n}", "hash", "fr"))
+
+    threads = [threading.Thread(target=attempt, args=(n, db)) for n, db in enumerate(databases)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(30)
+    assert len(results) == 8 and len([r for r in results if r is not None]) == 1
+    rows = app.state.services.db.all("SELECT username, is_admin FROM users")
+    assert len(rows) == 1 and rows[0]["is_admin"] == 1
+    assert app.state.services.db.get_meta(first_run.META_KEY) is None

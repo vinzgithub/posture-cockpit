@@ -11,8 +11,9 @@ A backup is a ``.tar.gz`` holding three files:
 - ``.secret_key``: the key that signs the sessions (absent if the instance never started).
 
 Restoring checks the whole archive before touching anything (names, sizes, hashes,
-integrity, schema), refuses while a server still uses the database, keeps a copy of the
-current data in ``backups/``, then puts the files in place. A backup of an older schema is
+integrity, schema), holds the exclusive lock of the data folder from start to end
+(instance_lock.py), saves the current data as a backup in ``backups/``, then swaps the files,
+all of them or none. A backup of an older schema is
 migrated at the next start, like any older database. Nothing here contacts the network.
 """
 
@@ -22,6 +23,7 @@ import hashlib
 import io
 import json
 import os
+import secrets
 import shutil
 import sqlite3
 import tarfile
@@ -35,6 +37,7 @@ from typing import IO, Any
 
 from .. import __version__
 from ..config import MIN_SECRET_KEY, prepare_data_dir
+from . import instance_lock
 from .schema import MIGRATIONS
 
 FORMAT = 1
@@ -131,8 +134,18 @@ def _workdir(data_dir: Path) -> Iterator[Path]:
         shutil.rmtree(folder, ignore_errors=True)
 
 
+def _free(folder: Path, stem: str, suffix: str = "") -> Path:
+    """``folder/stem-<time><suffix>``, with -2, -3... when two are made in the same second."""
+    base = f"{stem}-{_stamp()}"
+    path, n = folder / f"{base}{suffix}", 1
+    while path.exists():
+        n += 1
+        path = folder / f"{base}-{n}{suffix}"
+    return path
+
+
 def default_path(data_dir: Path) -> Path:
-    return data_dir / "backups" / f"posture-cockpit-{_stamp()}.tar.gz"
+    return _free(data_dir / "backups", "posture-cockpit", ".tar.gz")
 
 
 def create(data_dir: Path, out: IO[bytes]) -> dict[str, Any]:
@@ -170,17 +183,27 @@ def _add(tar: tarfile.TarFile, name: str, data: IO[bytes], size: int) -> None:
 
 
 def create_file(data_dir: Path, target: Path | None = None) -> tuple[Path, dict[str, Any]]:
-    """A backup written to a file (by default in ``backups/``), readable by its owner only."""
-    target = target or default_path(data_dir)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    """A backup written to a file (by default a new one in ``backups/``), readable by its owner only.
+
+    An existing file is never overwritten: a given target is refused, a default name moves on."""
+    (target.parent if target else data_dir / "backups").mkdir(parents=True, exist_ok=True)
+    for _ in range(100):
+        path = target or default_path(data_dir)
+        try:
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            break
+        except FileExistsError:
+            if target:
+                raise BackupError(f"{target} already exists: choose another file.") from None
+    else:  # pragma: no cover - a hundred backups in the same second
+        raise BackupError("No free name for the backup in backups/.")
     try:
         with os.fdopen(fd, "wb") as out:
             manifest = create(data_dir, out)
     except BaseException:
-        target.unlink(missing_ok=True)
+        path.unlink(missing_ok=True)
         raise
-    return target, manifest
+    return path, manifest
 
 
 def _read(source: IO[bytes], into: Path) -> dict[str, Any]:
@@ -241,42 +264,124 @@ def check(source: IO[bytes], data_dir: Path) -> dict[str, Any]:
 
 
 def restore(data_dir: Path, source: IO[bytes], *, replace: bool = False) -> dict[str, Any]:
-    """Restores a backup into ``data_dir``. Returns the manifest, plus where the former data went."""
+    """Restores a backup into ``data_dir``: all of it, or nothing.
+
+    The exclusive lock of the data folder (instance_lock.py) is held from the first check to the
+    last file: no server starts and no command opens the database in between. The archive is
+    checked completely before anything changes. The former data is first saved as a backup
+    archive in ``backups/`` (or, when it is too damaged to be read, copied as it is). The files
+    are then swapped by renames on the same file system; if one of them fails, the former files
+    are put back and the error says so.
+
+    The session key: the one of the archive when it holds one. When it holds none (an instance
+    that never started), an existing instance being replaced gets a new key, never its former
+    one: the sessions of the former accounts must not open the restored accounts that have the
+    same numbers. A new instance gets its key at its first start.
+
+    Returns the manifest, plus ``kept`` (where the former data went) and ``new_key``."""
     prepare_data_dir(data_dir)
-    db_path, key_path = data_dir / DB_NAME, data_dir / KEY_NAME
-    if in_use(db_path):
-        raise BackupError("The database is in use: stop Posture Cockpit first (docker compose stop).")
-    exists = db_path.exists() and db_path.stat().st_size > 0
-    if exists and not replace:
-        raise BackupError(f"{data_dir} already holds an instance. Add --replace to replace it "
-                          "(a copy of the current data is kept in backups/).")
-    with _workdir(data_dir) as work:
-        manifest = _read(source, work)
-        kept: list[str] = []
-        if exists:
-            saved = data_dir / "backups"
-            saved.mkdir(exist_ok=True)
-            stamp = _stamp()
-            before = saved / f"posture_cockpit-before-restore-{stamp}.db"
-            try:
-                _snapshot(db_path, before)
-            except (sqlite3.DatabaseError, BackupError):  # a damaged database is kept as it is
-                before.unlink(missing_ok=True)
-                for suffix in ("", "-wal"):
-                    if Path(f"{db_path}{suffix}").exists():
-                        shutil.copyfile(f"{db_path}{suffix}", f"{before}{suffix}")
-                        _private(Path(f"{before}{suffix}"))
-            kept.append(str(before))
-            if key_path.is_file():
-                shutil.copyfile(key_path, saved / f"secret_key-before-restore-{stamp}")
-                _private(saved / f"secret_key-before-restore-{stamp}")
-                kept.append(str(saved / f"secret_key-before-restore-{stamp}"))
-        # A journal left beside the former database would be replayed onto the restored one.
-        for suffix in ("-wal", "-shm", "-journal"):
-            Path(f"{db_path}{suffix}").unlink(missing_ok=True)
-        os.replace(work / DB_NAME, db_path)
-        _private(db_path)
+    db_path = data_dir / DB_NAME
+    try:
+        with instance_lock.exclusive(data_dir):
+            # Servers of 0.4.0 and earlier do not take the lock: an open SQLite connection betrays them.
+            if in_use(db_path):
+                raise BackupError("The database is in use: stop Posture Cockpit first (docker compose stop).")
+            exists = db_path.exists() and db_path.stat().st_size > 0
+            if exists and not replace:
+                raise BackupError(f"{data_dir} already holds an instance. Add --replace to replace it "
+                                  "(a backup of the current data is kept in backups/).")
+            with _workdir(data_dir) as work:
+                try:
+                    manifest = _read(source, work)
+                    kept = [str(_keep_former(data_dir))] if exists else []
+                except OSError as error:  # a full disk, a folder that cannot be written...
+                    raise BackupError(f"The restoration could not be prepared ({error}); "
+                                      "nothing was changed.") from None
+                new_key = _swap(data_dir, work, replacing=exists)
+    except instance_lock.Busy:
+        raise BackupError("Posture Cockpit, a command or another restoration uses this data folder: "
+                          "stop Posture Cockpit first (docker compose stop).") from None
+    return {**manifest, "kept": kept, "new_key": new_key}
+
+
+_FORMER_FILES = (DB_NAME, f"{DB_NAME}-wal", f"{DB_NAME}-shm", f"{DB_NAME}-journal", KEY_NAME)
+
+
+def _keep_former(data_dir: Path) -> Path:
+    """The former data saved before it is replaced: a backup archive, restorable like any other,
+    or a plain copy of its files when the database is too damaged to be read."""
+    (data_dir / "backups").mkdir(exist_ok=True)
+    try:
+        return create_file(data_dir, _free(data_dir / "backups", "posture-cockpit-before-restore", ".tar.gz"))[0]
+    except (BackupError, sqlite3.DatabaseError):
+        folder = _free(data_dir / "backups", "before-restore")
+        folder.mkdir(mode=0o700)
+        for name in _FORMER_FILES:
+            if (data_dir / name).is_file():
+                shutil.copyfile(data_dir / name, folder / name)
+                _private(folder / name)
+        return folder
+
+
+def _swap(data_dir: Path, work: Path, *, replacing: bool) -> bool:
+    """Puts the restored files in place; on any failure, puts the former ones back. True when
+    a new session key was made (see restore)."""
+    aside = Path(tempfile.mkdtemp(prefix=".restore-former-", dir=data_dir))
+    moved: list[tuple[Path, Path]] = []
+    placed: list[Path] = []
+    new_key = False
+    try:
+        # The former journals go too: a -wal left beside the restored database would be replayed onto it.
+        for name in _FORMER_FILES:
+            if (data_dir / name).exists():
+                os.replace(data_dir / name, aside / name)
+                moved.append((data_dir / name, aside / name))
+        os.replace(work / DB_NAME, data_dir / DB_NAME)
+        placed.append(data_dir / DB_NAME)
+        _private(data_dir / DB_NAME)
         if (work / KEY_NAME).is_file():
-            os.replace(work / KEY_NAME, key_path)
-            _private(key_path)
-    return {**manifest, "kept": kept}
+            os.replace(work / KEY_NAME, data_dir / KEY_NAME)
+            placed.append(data_dir / KEY_NAME)
+            _private(data_dir / KEY_NAME)
+        elif replacing:
+            fd = os.open(data_dir / KEY_NAME, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            placed.append(data_dir / KEY_NAME)
+            with os.fdopen(fd, "w") as f:
+                f.write(secrets.token_urlsafe(48))
+            new_key = True
+        _sync(data_dir)
+    except BaseException as error:
+        problems = []
+        for path in placed:
+            try:
+                path.unlink(missing_ok=True)
+            except OSError as e:  # pragma: no cover - reported below
+                problems.append(f"{path}: {e}")
+        for original, kept in reversed(moved):
+            try:
+                os.replace(kept, original)
+            except OSError as e:
+                problems.append(f"{original}: {e}")
+        if problems:  # the former files stay where they are, and the message says where
+            raise BackupError(f"The restoration failed ({error}) and the former files could not all be put "
+                              f"back ({'; '.join(problems)}): they are in {aside}.") from error
+        shutil.rmtree(aside, ignore_errors=True)
+        if isinstance(error, BackupError):
+            raise
+        raise BackupError(f"The restoration failed ({error}); the former data is back, unchanged.") from error
+    shutil.rmtree(aside, ignore_errors=True)
+    return new_key
+
+
+def _sync(folder: Path) -> None:
+    """Writes the renames of ``folder`` to disk (where the system allows it)."""
+    try:
+        fd = os.open(folder, os.O_RDONLY)
+    except OSError:  # pragma: no cover - Windows
+        return
+    try:
+        os.fsync(fd)
+    except OSError:  # pragma: no cover - some file systems refuse it on a folder
+        pass
+    finally:
+        os.close(fd)

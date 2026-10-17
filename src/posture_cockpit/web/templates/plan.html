@@ -57,7 +57,7 @@
 </section>
 
 {% if plan.now.blocked %}<section class="panel"><ul class="checks">
-{% for f in plan.scan.current() if f.status.value == 'blocked' %}<li class="status-blocked"><strong>{{ t(f.check_id ~ '.title') }}</strong> — <a href="/domains/{{ plan.domain }}/details#web.https_redirect">{{ t('v04.blocked_by', root=t(root_check ~ '.title')) }}</a></li>{% endfor %}
+{% for f in plan.scan.current() if f.status.value == 'blocked' %}<li class="status-blocked"><strong>{{ t(f.check_id ~ '.title') }}</strong> — <a href="/domains/{{ plan.domain }}/details#web.https_redirect">{{ t('v04.blocked_by') }}</a></li>{% endfor %}
 </ul></section>{% endif %}
 <div class="plan-grid">
   <aside class="task-list" aria-label="{{ t('plan.tasks') }}">

@@ -197,4 +197,5 @@ def test_every_result_page_fits_the_screen_and_states_its_coverage_once(visit, d
     page.goto('/domains')
     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
     page.goto('/domains/blocked.example')
-    expect(page.locator('li.status-blocked').first).to_contain_text('Passage automatique en HTTPS')
+    blocked_line = 'Bloqué — dépend de : Redirection HTTPS (refus observé)'  # the wording of the 0.4 arbitration
+    expect(page.locator('li.status-blocked').first).to_contain_text(blocked_line)

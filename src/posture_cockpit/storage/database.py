@@ -60,6 +60,7 @@ class Database:
         path.parent.mkdir(parents=True, exist_ok=True)
         self.path = path
         self._lock = RLock()
+        self._depth = 0  # transactions in progress on this connection (see transaction())
         _private_file(path)
         self._conn = sqlite3.connect(str(path), check_same_thread=False, isolation_level=None)
         self._conn.row_factory = sqlite3.Row
@@ -102,15 +103,29 @@ class Database:
         return row[0] if row else None
 
     @contextmanager
-    def transaction(self) -> Iterator[None]:
-        """Everything inside happens, or nothing does."""
+    def transaction(self, *, immediate: bool = False) -> Iterator[None]:
+        """Everything inside happens, or nothing does.
+
+        A transaction inside another one joins it (0.4.1): an inner failure undoes the whole outer
+        transaction. ``immediate`` takes the write lock at once, so that two processes checking
+        then writing the same rows run one after the other instead of failing."""
         with self._lock:
-            self._conn.execute("BEGIN")
+            if self._depth:
+                self._depth += 1
+                try:
+                    yield
+                finally:
+                    self._depth -= 1
+                return
+            self._conn.execute("BEGIN IMMEDIATE" if immediate else "BEGIN")
+            self._depth = 1
             try:
                 yield
             except BaseException:
                 self._conn.execute("ROLLBACK")
                 raise
+            finally:
+                self._depth = 0
             self._conn.execute("COMMIT")
 
     # ------------------------------------------------------------------- meta
