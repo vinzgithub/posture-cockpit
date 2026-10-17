@@ -4,38 +4,59 @@
 
 ## With Docker (recommended)
 
-```yaml
-# compose.yaml
-services:
-  posture-cockpit:
-    image: ghcr.io/vinzgithub/posture-cockpit:latest
-    container_name: posture-cockpit
-    restart: unless-stopped
-    ports:
-      - "8080:8080"          # "8081:8080" if port 8080 is already taken
-    volumes:
-      - posture-cockpit-data:/data
-    environment:
-      TZ: Europe/Paris
-    read_only: true
-    tmpfs:
-      - /tmp
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-volumes:
-  posture-cockpit-data:
-```
+You need Docker Engine and **Docker Compose 2.24 or later** (`docker compose version`). Nothing to build, no Git: the official image is published on `ghcr.io/vinzgithub/posture-cockpit`, for amd64 and arm64 processors.
 
 ```bash
+mkdir posture-cockpit && cd posture-cockpit
+curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.4.1/compose.yaml
 docker compose up -d
-curl http://localhost:8080/healthz     # {"status":"ok","version":"…"}
 ```
 
-Open `http://<server>:8080` and create the administrator account. The **"Check the demo domain"** box adds a fictitious domain to discover the tool without scanning anything real.
+The [`compose.yaml`](../../compose.yaml) file names an exact version of the image (`0.4.1`), never `latest`: an installation never changes version on its own. It keeps the protections: unprivileged user (uid 10001), read-only system, no Linux capability, `no-new-privileges`, `/tmp` in memory. The data goes to the volume `posture-cockpit_posture-cockpit-data`, whatever the installation folder.
 
-The repository's [`compose.yaml`](../../compose.yaml) holds the same, with the optional settings in comments.
+### First start: the setup code
+
+While no account exists, creating the administrator account asks for a **setup code**, written to the server log (it changes at each restart while no account exists):
+
+```bash
+docker compose logs posture-cockpit
+# … Setup code / code d'initialisation : 7KQM-3XHA-PZ2W
+```
+
+Open `http://<server>:8080/setup`, enter the code, then create the account. Ticking **"Check the demo domain"** adds a fictitious domain to discover the tool without scanning anything real. Without the code, someone who reached the page before you cannot become administrator. Instances that already have accounts never see a code.
+
+For an automated installation, `POSTURE_COCKPIT_SETUP_CODE` sets the code (at least 12 letters or digits); it is then never written to the log.
+
+### Check
+
+```bash
+curl http://localhost:8080/healthz                       # {"status":"ok","version":"0.4.1"}
+docker compose exec posture-cockpit posture-cockpit info  # version, schema, accounts, scans
+```
+
+### Settings: the `.env` file
+
+Do not edit `compose.yaml`: an update replaces it. Settings go in an optional `.env` file next to it; the [`.env.example`](../../.env.example) template describes them all, commented out:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.4.1/.env.example -o .env
+nano .env                 # uncomment the lines you need
+docker compose up -d      # applies the changes
+```
+
+The most common:
+
+| `.env` line | Effect |
+|---|---|
+| `POSTURE_COCKPIT_PORT=8081` | Port of the server (8080 by default) |
+| `POSTURE_COCKPIT_BIND=127.0.0.1` | Listen on this address only (all by default); `127.0.0.1` behind a reverse proxy on the same server |
+| `TZ=Europe/Paris` | Time zone of the pages and PDF reports (`Europe/Paris` by default) |
+| `POSTURE_COCKPIT_COOKIE_SECURE=true` | Served over HTTPS by a reverse proxy (below) |
+| `POSTURE_COCKPIT_NAMESERVERS=9.9.9.9,1.1.1.1` | DNS resolvers to use |
+
+An empty line (`NAME=`) keeps the default. Every setting of the application (`POSTURE_COCKPIT_*` variables, below) can go in this file too.
+
+> Note: a port published by Docker bypasses the host's firewall (Docker's iptables rules). To expose Posture Cockpit to the reverse proxy of the same server only, use `POSTURE_COCKPIT_BIND=127.0.0.1`.
 
 ## Network access needed
 
@@ -44,7 +65,7 @@ The server must be able to reach the Internet:
 - **DNS** (port 53 UDP and TCP) to its resolvers, or those of `POSTURE_COCKPIT_NAMESERVERS`;
 - **HTTPS and HTTP** (ports 443 and 80) to the domains scanned.
 
-A filtering resolver (ad blocker, corporate DNS) may return empty answers: Posture Cockpit then refuses the scan rather than reporting missing records by mistake. Give it public resolvers, for instance `POSTURE_COCKPIT_NAMESERVERS: "9.9.9.9,1.1.1.1"`.
+A filtering resolver (ad blocker, corporate DNS) may return empty answers: Posture Cockpit then refuses the scan rather than reporting missing records by mistake. Give it public resolvers, for instance `POSTURE_COCKPIT_NAMESERVERS=9.9.9.9,1.1.1.1` in the `.env`.
 
 **Installed in a company network**, also set `POSTURE_COCKPIT_NAMESERVERS` to public resolvers: otherwise the internal resolver answers the "Internet" scans, and a user could read records of your internal zones there. Internal sites are audited in an **internal perimeter** (below), for administrators only.
 
@@ -53,6 +74,8 @@ Scans do **not** go through an HTTP proxy: the `HTTP_PROXY` and `HTTPS_PROXY` va
 **Egress rule.** In Internet mode, Posture Cockpit only connects to public addresses, on ports 80 and 443. A domain that points to a private address (10.x, 192.168.x, ::1…) is not contacted: the checks concerned are "not evaluated", with the reason. Link-local, multicast and reserved addresses and the cloud metadata services (169.254.169.254…) are never contacted, whatever the mode. Details in [SECURITY.md](../../SECURITY.md).
 
 ## Settings
+
+With Docker, these settings go in the `.env` file (`NAME=value`, see above).
 
 | Variable | Default | Role |
 |---|---|---|
@@ -70,28 +93,23 @@ Scans do **not** go through an HTTP proxy: the `HTTP_PROXY` and `HTTPS_PROXY` va
 | `POSTURE_COCKPIT_TIMEZONE` | `TZ`, else UTC | Time zone of pages and PDF reports (IANA name, e.g. `Europe/Paris`). The database and the API stay in UTC |
 | `POSTURE_COCKPIT_SESSION_COOKIE` | `posture_cockpit` | Name of the session cookie: change it for a second instance at the same address (below) |
 | `FORWARDED_ALLOW_IPS` | – | Address of the reverse proxy, so the attempt limit counts the real client address |
+| `POSTURE_COCKPIT_SETUP_CODE` | random | Code of the first account (at least 12 letters or digits) instead of the random code written to the log |
+| `POSTURE_COCKPIT_PORT` | `8080` | Docker Compose: port of the server |
+| `POSTURE_COCKPIT_BIND` | all | Docker Compose: listening address of the server |
+| `POSTURE_COCKPIT_IMAGE` | the image of the version | Docker Compose: image to run (test of a locally built image) |
+| `POSTURE_COCKPIT_CONTAINER` | `posture-cockpit` | Docker Compose: container name (second instance) |
+| `COMPOSE_PROJECT_NAME` | `posture-cockpit` | Docker Compose: project name, prefix of the volume (second instance) |
 
 ### Times shown
 
 Times are stored and returned by the API in UTC (`2026-10-13T07:19:05+00:00`). Pages and PDF reports show them in the time zone of the instance: `POSTURE_COCKPIT_TIMEZONE`, else the `TZ` variable of the container (the one in the example above), else UTC. The PDF states the offset ("09:19 UTC+2"). An unknown zone name in `POSTURE_COCKPIT_TIMEZONE` stops the start; a POSIX-style `TZ` (`CET-1CEST,…`) is ignored, with a warning in the log.
-
-### Two instances at the same address
-
-A browser sends the cookies of an address to all its ports: a test instance at `192.168.2.15:8081` and the production one at `192.168.2.15:8080` then sign each other out. Give the cookie of the test instance another name:
-
-```yaml
-    environment:
-      POSTURE_COCKPIT_SESSION_COOKIE: posture_cockpit_validation
-```
-
-Letters, digits, `_` and `-` only. The `__Host-` and `__Secure-` prefixes need `POSTURE_COCKPIT_COOKIE_SECURE: "true"`. Renaming the cookie of an existing instance signs its users out once.
 
 ## Audits of internal networks
 
 To audit sites of your private network (intranet, internal applications over HTTPS):
 
 1. install Posture Cockpit **inside** that network, or on a machine that reaches it;
-2. start it with `POSTURE_COCKPIT_INTERNAL_SCANS: "true"`;
+2. start it with `POSTURE_COCKPIT_INTERNAL_SCANS=true` in the `.env`;
 3. in **Administration → Internal perimeters**, an administrator creates a perimeter: the allowed networks (CIDR, inside 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10 or fc00::/7), the internal DNS servers, the ports (443 and 80 by default) and, if needed, the internal certificate authority in PEM;
 4. from the perimeter's page, they add the internal domains and scan them.
 
@@ -103,33 +121,131 @@ To audit several networks from a single instance, an agent architecture is studi
 
 ## Behind a reverse proxy (HTTPS)
 
-Serve Posture Cockpit over HTTPS (Caddy, Nginx, Traefik, HAProxy…), then:
+Serve Posture Cockpit over HTTPS (Caddy, Nginx, Traefik, HAProxy…). In the `.env`:
 
-```yaml
-    environment:
-      POSTURE_COCKPIT_COOKIE_SECURE: "true"
-      FORWARDED_ALLOW_IPS: "10.0.0.2"        # the proxy's address
+```bash
+POSTURE_COCKPIT_COOKIE_SECURE=true   # session cookie over HTTPS only, and an HSTS header
+POSTURE_COCKPIT_BIND=127.0.0.1       # when the proxy runs on the same server
+FORWARDED_ALLOW_IPS=127.0.0.1        # the address of the proxy: its X-Forwarded-* headers are trusted
+```
+
+`FORWARDED_ALLOW_IPS` must be the address the proxy connects from, as the container sees it (for a proxy in another container, its address on the Docker network); otherwise the limits on sign-in attempts would count the proxy instead of the visitors. Examples:
+
+```text
+# Caddyfile
+cockpit.example.org {
+    reverse_proxy 127.0.0.1:8080
+}
+```
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name cockpit.example.org;
+    # ssl_certificate … ; ssl_certificate_key … ;
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
 ```
 
 ## Backup
 
-Everything is in the `/data` volume: the `posture_cockpit.db` database, the `.secret_key` session key and the `backups/` folder (copies made before each schema upgrade).
+Everything is in the `/data` volume: the database `posture_cockpit.db`, the session key `.secret_key` and the `backups/` folder. The `backup` command makes a **consistent** copy while the application runs: it goes through SQLite's backup API, which takes the WAL journal into account, and adds the session key and a checkable manifest.
 
 ```bash
-docker run --rm -v posture-cockpit-data:/data -v "$PWD":/backup alpine \
-  tar czf /backup/posture-cockpit-$(date +%F).tgz -C /data .
+umask 077   # the backup holds the accounts: readable by you only
+docker compose exec -T posture-cockpit posture-cockpit backup --output - > posture-cockpit-$(date +%F).tar.gz
 ```
 
-## Updating
+Without `--output`, the archive is written to the volume, `/data/backups/posture-cockpit-<date>.tar.gz`. A backup can be checked without restoring anything:
 
 ```bash
-docker compose pull
+docker compose run --rm --no-deps -T posture-cockpit posture-cockpit check-backup - < posture-cockpit-2026-10-17.tar.gz
+```
+
+Do not copy the volume with `tar` while it runs: the database file may then disagree with its journal.
+
+## Restoring
+
+Restoring checks the whole archive (content, hashes, integrity, schema) before touching anything, refuses while the application still uses the database, keeps a copy of the replaced data in `/data/backups/`, then puts back the database and the session key.
+
+**On the same installation:**
+
+```bash
+docker compose stop
+docker compose run --rm --no-deps -T posture-cockpit posture-cockpit restore --replace - < posture-cockpit-2026-10-17.tar.gz
 docker compose up -d
 ```
 
-The database is upgraded automatically at start-up (migrations); a copy of the database from before is first written to `/data/backups/`. Still, back up before a major update.
+**On a new installation** (another server, or a test instance): install it as above without starting it, then restore without `--replace` (its volume is empty) and start it. A backup of an older version is upgraded at start, like any older database. A backup made by a newer version is refused.
 
-**Upgrading to 0.2.0**: the scores of stored scans are computed again with the coverage rules (see [SCORING.md](SCORING.md)); the API may return `"score": null` for a domain "not evaluated" (see [HOME_ASSISTANT.md](HOME_ASSISTANT.md)).
+As the session key is restored, open sessions stay valid; accounts, two-factor authentication and API tokens are those of the backup.
+
+## Updating
+
+1. Make a backup (above).
+2. Replace `compose.yaml` with the one of the new version, then restart:
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.4.2/compose.yaml   # the version you want
+docker compose up -d
+docker compose exec posture-cockpit posture-cockpit info
+```
+
+Docker downloads the new image and recreates the container on the same volume. At start, the database is upgraded automatically; when its schema changes, a copy of the former database is first written to `/data/backups/`. Your `.env` is left as it is.
+
+0.4.1 keeps the schema 4 of 0.4.0: going from 0.4.0 to 0.4.1, or back from 0.4.1 to 0.4.0, does not change the database.
+
+**Moving to 0.2.0**: the scores of stored scans are recomputed with the coverage rules (see [SCORING.md](SCORING.md)); the API may return `"score": null` for a domain that is "not evaluated" (see [HOME_ASSISTANT.md](HOME_ASSISTANT.md)).
+
+## Rollback
+
+Put back the `compose.yaml` of the previous version and restart:
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.4.0/compose.yaml
+docker compose up -d
+```
+
+That is enough while both versions have the same database schema (0.4.0 and 0.4.1: schema 4). If the update changed the schema, the former version refuses to start on the upgraded database (message `uses schema N`): restore the backup made before the update (`restore --replace`, above), or the automatic copy in `/data/backups/`.
+
+## From an older `compose.yaml`
+
+Installations made with the `compose.yaml` of 0.4.0 or earlier keep their data when they move to the new file:
+
+- **Volume.** The new file sets the project name to `posture-cockpit`: the volume stays `posture-cockpit_posture-cockpit-data`, the one of an installation made in a `posture-cockpit` folder. If your folder had another name, check with `docker volume ls` and put its prefix in the `.env`: `COMPOSE_PROJECT_NAME=<prefix>`.
+- **Settings.** Move your `environment:` lines to the `.env` (same name, `NAME=value`, without quotes) and your port to `POSTURE_COCKPIT_PORT`.
+- **Image.** A locally built image is kept with `POSTURE_COCKPIT_IMAGE=<name:tag>`; otherwise the official image is downloaded.
+- **Container name.** It stays `posture-cockpit`; `docker compose exec posture-cockpit …` commands work in every case.
+
+## A test instance on the same server
+
+A separate folder with its own `.env`: separate project, container, port and cookie, hence a separate volume. A browser sends the cookies of an address to all its ports: without a cookie name of its own, the two instances would sign each other out.
+
+```bash
+COMPOSE_PROJECT_NAME=posture-cockpit-test
+POSTURE_COCKPIT_CONTAINER=posture-cockpit-test
+POSTURE_COCKPIT_PORT=8089
+POSTURE_COCKPIT_SESSION_COOKIE=posture_cockpit_test
+#POSTURE_COCKPIT_IMAGE=posture-cockpit:local   # an image built from the repository: docker build -t posture-cockpit:local .
+```
+
+Letters, digits, `_` and `-` only for the cookie; the `__Host-` and `__Secure-` prefixes need `POSTURE_COCKPIT_COOKIE_SECURE=true`. Renaming the cookie of an existing instance signs its users out once. To stop it and erase everything: `docker compose down -v`, **in the test folder only**.
+
+## When the start fails
+
+The application refuses to start, saying what to do (`docker compose logs posture-cockpit`), rather than putting the data at risk:
+
+| Message | Cause and fix |
+|---|---|
+| `The data folder /data cannot be written … chown -R 10001:10001 <folder>` | A folder of the host mounted on `/data` belongs to root. Use the named volume of `compose.yaml`, or give the folder to user 10001. |
+| `The database … uses schema N; this version … handles schema M at most` | The database comes from a newer version. Run that one again, or restore a backup made before. Nothing was changed. |
+| `The session key … is empty or damaged` | Restore `.secret_key` from a backup, or delete it: a new key is created and every browser is signed out. |
+| `The database … cannot be opened` | The database file is damaged: restore a backup. |
 
 ## Without Docker
 
@@ -147,7 +263,7 @@ Without Pango, everything works except the PDF report, which shows a message.
 ## Rescue
 
 ```bash
-docker exec -it posture-cockpit posture-cockpit reset-password <username>
-docker exec -it posture-cockpit posture-cockpit disable-totp <username>   # lost phone and recovery codes
-docker exec -it posture-cockpit posture-cockpit make-admin <username>
+docker compose exec posture-cockpit posture-cockpit reset-password <username>
+docker compose exec posture-cockpit posture-cockpit disable-totp <username>   # lost phone and recovery codes
+docker compose exec posture-cockpit posture-cockpit make-admin <username>
 ```

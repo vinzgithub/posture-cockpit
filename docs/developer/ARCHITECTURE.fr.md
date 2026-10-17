@@ -80,7 +80,7 @@ Ce document est la carte du code : où se trouve quoi, comment une analyse circu
 
 Un seul fichier SQLite dans le dossier de données, en mode WAL, lisible par son seul propriétaire. Tables : `users`, `totp`, `recovery_codes`, `api_tokens`, `perimeters`, `domains` (avec `perimeter_id`), `scans` (note, lettre, couverture, périmètre), `findings`, `rechecks`, `audit_log`, `meta`.
 
-**Migrations** : `storage/schema.py` contient une liste de scripts SQL ou de fonctions Python. La base retient combien elle en a appliqué (`meta.schema_version`) et applique les suivantes au démarrage, chacune dans une transaction, clés étrangères désactivées puis vérifiées (`PRAGMA foreign_key_check`) avant validation, comme SQLite le prescrit pour reconstruire une table. Avant de migrer une base qui contient des données, une copie est écrite dans `backups/`. Pour changer le schéma, **ajoutez une migration à la fin de la liste** ; ne modifiez jamais une migration déjà publiée.
+**Migrations** : `storage/schema.py` contient une liste de scripts SQL ou de fonctions Python. La base retient combien elle en a appliqué (`meta.schema_version`) et applique les suivantes au démarrage, chacune dans une transaction, clés étrangères désactivées puis vérifiées (`PRAGMA foreign_key_check`) avant validation, comme SQLite le prescrit pour reconstruire une table. Avant de migrer une base qui contient des données, une copie est écrite dans `backups/`. Pour changer le schéma, **ajoutez une migration à la fin de la liste** ; ne modifiez jamais une migration déjà publiée. Une base dont le schéma dépasse la liste (écrite par une version plus récente) est refusée au démarrage, sans être modifiée (`UnsupportedSchema`). `storage/backup.py` fait et restaure des sauvegardes cohérentes (`posture-cockpit backup`, `restore`).
 
 | Version | Migration |
 |---|---|
@@ -144,6 +144,13 @@ Paramètres : `{nom}`. Un paramètre dont le nom finit par `_on` est une date IS
 - `tests/test_perimeters.py` et `tests/test_app_security.py` couvrent les droits, le journal d'audit, les protections de la connexion et les limites d'analyse.
 
 Un test demande une adresse de boucle locale IPv6 : il est sauté sur les machines qui n'en ont pas.
+
+Depuis la 0.4.1, `tests/test_v041_migrations.py` ouvre des bases faites par le vrai code des v0.3.0
+et v0.4.0 (exports SQL de `tests/data/`, écrits par `tests/data/make_legacy_databases.py`), et la CI
+(`.github/workflows/tests.yml`) passe aussi `scripts/docker-recette.sh` sur l'image construite
+(installation neuve, protections Docker, code d'initialisation, sauvegarde et restauration, refus,
+mises à jour depuis les images v0.3.0 et v0.4.0 et retour arrière) et toute la suite dans l'image.
+Publication : [RELEASE.fr.md](RELEASE.fr.md).
 
 ## 10. Conventions
 

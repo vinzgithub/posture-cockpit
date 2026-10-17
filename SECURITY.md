@@ -51,7 +51,8 @@ Internet scans use the system's resolvers unless `POSTURE_COCKPIT_NAMESERVERS` i
 - **Forms**: a CSRF token on every form and every state-changing request; redirections after a form only go to paths of the application.
 - **Browser**: strict Content Security Policy (no inline script or style, nothing from other origins), `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`, `Cross-Origin-Opener-Policy` and `Cross-Origin-Resource-Policy: same-origin`, `Cache-Control: no-store`, and HSTS when served over HTTPS.
 - **API keys**: shown once, stored as SHA-256 hashes, revocable; a key has the rights of its owner.
-- **Data**: the data folder and the database are created readable by their owner only; before a schema migration, a copy of the database is written to `backups/`.
+- **First start**: while no account exists, creating the first (administrator) account needs a one-time setup code written to the server log, or set by `POSTURE_COCKPIT_SETUP_CODE`; only its SHA-256 is stored, it is consumed with the account, and wrong codes count as failed sign-ins. Whoever reaches the page first cannot take the instance.
+- **Data**: the data folder and the database are created readable by their owner only; before a schema migration, a copy of the database is written to `backups/`. The application refuses to start on a database written by a newer version, on a damaged session key or on a data folder it cannot write, without changing anything. Backups (`posture-cockpit backup`) hold the accounts and the session key: keep them readable by you only.
 - **Container**: unprivileged user, read-only root file system, no capabilities (see `compose.yaml`).
 
 ## Third-party extensions

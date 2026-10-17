@@ -3,10 +3,67 @@
 ## 0.4.1 — unreleased
 
 Maintenance release: simple installation and update with Docker Compose, consistent backups,
-a protected first start. Scoring rules, checks and the API contract are unchanged; schema 4 too,
-so the 0.4.0 image can still open the database (rollback without restoration).
+a protected first start. Scoring rules, checks, statuses and the API contract are unchanged;
+schema 4 too, so the 0.4.0 image can still open the database (rollback without restoration).
 
-(details below, completed with the release)
+**Installation and update**
+- `compose.yaml` runs the published image `ghcr.io/vinzgithub/posture-cockpit:0.4.1` (never
+  `latest`), without building: `curl -fsSLO …/v0.4.1/compose.yaml && docker compose up -d`.
+  Requires Docker Compose 2.24 or later.
+- Settings go in an optional `.env` next to it (`.env.example` documents them): port, listening
+  address, time zone, reverse proxy, second instance, image to test. An update only replaces
+  `compose.yaml`. Empty `POSTURE_COCKPIT_*` values now count as absent.
+- The project name is fixed (`posture-cockpit`): the volume stays
+  `posture-cockpit_posture-cockpit-data` whatever the folder, as for installations made in a
+  `posture-cockpit` folder; the container keeps its name `posture-cockpit` (configurable).
+- Same protections: uid 10001, read-only system, no capability, `no-new-privileges`, `/tmp` in memory.
+
+**Image and publication**
+- Pinned image contents: exact base image (`python:3.12.15-slim-trixie`), libraries from
+  `docker/requirements.lock` with hashes, pinned build tools, `pip check`, numeric non-root user.
+- `release.yml` publishes only when a GitHub release is published, after the whole test suite
+  and the Docker recette; amd64 and arm64; SBOM and provenance (mode max). Pre-releases never
+  move `X.Y` or `latest`, an older line never takes `latest` back, a published version is
+  never overwritten (`scripts/release_tags.py`). Pull requests run it as a dry run.
+- CI: `scripts/docker-recette.sh` on the built image (new installation, protections, setup code,
+  backup and restore, refusals), the whole suite inside the image, updates from the released
+  v0.3.0 and v0.4.0 images and rollback to v0.4.0. Actions moved off Node.js 20.
+
+**Backups and start-up**
+- `posture-cockpit backup` writes a consistent archive (SQLite online backup, WAL included,
+  plus the session key and a manifest with hashes) while the server runs; `check-backup`
+  verifies one; `restore` checks the whole archive first, refuses while the database is in use,
+  keeps a copy of the replaced data and removes stale journals; `info` shows version, schema and
+  content. The former documented backup command archived an empty volume: replaced.
+- The start is refused, with what to do and without changing anything, for a database written by
+  a newer version (schema above 4), an unreadable schema version or database, an empty or
+  truncated session key, and a data folder the application cannot write (the message gives the
+  `chown`). A session key readable by others is restricted to its owner.
+
+**Security**
+- The first (administrator) account needs a one-time setup code written to the server log at
+  each start while no account exists (or `POSTURE_COCKPIT_SETUP_CODE`); only its hash is stored,
+  it is consumed atomically, wrong codes are throttled and audited. Existing instances are unaffected.
+- Documented reverse proxy configuration (`POSTURE_COCKPIT_BIND=127.0.0.1`, `COOKIE_SECURE`,
+  `FORWARDED_ALLOW_IPS`, Caddy and Nginx examples).
+
+**Pages, PDF and API**
+- The scoring coverage is stated once per page (it was repeated under the score) and named
+  "scoring coverage" next to the "diagnostic coverage", with a one-line explanation when blocked
+  checks make them differ. Address counts agree in number; the provisional-score sentence names
+  its inconclusive addresses.
+- HTTPS wording: blocked checks name the root by its title; dependent checks no longer repeat
+  "Not evaluated:" after their status; "inconclusive address" everywhere; attribution notes no
+  longer repeat the refusal.
+- PDF: area comments give the verdict without its notes; what could not be measured is listed
+  once per reason; zero counts are left out of the diagnosis; compact indicators; fewer awkward
+  page breaks.
+- API: `diagnostic_coverage` is rounded to 3 decimals like `coverage` (it was not for 0.4 scans).
+  No field added or removed.
+
+**Housekeeping**: the 0.4.0 recette files are removed (`compose.recette-v040.yaml`,
+`Dockerfile.recette-tests`, `docs/user/RECETTE_V040.fr.md`); recette and release process in
+`docs/developer/RELEASE.md`.
 
 ## 0.4.0 — 2026-10-16
 

@@ -141,24 +141,16 @@ See [SECURITY.md](SECURITY.md).
 
 ## 🐳 Installation
 
-```yaml
-# compose.yaml
-services:
-  posture-cockpit:
-    image: ghcr.io/vinzgithub/posture-cockpit:latest
-    container_name: posture-cockpit
-    restart: unless-stopped
-    ports: ["8080:8080"]
-    volumes: ["posture-cockpit-data:/data"]
-volumes:
-  posture-cockpit-data:
-```
+Docker Compose 2.24 or later, in an empty folder:
 
 ```bash
+mkdir posture-cockpit && cd posture-cockpit
+curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.4.1/compose.yaml
 docker compose up -d
+docker compose logs posture-cockpit   # the setup code of the first account
 ```
 
-Open `http://<server>:8080`, create the administrator account, and tick **"Check the demo domain"** to discover the tool. Every setting, backups and updates: [docs/user/INSTALLATION.md](docs/user/INSTALLATION.md).
+Open `http://<server>:8080/setup`, enter the code, create the administrator account, and tick **"Check the demo domain"** to discover the tool. The image is prebuilt (amd64 and arm64), versioned, unprivileged and read-only; settings (port, time zone, reverse proxy) go in an optional `.env` file. Settings, backups, restoring, updates and rollback: [docs/user/INSTALLATION.md](docs/user/INSTALLATION.md).
 
 ### From the command line
 
@@ -167,6 +159,7 @@ posture-cockpit scan my-domain.com          # the result in the terminal (nothin
 posture-cockpit scan my-domain.com --json
 posture-cockpit extensions                  # the extensions loaded and their checks
 posture-cockpit disable-totp <username>     # lost phone and no recovery code left
+posture-cockpit backup --output backup.tar.gz   # consistent backup (database and session key)
 ```
 
 ---
