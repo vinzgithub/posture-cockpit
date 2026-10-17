@@ -10,6 +10,16 @@
   <p class="lead">{{ t('history.count', n=total) }}</p>
 </div>
 <section class="panel history-panel">
+{% if comparison %}
+<div class="history-comparison" aria-live="polite">
+  <strong>{{ t('v050.comparison.heading') }}</strong>
+  {% if comparison.comparable %}
+    <p>{{ t('v050.comparison.delta', points=('%+d' | format(comparison.score_delta))) }}</p>
+  {% else %}
+    <p>{{ t('v050.comparison.unavailable') }} — {{ t('v050.comparison.reason.' ~ comparison.reason) }}</p>
+  {% endif %}
+</div>
+{% endif %}
 {% if history | length > 1 %}<svg class="history-trend" viewBox="0 0 210 110" role="img" aria-label="{{ t('details.history') }}">
 {% for h in history | reverse %}{% if h.score is not none and h.id not in unreadable %}
 <circle class="trend-{{ 'provisional' if h.grade_withheld_reason else 'graded' }}" cx="{{ 5 + loop.index0 * 200 / ([history | length - 1, 1] | max) }}" cy="{{ 105 - h.score }}" r="3"><title>{{ h.started_at }} : {{ h.score }}/100{% if h.grade_withheld_reason %} · {{ t('v04.undetermined_count', n=h.addresses_attempted - h.addresses_conclusive) }}{% endif %}</title></circle>
