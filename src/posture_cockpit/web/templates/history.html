@@ -53,10 +53,9 @@
     <span class="history-meta"><span class="muted">{{ t('history.number', id=h.id) }}</span>{% if h.id == latest_id %} <span class="badge badge-latest" title="{{ t('history.latest_label') }}">{{ t('history.latest') }}</span>{% endif %}</span></td>
   <td class="history-result">{% if h.id in unreadable %}{{ t("error.scan_unreadable") }}{% elif h.score is not none and h.id not in unreadable %}<span class="grade grade-{{ h.grade or 'none' }}">{{ h.grade or '–' }}</span> <span class="history-score">{{ h.score }}/100</span>{% if h.grade_withheld_reason %}<p>{{ t("v04.undetermined") }}</p>{% endif %}{% else %}{{ t('score.not_evaluated') }}{% endif %}</td>
   <td class="history-coverage {{ 'coverage-partial' if h.coverage < full_coverage }}" data-label="{{ t('details.history_coverage') }}">
-    <details>
-      <summary>{{ (h.coverage * 100 + 0.000001) | int }}&nbsp;%{% if r %} · {{ r.evaluated }}/{{ r.applicable }}{% endif %}</summary>
-      {% if r and h.diagnostic_coverage is not none %}{{ indicators(r, address_results.get(h.id, {})) }}{% elif h.diagnostic_coverage is none and h.id not in unreadable %}<span>{{ t('v04.addresses_unknown') }}</span>{% endif %}
-    </details>
+    <span>{{ (h.coverage * 100 + 0.000001) | int }}&nbsp;%</span>
+    {% if r and h.diagnostic_coverage is not none %}{{ indicators(r, address_results.get(h.id, {})) }}{% elif h.diagnostic_coverage is none and h.id not in unreadable %}<span>{{ t('v04.addresses_unknown') }}</span>{% endif %}
+    {% if r %}<span class="history-evaluated muted">{{ t('history.evaluated', evaluated=r.evaluated, applicable=r.applicable) }}</span>{% endif %}
   </td>
   <td class="history-origin" data-label="{{ t('history.origin') }}">{{ t('history.origin_perimeter', name=h.perimeter) if h.perimeter else t('history.origin_internet') }}</td>
   <td class="history-via" data-label="{{ t('history.via') }}">{% if h.via %}{{ t('history.via.' ~ h.via) }}{% else %}<span title="{{ t('history.via.unknown') }}" aria-label="{{ t('history.via.unknown') }}">—</span>{% endif %}</td>
