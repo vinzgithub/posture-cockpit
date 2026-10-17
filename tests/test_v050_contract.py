@@ -2,8 +2,10 @@
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """0.5.0, written before any change: what 0.4.1 promises and 0.5.0 must keep.
 
-- The API: every key, type and value that ``GET /api/v1/domains`` gave in 0.4.1, on databases
-  made by v0.3.0, v0.4.0 and v0.4.1. Later versions may add keys, never change or remove one.
+- The API: every key, type and value that ``GET /api/v1/domains`` and
+  ``POST /api/v1/domains/{name}/scan`` gave in 0.4.1, on databases made by v0.3.0, v0.4.0 and
+  v0.4.1 (the scan: of the demonstration domain, its refusals included). Later versions may add
+  keys, never change or remove one; the time of a new scan is compared by its type only.
   tests/data/api-contract-0.4.1.json was written by the code of 0.4.1 (run this file as a script).
 - The storage: no ``await`` inside a ``with ….transaction()`` block. The database has one
   connection per process; a task that waited in the middle of a transaction would let another
@@ -28,39 +30,76 @@ TOKEN = "legacy-api-token-for-tests-0123456789"
 VERSIONS = ("v0.3.0", "v0.4.0", "v0.4.1")
 
 
+DEMO = "menuiserie-dupont.example"
+GET, POST = "GET /api/v1/domains", "POST /api/v1/domains/{name}/scan"
+CHANGING = {"scanned_at"}  # the time of a scan made by the test
+
+
 def api_of(folder: Path, version: str) -> dict[str, dict]:
-    """The domains of ``GET /api/v1/domains`` for an instance made by ``version``."""
+    """What the API answers on an instance made by ``version``: the domains first, then scans."""
     folder.mkdir(parents=True)
     with sqlite3.connect(folder / "posture_cockpit.db") as conn:
         conn.executescript((DATA / f"database-{version}.sql").read_text())
     app = create_app(Config(data_dir=folder))
+    key = {"Authorization": f"Bearer {TOKEN}"}
     try:
         with TestClient(app) as client:
-            answer = client.get("/api/v1/domains", headers={"Authorization": f"Bearer {TOKEN}"})
+            answer = client.get("/api/v1/domains", headers=key)
             assert answer.status_code == 200
-            return {d["domain"]: d for d in answer.json()["domains"]}
+            domains = {d["domain"]: d for d in answer.json()["domains"]}
+            scans = {}
+            for case, name, headers in (("demo", DEMO, key), ("without key", DEMO, {}),
+                                        ("unknown domain", "inconnu.example", key),
+                                        ("internal domain", "intranet.siege.example", key)):
+                if case == "internal domain" and name not in domains:
+                    continue
+                answer = client.post(f"/api/v1/domains/{name}/scan", headers=headers)
+                scans[case] = {"status": answer.status_code, "body": answer.json()}
+            return {GET: domains, POST: scans}
     finally:
         app.state.services.db.close()
 
 
+def same_keys_types_and_values(new: dict, old: dict, where: tuple) -> None:
+    for key, value in old.items():
+        assert key in new, (*where, key)
+        assert type(new[key]) is type(value), (*where, key, new[key], value)
+        if key not in CHANGING:
+            assert new[key] == value, (*where, key, new[key], value)
+
+
+@pytest.fixture(scope="module")
+def answers(tmp_path_factory) -> dict[str, dict]:
+    folder = tmp_path_factory.mktemp("contract")
+    return {version: api_of(folder / version, version) for version in VERSIONS}
+
+
 @pytest.mark.parametrize("version", VERSIONS)
-def test_the_api_keeps_every_key_type_and_value_of_0_4_1(tmp_path, version):
-    promised = json.loads(CONTRACT.read_text())[version]
-    given = api_of(tmp_path / version, version)
+def test_the_api_keeps_every_key_type_and_value_of_0_4_1(answers, version):
+    promised = json.loads(CONTRACT.read_text())[version][GET]
+    given = answers[version][GET]
     assert set(given) == set(promised)  # the same domains, the internal one included for an administrator
     for domain, old in promised.items():
-        new = given[domain]
-        for key, value in old.items():
-            assert key in new, (domain, key)
-            assert type(new[key]) is type(value), (domain, key, new[key], value)
-            assert new[key] == value, (domain, key, new[key], value)
+        same_keys_types_and_values(given[domain], old, (version, domain))
+
+
+@pytest.mark.parametrize("version", VERSIONS)
+def test_a_scan_by_the_api_keeps_every_key_type_and_value_of_0_4_1(answers, version):
+    promised = json.loads(CONTRACT.read_text())[version][POST]
+    given = answers[version][POST]
+    assert set(given) == set(promised)
+    for case, old in promised.items():
+        assert given[case]["status"] == old["status"], (version, case)
+        same_keys_types_and_values(given[case]["body"], old["body"], (version, case))
 
 
 def test_the_contract_covers_what_0_5_0_must_carry_over():
     promised = json.loads(CONTRACT.read_text())["v0.4.1"]
-    evaluations = {d["evaluation"] for d in promised.values()}
+    evaluations = {d["evaluation"] for d in promised[GET].values()}
     assert {"complete", "undetermined", "not_evaluated"} <= evaluations
-    assert any(d.get("perimeter") for d in promised.values())  # a domain of an internal perimeter
+    assert any(d.get("perimeter") for d in promised[GET].values())  # a domain of an internal perimeter
+    assert {c: a["status"] for c, a in promised[POST].items()} == {
+        "demo": 200, "without key": 401, "unknown domain": 404, "internal domain": 403}
 
 
 def transaction_blocks(root: Path) -> tuple[int, list[str]]:
