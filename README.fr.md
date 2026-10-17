@@ -6,7 +6,7 @@
 
 **Messagerie · Certificats · Site web · DNS · Plan de corrections guidé · Rapport PDF · Double authentification · Extensions**
 
-🇬🇧 [Read in English](README.md)
+🇬🇧 [Read in English](README.md) · 🗺️ [Feuille de route](ROADMAP.fr.md)
 
 <br>
 
