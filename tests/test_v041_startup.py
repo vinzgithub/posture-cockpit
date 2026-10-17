@@ -61,7 +61,7 @@ def test_the_application_logs_why_it_cannot_start(tmp_path, caplog):
 
 def test_a_data_path_that_is_a_file_is_refused(tmp_path):
     (tmp_path / "data").write_text("")
-    with pytest.raises(StartupError, match="not a folder|cannot be written"):
+    with pytest.raises(StartupError, match=r"not a folder|cannot be written"):
         prepare_data_dir(tmp_path / "data")
 
 

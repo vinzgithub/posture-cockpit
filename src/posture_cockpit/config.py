@@ -25,12 +25,14 @@ class StartupError(RuntimeError):
 
 
 def _env(name: str, default: str) -> str:
-    return os.environ.get(ENV_PREFIX + name, default)
+    """An empty variable counts as absent: ``NAME=`` in a .env file keeps the default."""
+    value = os.environ.get(ENV_PREFIX + name)
+    return default if value is None or not value.strip() else value
 
 
 def _env_bool(name: str, default: bool) -> bool:
     value = os.environ.get(ENV_PREFIX + name)
-    if value is None:
+    if value is None or not value.strip():
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
 

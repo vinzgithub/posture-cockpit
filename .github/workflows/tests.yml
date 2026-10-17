@@ -4,6 +4,7 @@ name: tests
 on:
   push:
   pull_request:
+  workflow_call:  # release.yml runs these jobs before publishing an image
 
 permissions:
   contents: read
@@ -24,7 +25,7 @@ jobs:
       - name: Libraries for the PDF report
         run: sudo apt-get update && sudo apt-get install -y libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0
       - run: python -m pip install -e ".[dev]"
-      - run: ruff check src tests examples
+      - run: ruff check src tests examples scripts
       - run: mypy
       - run: python -m pytest
 
@@ -45,6 +46,9 @@ jobs:
       - run: python -m playwright install --with-deps chromium
       - run: python -m pytest tests/browser
 
+  # The image, then the recette of scripts/docker-recette.sh with the compose.yaml of the
+  # repository: new installation, Docker protections, setup code, backup and restore, refusals.
+  # Then the whole test suite inside the image, with the libraries and the OpenSSL it ships.
   docker:
     runs-on: ubuntu-latest
     steps:
@@ -54,4 +58,37 @@ jobs:
         with:
           context: .
           push: false
+          load: true
           tags: posture-cockpit:ci
+      - name: Recette of a new installation
+        run: scripts/docker-recette.sh install posture-cockpit:ci
+      - name: Test suite inside the image
+        run: |
+          docker run --rm --user 10001:10001 -e HOME=/tmp -v "$PWD:/checks:ro" -w /checks --entrypoint sh \
+            posture-cockpit:ci -c 'pip install --quiet --user "pytest>=8" "pyyaml>=6" && python -m pytest -q -rs -p no:cacheprovider'
+
+  # Instances made by the released v0.3.0 (schema 3) and v0.4.0 (schema 4), then updated to this
+  # image on the same volume; v0.4.0 is also started again afterwards (rollback).
+  upgrade:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        from: ["v0.3.0", "v0.4.0"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: posture-cockpit:ci
+      - name: Image of ${{ matrix.from }}, built from its tag
+        run: |
+          git worktree add "$RUNNER_TEMP/old" "${{ matrix.from }}"
+          docker build -q -t "posture-cockpit:${{ matrix.from }}" "$RUNNER_TEMP/old"
+      - name: Recette of the update
+        run: scripts/docker-recette.sh upgrade "posture-cockpit:${{ matrix.from }}" posture-cockpit:ci

@@ -1,40 +1,133 @@
 # Copyright © 2026 Vincent Fournet
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+#
+# Publishes the image ghcr.io/vinzgithub/posture-cockpit when a GitHub release is published
+# (the explicit act of validation), after the whole test suite and the Docker recette.
+# On a pull request that touches the image, the same workflow runs as a dry run: same checks,
+# both architectures built, nothing logged in, nothing pushed.
+#
+# Tags (scripts/release_tags.py): the exact version always; X.Y and latest for a final version
+# only, and never backwards. A pre-release (v0.4.2-rc.1, "pre-release" box ticked) never moves
+# X.Y nor latest. A version already published is never overwritten.
 name: release
 on:
-  push:
-    tags: ["v*"]
+  release:
+    types: [published]
+  pull_request:
+    paths:
+      - Dockerfile
+      - .dockerignore
+      - docker/**
+      - compose.yaml
+      - pyproject.toml
+      - src/**
+      - scripts/**
+      - .github/workflows/**
 
 permissions:
   contents: read
-  packages: write
+
+concurrency:
+  group: release-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  tests:
+    if: github.event_name == 'release'
+    uses: ./.github/workflows/tests.yml
+
   image:
+    needs: tests
+    # On a pull request the tests run in tests.yml; for a release they must have passed here.
+    if: ${{ !cancelled() && (needs.tests.result == 'success' || (github.event_name == 'pull_request' && needs.tests.result == 'skipped')) }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE: ghcr.io/${{ github.repository }}
+      PUBLISH: ${{ github.event_name == 'release' }}
+      TAG: ${{ github.event.release.tag_name }}
+      PRERELEASE: ${{ github.event.release.prerelease }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # the tags already released decide whether X.Y and latest move
+      - name: Versions and tags
+        id: release
+        run: |
+          if [ "$PUBLISH" = true ]; then
+            python3 scripts/release_tags.py --image "$IMAGE" --tag "$TAG" --prerelease "$PRERELEASE" >> "$GITHUB_OUTPUT"
+          else
+            python3 scripts/release_tags.py --image "$IMAGE" >> "$GITHUB_OUTPUT"
+          fi
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+
+      - name: Build for amd64
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: posture-cockpit:candidate
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Recette of the amd64 image
+        run: scripts/docker-recette.sh install posture-cockpit:candidate "${{ steps.release.outputs.version }}"
+      - name: Build for arm64
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/arm64
+          load: true
+          tags: posture-cockpit:candidate-arm64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Start the arm64 image (emulated)
+        run: scripts/docker-recette.sh quick posture-cockpit:candidate-arm64 "${{ steps.release.outputs.version }}"
+
+      - name: Sign in to ghcr.io
+        if: env.PUBLISH == 'true'
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository }}
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest
-      - uses: docker/build-push-action@v6
+      - name: Refuse to overwrite a published version
+        if: env.PUBLISH == 'true'
+        run: |
+          if docker buildx imagetools inspect "$IMAGE:${{ steps.release.outputs.version }}" > /dev/null 2>&1; then
+            echo "::error::$IMAGE:${{ steps.release.outputs.version }} is already published: make a new version"
+            exit 1
+          fi
+      - name: Build both architectures${{ github.event_name == 'release' && ' and publish' || ' (dry run, not pushed)' }}
+        id: build
+        uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          provenance: true
+          push: ${{ env.PUBLISH == 'true' }}
+          tags: ${{ steps.release.outputs.tags }}
+          labels: |
+            org.opencontainers.image.version=${{ steps.release.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          annotations: |
+            index:org.opencontainers.image.title=Posture Cockpit
+            index:org.opencontainers.image.description=Passive security check of a domain, with a guided plan of fixes
+            index:org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            index:org.opencontainers.image.licenses=PolyForm-Noncommercial-1.0.0
+            index:org.opencontainers.image.version=${{ steps.release.outputs.version }}
+            index:org.opencontainers.image.revision=${{ github.sha }}
+          provenance: mode=max
           sbom: true
+          cache-from: type=gha
+      - name: Summary
+        run: |
+          {
+            echo "### ${{ env.PUBLISH == 'true' && 'Published' || 'Dry run (nothing pushed)' }}: ${{ steps.release.outputs.version }}"
+            echo
+            echo "Tags: \`${{ steps.release.outputs.tags }}\`"
+            echo
+            echo "Digest: \`${{ steps.build.outputs.digest }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,6 +1,14 @@
 # Changelog
 
-## 0.4.0 — unreleased
+## 0.4.1 — unreleased
+
+Maintenance release: simple installation and update with Docker Compose, consistent backups,
+a protected first start. Scoring rules, checks and the API contract are unchanged; schema 4 too,
+so the 0.4.0 image can still open the database (rollback without restoration).
+
+(details below, completed with the release)
+
+## 0.4.0 — 2026-10-16
 
 Counter-review corrections: S4 and preload are hints only; HSTS recheck history is compacted
 without losing zero-max-age events or dates. Stored data corruption is isolated per scan,
