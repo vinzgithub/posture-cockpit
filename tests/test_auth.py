@@ -8,7 +8,7 @@ import re
 import pytest
 from fastapi.testclient import TestClient
 
-from helpers import PASSWORD, csrf_of, log_in, log_out, page_csrf, post, setup_account
+from helpers import PASSWORD, csrf_of, log_in, log_out, page_csrf, post, setup_account, setup_code
 from posture_cockpit import cli
 from posture_cockpit.security import totp_at, totp_match, totp_step, totp_uri
 
@@ -82,8 +82,8 @@ def test_first_run_with_the_demo_domain(client):
 
 
 def test_setup_refuses_short_passwords(client):
-    r = client.post("/setup", data={"csrf": page_csrf(client, "/setup"), "username": "vincent",
-                                    "password": "short", "password2": "short"})
+    r = client.post("/setup", data={"csrf": page_csrf(client, "/setup"), "setup_code": setup_code(client.app),
+                                    "username": "vincent", "password": "short", "password2": "short"})
     assert r.status_code == 400 and accounts(client).count() == 0
 
 

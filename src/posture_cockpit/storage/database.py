@@ -17,6 +17,9 @@ to ``backups/`` next to it. While migrating, foreign keys are switched off (the
 procedure SQLite documents for rebuilding a table: otherwise dropping the old
 table would delete the rows that refer to it) and checked again before each
 commit. The database file is readable by its owner only.
+
+A database whose schema is newer than the migrations this version knows (written by a
+later release) is refused at start-up and left untouched: running on it could damage it.
 """
 
 from __future__ import annotations
@@ -30,9 +33,21 @@ from pathlib import Path
 from threading import RLock
 from typing import Any
 
+from ..config import StartupError
 from .schema import MIGRATIONS, Migration
 
 Row = sqlite3.Row
+
+
+class UnsupportedSchema(StartupError):
+    """The database was written by a version of Posture Cockpit this one does not know."""
+
+    def __init__(self, path: Path, found: int, known: int):
+        self.found, self.known = found, known
+        super().__init__(
+            f"The database {path} uses schema {found}; this version of Posture Cockpit handles schema {known} "
+            "at most. It was written by a newer version: run that version again, or restore the backup "
+            "made before the update (see docs/user/INSTALLATION.md, Rollback). Nothing was changed.")
 
 
 def utcnow() -> str:
@@ -48,11 +63,19 @@ class Database:
         _private_file(path)
         self._conn = sqlite3.connect(str(path), check_same_thread=False, isolation_level=None)
         self._conn.row_factory = sqlite3.Row
-        self._conn.execute("PRAGMA foreign_keys = ON")
-        self._conn.execute("PRAGMA journal_mode = WAL")
-        self._conn.execute("PRAGMA busy_timeout = 5000")
-        self._conn.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
-        self._migrate(migrations)
+        try:
+            self._conn.execute("PRAGMA foreign_keys = ON")
+            self._conn.execute("PRAGMA journal_mode = WAL")
+            self._conn.execute("PRAGMA busy_timeout = 5000")
+            self._conn.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+            self._migrate(migrations)
+        except sqlite3.DatabaseError as error:
+            self._conn.close()
+            raise StartupError(f"The database {path} cannot be opened ({error}). Restore a backup "
+                               "(see docs/user/INSTALLATION.md).") from None
+        except BaseException:
+            self._conn.close()
+            raise
 
     def close(self) -> None:
         self._conn.close()
@@ -104,9 +127,15 @@ class Database:
     # ------------------------------------------------------------- migrations
     @property
     def schema_version(self) -> int:
-        return int(self.get_meta("schema_version") or 0)
+        value = str(self.get_meta("schema_version") or "0")
+        if not value.isascii() or not value.isdigit():
+            raise StartupError(f"The database {self.path} has an unreadable schema version ({value!r}). "
+                               "Restore a backup (see docs/user/INSTALLATION.md).")
+        return int(value)
 
     def _migrate(self, migrations: Sequence[Migration]) -> None:
+        if self.schema_version > len(migrations):
+            raise UnsupportedSchema(self.path, self.schema_version, len(migrations))
         first = self.schema_version + 1
         if first > len(migrations):
             return

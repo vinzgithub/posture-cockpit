@@ -62,7 +62,8 @@ def port(tmp_path_factory):
     number = sock.getsockname()[1]
     with httpx.Client(base_url=f"http://{SECURE}:{number}", trust_env=False) as client:
         csrf = re.search(r'name="csrf" content="([^"]+)"', client.get("/setup").text).group(1)
-        r = client.post("/setup", data={"csrf": csrf, "username": "vincent", "password": PASSWORD,
+        r = client.post("/setup", data={"csrf": csrf, "setup_code": app.state.setup_code, "username": "vincent",
+                                        "password": PASSWORD,
                                         "password2": PASSWORD, "lang": "fr", "demo": "on"})
         assert r.status_code == 303 and r.headers["location"] == f"/domains/{DEMO_DOMAIN}"
         for domain in (DOMAIN, "blocked.example"):

@@ -16,6 +16,12 @@ from .timezones import UTC, instance_zone
 ENV_PREFIX = "POSTURE_COCKPIT_"
 DEFAULT_SESSION_COOKIE = "posture_cockpit"
 _COOKIE_NAME = re.compile(r"[A-Za-z0-9_-]{1,64}")
+# A setup code chosen by the operator (POSTURE_COCKPIT_SETUP_CODE) has at least this many letters or digits.
+MIN_SETUP_CODE = 12
+
+
+class StartupError(RuntimeError):
+    """A problem the operator has to fix before the instance can start. The message says how."""
 
 
 def _env(name: str, default: str) -> str:
@@ -52,9 +58,14 @@ class Config:
     # Name of the session cookie. Browsers share cookies between the ports of one address:
     # two instances reached at the same address need two names (see docs/user/INSTALLATION.md).
     session_cookie: str = DEFAULT_SESSION_COOKIE
+    # One-time code that protects the creation of the first account. Empty: a new random code at
+    # each start while no account exists, written to the server log (see web/first_run.py).
+    setup_code: str = ""
 
     def __post_init__(self) -> None:
         check_cookie_name(self.session_cookie, secure=self.cookie_secure)
+        if self.setup_code and len(normalize_setup_code(self.setup_code)) < MIN_SETUP_CODE:
+            raise ValueError(f"POSTURE_COCKPIT_SETUP_CODE: at least {MIN_SETUP_CODE} letters or digits")
 
     @property
     def db_path(self) -> Path:
@@ -77,6 +88,7 @@ class Config:
             scans_per_hour=max(1, int(_env("SCANS_PER_HOUR", "30"))),
             timezone=instance_zone(os.environ.get(ENV_PREFIX + "TIMEZONE"), os.environ.get("TZ")),
             session_cookie=_env("SESSION_COOKIE", DEFAULT_SESSION_COOKIE).strip(),
+            setup_code=_env("SETUP_CODE", "").strip(),
         )
         check_dkim_selectors(_env("DKIM_SELECTORS", ""))
         return config
@@ -106,14 +118,61 @@ def check_dkim_selectors(value: str) -> None:
         raise ValueError(f"POSTURE_COCKPIT_DKIM_SELECTORS: {e}") from None
 
 
+def normalize_setup_code(code: str) -> str:
+    """The letters and digits of a setup code, in capitals: spaces and dashes do not count."""
+    return "".join(c for c in code.upper() if c.isalnum())
+
+
+# Below this length a stored session key is damaged (the key written on first start has 64 characters).
+MIN_SECRET_KEY = 32
+
+
+def prepare_data_dir(data_dir: Path) -> None:
+    """Creates the data folder if needed and checks that this account can write in it.
+
+    Raises StartupError with what to do: the usual cause is a folder of the host mounted on
+    /data in Docker, which belongs to root while the application runs as uid 10001."""
+    try:
+        data_dir.mkdir(mode=0o700, parents=True, exist_ok=True)  # an existing folder keeps its rights
+        if not data_dir.is_dir():
+            raise StartupError(f"The data folder {data_dir} is not a folder.")
+        probe = data_dir / f".write-test-{os.getpid()}"
+        os.close(os.open(probe, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600))
+        probe.unlink()
+    except OSError as error:
+        raise StartupError(_unwritable(data_dir, error)) from None
+
+
+def _unwritable(data_dir: Path, error: OSError) -> str:
+    account = f"uid {os.getuid()}, gid {os.getgid()}" if hasattr(os, "getuid") else "the current account"
+    owner = f"{os.getuid()}:{os.getgid()}" if hasattr(os, "getuid") else "<account>"
+    return (f"The data folder {data_dir} cannot be written by Posture Cockpit ({account}): "
+            f"{error.strerror or error}. With Docker, keep the named volume of compose.yaml; a folder of "
+            f"the host mounted on /data must belong to that account (chown -R {owner} <folder>). "
+            "See docs/user/INSTALLATION.md.")
+
+
 def secret_key(data_dir: Path) -> str:
-    """Key that signs the session cookie, created on first start and kept in the data folder."""
-    data_dir.mkdir(mode=0o700, parents=True, exist_ok=True)  # an existing folder keeps its rights
+    """Key that signs the session cookie, created on first start and kept in the data folder.
+
+    An existing key readable by other accounts is restricted to its owner. An empty or
+    truncated key stops the start instead of signing sessions with a weak key."""
+    prepare_data_dir(data_dir)
     path = data_dir / ".secret_key"
-    if path.exists():
-        return path.read_text().strip()
-    key = secrets.token_urlsafe(48)
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(fd, "w") as f:
-        f.write(key)
-    return key
+    try:
+        if path.exists():
+            key = path.read_text().strip()
+            if len(key) < MIN_SECRET_KEY:
+                raise StartupError(f"The session key {path} is empty or damaged. Restore it from a backup, "
+                                   "or delete it to create a new one (every browser is then signed out).")
+            if path.stat().st_mode & 0o077:
+                os.chmod(path, 0o600)
+            return key
+        key = secrets.token_urlsafe(48)
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w") as f:
+            f.write(key)
+        return key
+    except OSError as error:
+        raise StartupError(f"The session key {path} cannot be read or created: {error.strerror or error}. "
+                           "It must belong to the account that runs Posture Cockpit.") from None

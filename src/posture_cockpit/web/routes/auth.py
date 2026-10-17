@@ -18,6 +18,7 @@ from ...i18n import LOCALES
 from ...scanner import DEMO_DOMAIN
 from ...security import MIN_PASSWORD_LENGTH, dummy_password_hash, hash_password, verify_password
 from ...storage import Row
+from .. import first_run
 from ..credentials import check_second_factor, failed, password_problem, succeeded, throttled
 from ..deps import (
     audit,
@@ -63,11 +64,24 @@ async def setup(request: Request, form: FormData = Depends(checked_form)):
     username, password = field(form, "username", 41), str(form.get("password", ""))
     lang = field(form, "lang")
     request.session["lang"] = lang if lang in LOCALES else "fr"
+    # The one-time code of the server log (first_run.py): checked first, consumed last, so that
+    # a mistake in the rest of the form does not use it up.
+    code = field(form, "setup_code", 64)
+    if throttled(request):
+        return render(request, "setup.html", status=429, min_length=MIN_PASSWORD_LENGTH, username=username,
+                      error=t(request, "error.locked"))
+    if not first_run.matches(s.db, code):
+        failed(request)
+        audit(request, "setup.code_refused")
+        return render(request, "setup.html", status=403, min_length=MIN_PASSWORD_LENGTH, username=username,
+                      error=t(request, "error.setup_code"))
     problem = ("error.username" if not 1 <= len(username) <= 40
                else password_problem(password, str(form.get("password2", ""))))
     if problem:
         return render(request, "setup.html", status=400, min_length=MIN_PASSWORD_LENGTH, username=username,
-                      error=t(request, problem, n=MIN_PASSWORD_LENGTH))
+                      setup_code=code, error=t(request, problem, n=MIN_PASSWORD_LENGTH))
+    if not first_run.consume(s.db, code):  # another request created the first account meanwhile
+        return redirect("/login")
     # The first account administers the others.
     uid = s.accounts.create(username, hash_password(password), is_admin=True, lang=lang_of(request))
     user = s.accounts.get(uid)

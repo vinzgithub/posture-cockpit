@@ -14,7 +14,15 @@ Rescue an account, on the server (the data folder comes from POSTURE_COCKPIT_DAT
     posture-cockpit disable-totp <username>
     posture-cockpit make-admin <username>
 
-In the Docker image: ``docker exec -it posture-cockpit posture-cockpit <command>``.
+Back up and restore an instance (storage/backup.py), see what a data folder holds:
+
+    posture-cockpit backup [--output FILE|-]        while the server runs
+    posture-cockpit check-backup FILE|-
+    posture-cockpit restore FILE|- [--replace]      server stopped
+    posture-cockpit info
+
+With Docker Compose: ``docker compose exec posture-cockpit posture-cockpit <command>``
+(``docker compose exec -T`` for a backup sent to the standard output).
 """
 
 from __future__ import annotations
@@ -24,15 +32,18 @@ import asyncio
 import getpass
 import json
 import sys
+from pathlib import Path
 
-from .config import Config
+from . import __version__
+from .config import Config, StartupError
 from .core import engine, scoring
 from .core.network import NetworkError
 from .core.registry import Registry
 from .i18n import LOCALES, Catalog, finding_summary
 from .scanner import Scanner
 from .security import MIN_PASSWORD_LENGTH, hash_password
-from .storage import Accounts, Database
+from .storage import Accounts, Database, backup
+from .storage.schema import MIGRATIONS
 
 SYMBOLS = {"blocked": "⊘", "ok": "✓", "warn": "!", "fail": "✗", "na": "–", "info": "i", "error": "?"}
 
@@ -49,16 +60,38 @@ def _parser() -> argparse.ArgumentParser:
                        ("disable-totp", "turn off two-factor authentication (lost phone and recovery codes)"),
                        ("make-admin", "give an account the administrator role")):
         sub.add_parser(name, help=text).add_argument("username")
+    save = sub.add_parser("backup", help="write a consistent backup (database and session key), server running or not")
+    save.add_argument("--output", "-o", help="file to write, or - for the standard output "
+                                             "(default: a new file in the backups folder of the data folder)")
+    verify = sub.add_parser("check-backup", help="check a backup completely, without restoring it")
+    verify.add_argument("source", help="backup file, or - for the standard input")
+    load = sub.add_parser("restore", help="restore a backup (stop the server first)")
+    load.add_argument("source", help="backup file, or - for the standard input")
+    load.add_argument("--replace", action="store_true",
+                      help="replace the data of this instance (a copy of it is kept in the backups folder)")
+    sub.add_parser("info", help="version, data folder, schema and content of the database")
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
-    if args.command == "scan":
-        return _scan(args.domain, args.json, args.lang)
-    if args.command == "extensions":
-        return _extensions()
-    return _account(args.command, args.username)
+    try:
+        if args.command == "scan":
+            return _scan(args.domain, args.json, args.lang)
+        if args.command == "extensions":
+            return _extensions()
+        if args.command == "backup":
+            return _backup(args.output)
+        if args.command == "check-backup":
+            return _restore(args.source, check_only=True)
+        if args.command == "restore":
+            return _restore(args.source, replace=args.replace)
+        if args.command == "info":
+            return _info()
+        return _account(args.command, args.username)
+    except (StartupError, backup.BackupError) as error:
+        print(f"posture-cockpit: {error}", file=sys.stderr)
+        return 2
 
 
 # ---------------------------------------------------------------------- scan
@@ -118,6 +151,79 @@ def _extensions() -> int:
     for error in registry.errors:
         print(f"NOT LOADED {error.source}: {error.error}")
     return 1 if registry.errors else 0
+
+
+# ------------------------------------------------------------------- backups
+def _data_dir() -> Path:
+    return Config.from_env().data_dir
+
+
+def _backup(output: str | None) -> int:
+    data_dir = _data_dir()
+    if output == "-":
+        if sys.stdout.isatty():
+            print("posture-cockpit: the backup is binary: redirect it to a file (> backup.tar.gz), "
+                  "with docker compose exec -T.", file=sys.stderr)
+            return 2
+        manifest = backup.create(data_dir, sys.stdout.buffer)
+        sys.stdout.buffer.flush()
+        where = "standard output"
+    else:
+        path, manifest = backup.create_file(data_dir, Path(output) if output else None)
+        where = str(path)
+    found = manifest["counts"]
+    print(f"Backup written to {where}: schema {manifest['schema']}, {found['users']} account(s), "
+          f"{found['domains']} domain(s), {found['scans']} scan(s), session key "
+          f"{'included' if '.secret_key' in manifest['files'] else 'absent'}.", file=sys.stderr)
+    return 0
+
+
+def _restore(source: str, *, replace: bool = False, check_only: bool = False) -> int:
+    data_dir = _data_dir()
+    if source == "-":
+        stream = sys.stdin.buffer
+        if sys.stdin.isatty():
+            print("posture-cockpit: send the backup on the standard input (< backup.tar.gz), "
+                  "with docker compose run -T.", file=sys.stderr)
+            return 2
+        result = backup.check(stream, data_dir) if check_only else backup.restore(data_dir, stream, replace=replace)
+    else:
+        with open(source, "rb") as stream_file:
+            result = (backup.check(stream_file, data_dir) if check_only
+                      else backup.restore(data_dir, stream_file, replace=replace))
+    found = result["counts"]
+    summary = (f"schema {result['schema']} (version {result['version']}, {result['created_at']}), "
+               f"{found['users']} account(s), {found['domains']} domain(s), {found['scans']} scan(s)")
+    if check_only:
+        print(f"Backup complete and readable: {summary}.")
+        return 0
+    print(f"Backup restored into {data_dir}: {summary}.")
+    for path in result["kept"]:
+        print(f"The former data is kept in {path}.")
+    if result["schema"] < len(MIGRATIONS):
+        print(f"The database will be migrated from schema {result['schema']} to {len(MIGRATIONS)} "
+              "at the next start (a copy is made first).")
+    return 0
+
+
+def _info() -> int:
+    data_dir = _data_dir()
+    db_path = data_dir / backup.DB_NAME
+    print(f"Posture Cockpit {__version__}, schema {len(MIGRATIONS)}")
+    print(f"Data folder: {data_dir}")
+    if not db_path.is_file():
+        print("Database: none yet (created at the first start)")
+        return 0
+    schema = backup.schema_of(db_path)
+    state = ("up to date" if schema == len(MIGRATIONS) else "migrated at the next start" if schema < len(MIGRATIONS)
+             else "NEWER than this version: it will refuse to start")
+    found = backup.counts(db_path)
+    print(f"Database: schema {schema} ({state}), {found['users']} account(s), {found['domains']} domain(s), "
+          f"{found['scans']} scan(s)")
+    key = data_dir / backup.KEY_NAME
+    print(f"Session key: {'present' if key.is_file() else 'absent'}"
+          + (f", permissions {oct(key.stat().st_mode & 0o777)}" if key.is_file() else ""))
+    return 0
 
 
 # ------------------------------------------------------------------ accounts
