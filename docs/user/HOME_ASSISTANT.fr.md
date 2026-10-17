@@ -47,6 +47,8 @@ Chaque domaine donne :
 | `certificate_days_left` | Jours avant l'expiration du certificat du site |
 | `perimeter` | Nom du périmètre interne, `null` sur Internet |
 | `scanned_at` | Heure de l'analyse (UTC) |
+| `via` | Comment l'analyse a été lancée : `web`, `api` ou `schedule` ; `null` pour une analyse faite avant la 0.5.0 |
+| `engine` | Génération des règles de notation qui ont jugé l'analyse ; `null` si elle est inconnue. Deux scores ne se comparent qu'à génération égale |
 
 Depuis la 0.2.0, `score` peut valoir `null` : une automatisation qui le compare à un nombre doit d'abord regarder `evaluation`. Les domaines des périmètres internes ne sont listés que pour la clé d'un administrateur.
 

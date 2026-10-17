@@ -70,7 +70,8 @@ def test_a_0_4_0_database_keeps_its_structure_for_a_rollback(tmp_path):
     assert structure(tmp_path / "restored" / "posture_cockpit.db") == before
 
 
-# The fields of /api/v1/domains in 0.4.0: none removed, none added, same types (precision aside).
+# The fields of /api/v1/domains in 0.4.0: none removed, same types (precision aside); 0.5.0
+# adds two, and only those (test_v050_contract.py holds the values given by 0.4.1).
 API_FIELDS = {
     "domain": str, "score": (int, type(None)), "grade": (str, type(None)), "evaluation": str, "coverage": float,
     "diagnostic_coverage": (float, type(None)), "checks_blocked": (int, type(None)),
@@ -82,6 +83,7 @@ API_FIELDS = {
     "scanned_at": str, "perimeter": (str, type(None)), "critical": int, "to_improve": int, "not_evaluated": int,
     "certificate_days_left": (int, type(None)),
 }
+ADDED_IN_0_5_0 = {"via": (str, type(None)), "engine": (int, type(None))}
 
 
 @pytest.mark.parametrize("version", ["v0.3.0", "v0.4.0"])
@@ -92,8 +94,8 @@ def test_the_api_contract_is_the_one_of_0_4_0(tmp_path, version):
     scans = app.state.services.scans
     for row in scans.domains(internal=True):
         summary = _summary(scans.get(row["scan_id"]))
-        assert set(summary) == set(API_FIELDS)
-        for name, kind in API_FIELDS.items():
+        assert set(summary) == set(API_FIELDS) | set(ADDED_IN_0_5_0)
+        for name, kind in {**API_FIELDS, **ADDED_IN_0_5_0}.items():
             assert isinstance(summary[name], kind), (name, summary[name])
         for ratio in ("coverage", "diagnostic_coverage"):
             assert summary[ratio] is None or summary[ratio] == round(summary[ratio], 3)

@@ -199,3 +199,29 @@ def test_every_result_page_fits_the_screen_and_states_its_coverage_once(visit, d
     page.goto('/domains/blocked.example')
     blocked_line = 'Bloqué — dépend de : Redirection HTTPS (refus observé)'  # the wording of the 0.4 arbitration
     expect(page.locator('li.status-blocked').first).to_contain_text(blocked_line)
+
+
+@pytest.mark.parametrize('device', [None, 'Pixel 7', 'iPhone SE'])
+def test_the_history_shows_how_each_scan_was_started(visit, device):
+    """0.5.0: the column "Origine" (Manuelle, API, Planifiée, or a dash before 0.5.0), in French and
+    in English, in the table on a desktop and in the cards on phones, never as a raw key."""
+    page, _ = visit(secure=True, device=device)
+    page.goto(f'/domains/{DEMO_DOMAIN}/history')
+    try:
+        for language, header, value in (('fr', 'Origine', 'Manuelle'), ('en', 'Started', 'Manually')):
+            if language == 'en':
+                page.click('form.lang-switch button')
+                expect(page.locator('html')).to_have_attribute('lang', 'en')
+            cell = page.locator('td.history-via').first
+            expect(cell).to_be_visible()
+            expect(cell).to_have_text(value)
+            if device:  # the cards: the label comes from data-label, shown above the value
+                assert page.evaluate("getComputedStyle(document.querySelector('td.history-via'), '::before')"
+                                     ".content") == f'"{header}"'
+            else:
+                expect(page.locator('table.history thead')).to_contain_text(header)
+            assert 'history.via' not in page.content()
+            assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+    finally:
+        if page.locator('html').get_attribute('lang') == 'en':
+            page.click('form.lang-switch button')  # the language is the account's: back to French

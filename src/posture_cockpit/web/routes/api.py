@@ -93,6 +93,11 @@ def _summary(scan: Scan) -> dict:
         "to_improve": counts.get(Status.WARN, 0),
         "not_evaluated": counts.get(Status.ERROR, 0),
         "certificate_days_left": _certificate_days(current),
+        # 0.5.0, added: how the scan was started (web, api, schedule; null before 0.5.0) and the
+        # generation of the rules that judged it (null: unknown); only scans of the same
+        # generation are compared.
+        "via": scan.via,
+        "engine": scan.engine,
     }
 
 
