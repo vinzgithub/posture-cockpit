@@ -235,6 +235,13 @@ def compare(old: dict[str, Any], new: dict[str, Any], excepted: set[str]) -> tup
     return kept, report
 
 
+def _ordered(identities: list[str]) -> list[str]:
+    try:
+        return sorted(identities, key=json.loads)
+    except TypeError:  # keys of different shapes
+        return sorted(identities)
+
+
 def _text(report: dict[str, Any]) -> str:
     lines = [f"identical: {'yes' if report['identical'] else 'no'}; everything of the first kept: "
              f"{'yes' if report['kept'] else 'NO'}; session key: {report['session_key']}"]
@@ -247,9 +254,10 @@ def _text(report: dict[str, Any]) -> str:
         parts = [f"rows {entry['rows'][0]} -> {entry['rows'][1]}"]
         for name, label in (("removed_rows", "REMOVED rows"), ("added_rows", "added rows")):
             if name in entry:
-                parts.append(f"{label} {len(entry[name])}: {' '.join(entry[name])}")
+                parts.append(f"{label} {len(entry[name])}: {' '.join(_ordered(entry[name]))}")
         if "changed_rows" in entry:
-            parts.append("CHANGED rows " + "; ".join(f"{i} ({', '.join(c)})" for i, c in entry["changed_rows"].items()))
+            changed = entry["changed_rows"]
+            parts.append("CHANGED rows " + "; ".join(f"{i} ({', '.join(changed[i])})" for i in _ordered(list(changed))))
         for name, label in (("changed_columns", "CHANGED columns"), ("removed_columns", "REMOVED columns"),
                             ("added_columns", "added columns")):
             if name in entry:
