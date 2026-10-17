@@ -10,8 +10,9 @@ A later step may look farther back for the last conclusive check observation.
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any
 
 CONCLUSIVE = frozenset({"ok", "warn", "fail", "na"})
 NOT_MEASURED = frozenset({"error", "blocked"})
@@ -104,9 +105,8 @@ def compare_check(check_id: str, previous: str, current: str) -> CheckChange:
     """Report only conclusive changes; N/A never masquerades as a correction."""
     if previous == current:
         kind = "unchanged"
-    elif current in NOT_MEASURED or previous in NOT_MEASURED:
-        kind = "unmeasured"
-    elif current not in CONCLUSIVE or previous not in CONCLUSIVE:
+    elif (current in NOT_MEASURED or previous in NOT_MEASURED
+          or current not in CONCLUSIVE or previous not in CONCLUSIVE):
         kind = "unmeasured"
     elif current == "na":
         kind = "not_applicable"
