@@ -8,7 +8,7 @@
 # the build tools are pinned. Only the Debian packages follow the security updates of the release.
 
 # ---- build the wheel
-FROM python:3.12.15-slim-trixie AS build
+FROM python:3.14.8-slim-trixie AS build
 WORKDIR /src
 RUN pip install --no-cache-dir build==1.2.2 setuptools==84.0.0 packaging==26.3 pyproject-hooks==1.3.3
 COPY pyproject.toml README.md LICENSE NOTICE ./
@@ -16,7 +16,7 @@ COPY src ./src
 RUN python -m build --wheel --no-isolation --outdir /dist
 
 # ---- runtime image
-FROM python:3.12.15-slim-trixie
+FROM python:3.14.8-slim-trixie
 LABEL org.opencontainers.image.title="Posture Cockpit" \
       org.opencontainers.image.description="Passive security check of a domain, with a guided plan of fixes" \
       org.opencontainers.image.source="https://github.com/vinzgithub/posture-cockpit" \
