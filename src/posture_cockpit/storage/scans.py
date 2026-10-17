@@ -220,6 +220,19 @@ class Scans:
         """The measured states of a scan, oldest first (see the module documentation)."""
         return self.db.all("SELECT * FROM scan_states WHERE scan_id = ? ORDER BY at, id", (scan_id,))
 
+    def latest_states(self, domain_id: int) -> list[Row]:
+        """Last two immutable measurements for a domain, including rechecks.
+
+        A recheck is a new measurement on its own date, not an update to the
+        old chart point. Ties are settled by state id. No scan is rescored.
+        """
+        return self.db.all(
+            "SELECT st.* FROM scan_states AS st "
+            "JOIN scans AS s ON s.id = st.scan_id "
+            "WHERE s.domain_id = ? ORDER BY st.at DESC, st.id DESC LIMIT 2",
+            (domain_id,),
+        )
+
     def history(self, domain_id: int, limit: int = 24) -> list[Row]:
         """The last scans of a domain (date, score, grade, coverage, perimeter), newest first."""
         return self.db.all("SELECT * FROM scans "
