@@ -37,11 +37,12 @@ This document is the map of the code: where things are, how a scan flows, and ho
 | `core/fixture.py` | `FixtureNetwork`: the same questions, answered from recorded data (tests, demo) |
 | `core/engine.py` | Runs checks concurrently, each with its own time limit; normalizes domain names; preflight |
 | `core/scoring.py` | Coverage, score, grade (or "not evaluated"), assessment per area, plan of fixes |
+| `core/generation.py` | The generation of the scanning and scoring rules (`GENERATION`) and the exact versions it covers; two scans are compared only within one generation |
 | `core/providers.py` | Known DNS hosts and their detection |
 | `checks/` | The built-in extensions (`mail`, `tls`, `web`, `dns`) and their texts in `checks/locales/` |
 | `checks/records.py` | Parsing of SPF, DMARC, DKIM, MTA-STS and TLS-RPT records against their RFCs (pure functions) |
 | `scanner.py` | Chooses the network (real or demo) with the rule of the perimeter, leaves out disabled extensions, reruns a single check |
-| `storage/` | One SQLite connection (`database.py`), the schema (`schema.py`), one repository per subject (`accounts.py`, `scans.py`, `perimeters.py`, `audit.py`, `settings.py`) |
+| `storage/` | One SQLite connection (`database.py`), the schema (`schema.py`), its opening with a verified backup before any migration (`upgrade.py`), backups (`backup.py`), one repository per subject (`accounts.py`, `scans.py`, `perimeters.py`, `audit.py`, `settings.py`) |
 | `web/app.py` | Builds the application: services, security headers, session, routes, error pages |
 | `web/deps.py` | What routes share: signed-in user, access rules, CSRF-checked forms, rendering |
 | `web/credentials.py` | Password and code checks used by several pages, and the sign-in throttles |
@@ -52,7 +53,7 @@ This document is the map of the code: where things are, how a scan flows, and ho
 | `report/` | The PDF report: context, template, style and fonts |
 | `locales/` | Texts of the interface and the report (`fr.json`, `en.json`) |
 | `demo/` | Recorded answers of the demo domain |
-| `cli.py` | `posture-cockpit scan`, `extensions`, account rescue tools |
+| `cli.py` | `posture-cockpit scan`, `extensions`, account rescue tools, `backup`, `check-backup`, `restore`, `info` |
 
 ## 3. How a scan flows
 
@@ -62,9 +63,9 @@ This document is the map of the code: where things are, how a scan flows, and ho
 4. `scanning.scan_and_save` takes a slot of the **scan limiter** (concurrent scans, scans per account and per hour).
 5. `scanner.scan` takes the checks of the enabled extensions and a **fresh network** (its cache only serves this scan) built with the **rule of the perimeter**: the Internet (public addresses, ports 80 and 443), or an internal perimeter (its networks, DNS servers, ports and CA).
 6. `engine.scan` runs **all checks at once**. Each receives a `CheckContext` (domain, network, time, internal or not) and returns an `Outcome`. Checks made for the Internet only are "not applicable" in an internal scan. A check that times out, raises a network error, hits the egress rule or crashes becomes an `Outcome` with status `ERROR` ("not evaluated", with the reason): the others carry on. Work left running is cancelled at the end.
-7. `Scans.save` stores the scan, its `Finding`s and its assessment (score, grade, coverage, perimeter); the scan is written to the audit log.
+7. `Scans.save` stores, in one transaction, the scan (with how it was started, `via`: web, api, schedule, and the generation of its rules, `engine`), its `Finding`s, its assessment (score, grade, coverage, perimeter, metrics) and its first measured state (`scan_states`); the scan is written to the audit log.
 8. The plan page (`GET /domains/<name>`) calls `views.plan_view`, which produces ready-worded objects for the `plan.html` template.
-9. **"Check"** (`POST /domains/<name>/verify/<check>`) reruns that single check. The result is saved as a *recheck* of the same scan: the original scan does not change (the order of the plan stays stable), the current score takes the recheck into account.
+9. **"Check"** (`POST /domains/<name>/verify/<check>`) reruns that single check. The result is saved as a *recheck* of the same scan: the original scan does not change (the order of the plan stays stable), the current score takes the recheck into account, and a state is added to the timeline of the scan in the same transaction.
 
 ## 4. Data model
 
@@ -78,15 +79,23 @@ This document is the map of the code: where things are, how a scan flows, and ho
 
 ## 5. Database
 
-One SQLite file in the data folder, in WAL mode, readable by its owner only. Tables: `users`, `totp`, `recovery_codes`, `api_tokens`, `perimeters`, `domains` (with `perimeter_id`), `scans` (score, grade, coverage, perimeter), `findings`, `rechecks`, `audit_log`, `meta`.
+One SQLite file in the data folder, in WAL mode, readable by its owner only. Tables: `users`, `totp`, `recovery_codes`, `api_tokens`, `perimeters`, `domains` (with `perimeter_id`), `scans` (score, grade, coverage, perimeter, metrics, `via`, `engine`), `findings`, `rechecks`, `scan_states`, `schedules`, `schedule_runs`, `events`, `audit_log`, `meta`.
 
 **Migrations**: `storage/schema.py` holds a list of SQL scripts or Python functions. The database remembers how many it applied (`meta.schema_version`) and applies the next ones at start-up, each in a transaction, with foreign keys switched off and checked (`PRAGMA foreign_key_check`) before the commit, as SQLite documents for rebuilding a table. Before migrating a database that holds data, a copy is written to `backups/`. To change the schema, **append a migration to the list**; never edit one that has been released. A database whose schema is newer than the list (written by a later release) is refused at start-up, untouched (`UnsupportedSchema`). `storage/backup.py` makes and restores consistent backups (`posture-cockpit backup`, `restore`).
+
+**Backup before migrating** (0.5.0): the server and the account commands open the database with `storage/upgrade.py`, `open_database()`. Before migrating a database that holds data, it checks the free space (twice the database), writes a complete backup archive (database and session key) to `backups/posture-cockpit-before-schema<N>-<time>.tar.gz`, reads it back (`backup.check`) and compares its schema, accounts, domains, scans and session key with the data folder; on any failure it stops before migrating, deletes the archive that failed and leaves the database unchanged. The archive is recorded in `meta.upgrade_backup` and shown by `posture-cockpit info`. Each migration runs in `BEGIN IMMEDIATE` and reads the version again inside it: of two processes starting together on one data folder, one migrates, the other finds it done.
 
 | Version | Migration |
 |---|---|
 | 1 (0.1.0) | Initial schema |
 | 2 (0.2.0) | `perimeters`, `domains.perimeter_id`, `audit_log` |
 | 3 (0.2.0) | `scans` rebuilt (score and grade nullable, `coverage`, `perimeter`), scores of stored scans recomputed |
+| 4 (0.4.0) | Metrics of `scans` (raw score, cap, final score, diagnostic coverage, blocked checks, addresses, reasons), added empty: nothing recomputed |
+| 5 (0.5.0) | `scans.via`, `scans.engine`, `scan_states`, `schedules`, `schedule_runs`, `events`, `users.events_seen_at`; one state per existing scan made of its stored values, nothing recomputed; the images 0.4.x refuse this schema |
+
+**Timeline of measured states** (`scan_states`, 0.5.0). The values stored in `scans` are overwritten by each recheck; each moment is also kept as a state: one `scan` state when the scan is saved, one `recheck` state after each recheck, in the transaction of the change. A state holds its date, the generation of the rules, score, grade, coverage, evaluation, the metrics and the status of every check. Rows are only ever added (a trigger refuses any `UPDATE`; no code deletes one; they go with their scan). Scans made before 0.5.0 got a single state made of their stored values: `scan` when never rechecked, otherwise `legacy`, dated from the last recheck — the values before that recheck were overwritten, so no state is made up for them. The generation (`core/generation.py`) changes whenever the rules would give another verdict or score for the same observations (`tests/test_v050_generation.py` fails until it does); a recheck of a scan judged by other rules has no generation.
+
+**Transactions.** One connection serves the whole process and its lock lets the same thread in again — and every asyncio task runs on that thread. So `transaction()` remembers the thread and the task that opened it, and any use of the connection by another one while it is open raises `TransactionOwnerError`, reads included; another thread waits for the lock. The rule: **no `await` inside `with db.transaction():`** (`tests/test_v050_contract.py` checks the code for it).
 
 ## 6. Texts and languages
 
@@ -151,6 +160,15 @@ v0.4.0 (SQL dumps in `tests/data/`, written by `tests/data/make_legacy_databases
 installation, Docker protections, setup code, backup and restore, refusals, updates from the
 released v0.3.0 and v0.4.0 images and rollback) and the whole suite inside the image. Release
 process: [RELEASE.md](RELEASE.md).
+
+Since 0.5.0: `tests/test_v050_contract.py` holds the answers of the API of 0.4.1 (written by the code
+of the tag) that later versions must keep; `tests/data/database-v0.4.1.sql` adds two-factor
+authentication, an internal perimeter, a provisional and an unscored scan;
+`tests/test_v050_generation.py` the verdicts and scores of the rules of each generation. The CI
+also updates the official image of v0.4.1 (pinned by its digest) and runs
+`scripts/docker-recette.sh rollback`: update, then return to 0.4.1 through the backup made before
+the migration, checked with the fingerprints of `scripts/data-fingerprint.py` (data restored
+identical, exact list of what the return loses).
 
 ## 10. Conventions
 

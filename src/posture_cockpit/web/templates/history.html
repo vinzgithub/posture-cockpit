@@ -15,7 +15,7 @@
 <circle class="trend-{{ 'provisional' if h.grade_withheld_reason else 'graded' }}" cx="{{ 5 + loop.index0 * 200 / ([history | length - 1, 1] | max) }}" cy="{{ 105 - h.score }}" r="3"><title>{{ h.started_at }} : {{ h.score }}/100{% if h.grade_withheld_reason %} · {{ t('v04.undetermined_count', n=h.addresses_attempted - h.addresses_conclusive) }}{% endif %}</title></circle>
 {% endif %}{% endfor %}</svg>{% endif %}
 <div class="table-scroll history-scroll"><table class="table history">
-<thead><tr><th>{{ t('details.history_date') }}</th><th>{{ t('details.history_result') }}</th><th>{{ t('details.history_coverage') }}</th><th>{{ t('history.origin') }}</th><th>{{ t('details.history_version') }}</th><th>{{ t('history.actions') }}</th></tr></thead>
+<thead><tr><th>{{ t('details.history_date') }}</th><th>{{ t('details.history_result') }}</th><th>{{ t('details.history_coverage') }}</th><th>{{ t('history.origin') }}</th><th>{{ t('history.via') }}</th><th>{{ t('details.history_version') }}</th><th>{{ t('history.actions') }}</th></tr></thead>
 <tbody>
 {% for h in history %}
 {% set r = results.get(h.id) %}
@@ -27,6 +27,7 @@
     {% if r and h.diagnostic_coverage is not none %}{{ indicators(r, address_results.get(h.id, {})) }}{% elif h.diagnostic_coverage is none and h.id not in unreadable %}<span>{{ t('v04.addresses_unknown') }}</span>{% endif %}
     {% if r %}<span class="history-evaluated muted">{{ t('history.evaluated', evaluated=r.evaluated, applicable=r.applicable) }}</span>{% endif %}</td>
   <td class="history-origin" data-label="{{ t('history.origin') }}">{{ t('history.origin_perimeter', name=h.perimeter) if h.perimeter else t('history.origin_internet') }}</td>
+  <td class="history-via" data-label="{{ t('history.via') }}">{% if h.via %}{{ t('history.via.' ~ h.via) }}{% else %}<span title="{{ t('history.via.unknown') }}" aria-label="{{ t('history.via.unknown') }}">—</span>{% endif %}</td>
   <td class="history-version" data-label="{{ t('details.history_version') }}">{{ h.version }}</td>
   <td class="history-actions"><a class="btn btn-secondary" href="/domains/{{ domain.name }}/history/{{ h.id }}">{{ t('history.view') }}</a> <a class="btn btn-secondary" href="/domains/{{ domain.name }}/history/{{ h.id }}/report.pdf">{{ t('history.pdf') }}</a></td>
 </tr>

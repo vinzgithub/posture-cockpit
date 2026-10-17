@@ -490,8 +490,8 @@ span.side-link-icon svg { width: 13px; height: 13px; }
   .history-clock { color: var(--muted); font-weight: 500; }
   .history-result { grid-column: 1 / -1; display: flex !important; align-items: center; gap: 8px; flex-wrap: wrap; }
   .history-score { font-weight: 700; white-space: nowrap; }
-  .history-coverage, .history-origin, .history-version { display: flex !important; flex-direction: column; gap: 2px; }
-  .history-coverage::before, .history-origin::before, .history-version::before { content: attr(data-label); font-size: 12px; font-weight: 600; color: var(--muted); }
+  .history-coverage, .history-origin, .history-via, .history-version { display: flex !important; flex-direction: column; gap: 2px; }
+  .history-coverage::before, .history-origin::before, .history-via::before, .history-version::before { content: attr(data-label); font-size: 12px; font-weight: 600; color: var(--muted); }
   .history-actions { grid-column: 1 / -1; display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; white-space: normal; }
   .history-actions .btn { margin: 0 !important; min-width: 0; height: auto; min-height: 44px; text-align: center; white-space: normal; overflow-wrap: anywhere; }
   .history-panel > .small { padding: 0 4px; }

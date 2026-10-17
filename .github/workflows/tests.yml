@@ -70,14 +70,18 @@ jobs:
             | tee "$RUNNER_TEMP/pytest.log"
           echo "::notice title=Tests inside the image::$(tail -1 "$RUNNER_TEMP/pytest.log")"
 
-  # Instances made by the released v0.3.0 (schema 3) and v0.4.0 (schema 4), then updated to this
-  # image on the same volume; v0.4.0 is also started again afterwards (rollback).
+  # Instances made by the released v0.3.0 (schema 3) and v0.4.0 (schema 4), rebuilt from their tag,
+  # and by the official image of v0.4.1 (schema 4, pinned by its digest), then updated to this
+  # image on the same volume: the verified backup made before the migration, then the old image
+  # again when the schema is the same, or its refusal of the newer one (0.4.1 and later).
   upgrade:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        from: ["v0.3.0", "v0.4.0"]
+        from: ["v0.3.0", "v0.4.0", "v0.4.1"]
+    env:
+      OFFICIAL_0_4_1: ghcr.io/vinzgithub/posture-cockpit@sha256:c5081ebcf79fe79c30fdec4dde52d01611df6fd219ffcc4b3c6d4c80c258e9ae
     steps:
       - uses: actions/checkout@v7
         with:
@@ -90,11 +94,55 @@ jobs:
           load: true
           tags: posture-cockpit:ci
       - name: Image of ${{ matrix.from }}, built from its tag
+        if: matrix.from != 'v0.4.1'
         run: |
           git worktree add "$RUNNER_TEMP/old" "${{ matrix.from }}"
           docker buildx build --load -t "posture-cockpit:${{ matrix.from }}" "$RUNNER_TEMP/old"
           docker image inspect -f '{{.Id}} {{.Created}}' "posture-cockpit:${{ matrix.from }}"
+      - name: Official image of v0.4.1, by its digest
+        if: matrix.from == 'v0.4.1'
+        run: |
+          docker pull "$OFFICIAL_0_4_1"
+          docker tag "$OFFICIAL_0_4_1" posture-cockpit:v0.4.1
+          docker run --rm --entrypoint python posture-cockpit:v0.4.1 -c 'import posture_cockpit; print(posture_cockpit.__version__)' \
+            | grep -qx 0.4.1
       - name: Recette of the update
         run: scripts/docker-recette.sh upgrade "posture-cockpit:${{ matrix.from }}" posture-cockpit:ci
       - name: Recette of an installation laid out like the production (default names)
         run: scripts/docker-recette.sh layout "${{ matrix.from }}" "posture-cockpit:${{ matrix.from }}" posture-cockpit:ci
+
+  # The return to 0.4.1 (scripts/docker-recette.sh rollback), with the official image pinned by its
+  # digest, on synthetic data: an instance made by 0.4.1 (administrator with two-factor
+  # authentication, second account, API key, internal perimeter, demonstration domain scanned and
+  # rechecked), updated to this image, used, then brought back to 0.4.1 by restoring the backup
+  # made before the migration. Fingerprints (scripts/data-fingerprint.py) prove the data restored
+  # identical, and list exactly what the return loses.
+  rollback:
+    runs-on: ubuntu-latest
+    env:
+      OFFICIAL_0_4_1: ghcr.io/vinzgithub/posture-cockpit@sha256:c5081ebcf79fe79c30fdec4dde52d01611df6fd219ffcc4b3c6d4c80c258e9ae
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          load: true
+          tags: posture-cockpit:ci
+      - name: Official image of v0.4.1, by its digest
+        run: docker pull "$OFFICIAL_0_4_1"
+      - name: Recette of the return to 0.4.1
+        run: |
+          set -o pipefail
+          scripts/docker-recette.sh rollback "$OFFICIAL_0_4_1" posture-cockpit:ci | tee "$RUNNER_TEMP/rollback.log"
+      - name: Report of the recette
+        if: always()
+        run: |
+          {
+            echo "### Return to 0.4.1 (official image, synthetic data)"
+            echo
+            echo '```'
+            grep -v '^pc-recette' "$RUNNER_TEMP/rollback.log" | grep -v 'Container pc-recette' || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

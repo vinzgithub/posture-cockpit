@@ -42,7 +42,7 @@ from .core.registry import Registry
 from .i18n import LOCALES, Catalog, finding_summary
 from .scanner import Scanner
 from .security import MIN_PASSWORD_LENGTH, hash_password
-from .storage import Accounts, Database, backup, instance_lock
+from .storage import Accounts, backup, instance_lock, open_database, upgrade
 from .storage.schema import MIGRATIONS
 
 SYMBOLS = {"blocked": "⊘", "ok": "✓", "warn": "!", "fail": "✗", "na": "–", "info": "i", "error": "?"}
@@ -244,6 +244,16 @@ def _info() -> int:
     key = data_dir / backup.KEY_NAME
     print(f"Session key: {'present' if key.is_file() else 'absent'}"
           + (f", permissions {oct(key.stat().st_mode & 0o777)}" if key.is_file() else ""))
+    if 0 < schema < len(MIGRATIONS):
+        needed, free = upgrade.space_needed(db_path), upgrade.free_space(data_dir)
+        print(f"Before migrating, the next start writes a verified backup to {data_dir / 'backups'} "
+              f"(needs {needed / 1024**2:.1f} MB free; {free / 1024**2:.1f} MB free now).")
+    last = upgrade.last_upgrade_backup(db_path)
+    if last is not None:
+        present = (data_dir / str(last.get("path", ""))).is_file()
+        print(f"Backup before the last update: {last.get('path')} (schema {last.get('from_schema')} to "
+              f"{last.get('to_schema')}, {last.get('created_at')}, verified"
+              f"{'' if present else ', NO LONGER in the backups folder'})")
     return 0
 
 
@@ -252,7 +262,12 @@ def _account(command: str, username: str) -> int:
     config = Config.from_env()
     held = _shared(config.data_dir) if config.data_dir.is_dir() else None
     try:
-        return _change_account(Accounts(Database(config.db_path)), command, username)
+        # Like the server: a verified backup archive before any migration (storage/upgrade.py).
+        db = open_database(config, say=lambda line: print(line, file=sys.stderr))
+        try:
+            return _change_account(Accounts(db), command, username)
+        finally:
+            db.close()
     finally:
         if held:
             held.release()

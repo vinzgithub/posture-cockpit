@@ -14,6 +14,15 @@ The score, grade and coverage stored with a scan are those of
 :func:`~posture_cockpit.core.scoring.assess` on its current findings, written
 at each save and recheck; :meth:`Scan.assessment` computes the same from the
 findings, so every page, the API and the PDF show the same result.
+
+Timeline (0.5.0). Those stored values are overwritten by each recheck, so each
+moment is also kept in ``scan_states``, a table rows are only ever added to: one
+``scan`` state when the scan is saved, one ``recheck`` state after each recheck,
+in the same transaction. A state holds the date, the generation of the rules
+(core/generation.py), score, grade, coverage, evaluation, the metrics and the
+status of every check at that moment. Scans made before 0.5.0 got one state made
+of their stored values (schema.py, migration 5). A scan also records how it was
+started (``via``: web, api, schedule; NULL before 0.5.0).
 """
 
 from __future__ import annotations
@@ -23,10 +32,11 @@ import math
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 
-from ..core import scoring
+from ..core import generation, scoring
 from ..core.engine import ScanResult
 from ..core.model import HTTPS_ROOT_CHECK, Finding
 from .database import Database, Row, utcnow
+from .schema import METRICS
 
 
 class CorruptScan(Exception):
@@ -57,6 +67,8 @@ class Scan:
     perimeter: str                                # internal perimeter of the scan, "" for the Internet
     findings: list[Finding]                       # as found by the scan
     rechecks: dict[str, Recheck] = field(default_factory=dict)  # by check id
+    via: str | None = None                        # web, api, schedule; None before 0.5.0
+    engine: int | None = None                     # generation of the rules; None: unknown
 
     def current(self) -> list[Finding]:
         """The findings with the latest recheck of each one applied."""
@@ -134,26 +146,39 @@ class Scans:
     def set_dns_host(self, domain_id: int, host_id: str) -> None:
         self.db.execute("UPDATE domains SET dns_host = ? WHERE id = ?", (host_id, domain_id))
 
-    def delete_domain(self, domain_id: int) -> None:
-        """The domain and all its scans."""
-        self.db.execute("DELETE FROM domains WHERE id = ?", (domain_id,))
+    def delete_domain(self, domain_id: int) -> dict[str, int]:
+        """The domain and all it holds; returns how many scans, states, scheduled runs and events
+        went with it (for the audit log)."""
+        with self.db.transaction():
+            removed = {name: int(self.db.value(query, (domain_id,)) or 0) for name, query in (
+                ("scans", "SELECT COUNT(*) FROM scans WHERE domain_id = ?"),
+                ("states", "SELECT COUNT(*) FROM scan_states WHERE scan_id IN "
+                           "(SELECT id FROM scans WHERE domain_id = ?)"),
+                ("runs", "SELECT COUNT(*) FROM schedule_runs WHERE domain_id = ?"),
+                ("events", "SELECT COUNT(*) FROM events WHERE domain_id = ?"))}
+            self.db.execute("DELETE FROM domains WHERE id = ?", (domain_id,))
+        return removed
 
     # ------------------------------------------------------------------ scans
     def save(self, domain_id: int, result: ScanResult, version: str, user_id: int | None,
-             perimeter: str = "") -> int:
+             perimeter: str = "", *, via: str | None = None) -> int:
+        """Stores a scan, its findings and its first state, all in one transaction. ``via``: how
+        it was started (web, api, schedule)."""
         assessment = scoring.assess(result.findings)
+        started_at = result.started_at.replace(microsecond=0).isoformat()
         with self.db.transaction():
             cur = self.db.execute(
                 "INSERT INTO scans(domain_id, started_at, duration_ms, score, grade, coverage, version, started_by,"
-                " perimeter) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (domain_id, result.started_at.replace(microsecond=0).isoformat(), result.duration_ms,
-                 assessment.score, assessment.grade, assessment.coverage, version, user_id, perimeter))
+                " perimeter, via, engine) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (domain_id, started_at, result.duration_ms, assessment.score, assessment.grade,
+                 assessment.coverage, version, user_id, perimeter, via, generation.GENERATION))
             scan_id = int(cur.lastrowid or 0)
             self.db.executemany(
                 "INSERT INTO findings(scan_id, check_id, category, weight, status, outcome) VALUES(?, ?, ?, ?, ?, ?)",
                 [(scan_id, f.check_id, f.category, f.weight, f.status.value, json.dumps(f.outcome_json()))
                  for f in result.findings])
             self._update_metrics(scan_id, assessment, result.findings)
+            self._add_state(scan_id, started_at, "scan", generation.GENERATION, assessment, result.findings)
         return scan_id
 
     def latest(self, domain_id: int) -> Scan | None:
@@ -188,7 +213,12 @@ class Scans:
                                             r["outcome"])
                 rechecks[r["check_id"]] = Recheck(rechecked, r["checked_at"])
         return Scan(row["id"], row["domain_id"], row["domain"], row["started_at"], row["duration_ms"], row["score"],
-                    row["grade"], row["coverage"], row["version"], row["perimeter"], findings, rechecks)
+                    row["grade"], row["coverage"], row["version"], row["perimeter"], findings, rechecks,
+                    via=row["via"], engine=row["engine"])
+
+    def states(self, scan_id: int) -> list[Row]:
+        """The measured states of a scan, oldest first (see the module documentation)."""
+        return self.db.all("SELECT * FROM scan_states WHERE scan_id = ? ORDER BY at, id", (scan_id,))
 
     def history(self, domain_id: int, limit: int = 24) -> list[Row]:
         """The last scans of a domain (date, score, grade, coverage, perimeter), newest first."""
@@ -231,15 +261,20 @@ class Scans:
         return summarize(events, now or datetime.now(UTC))
 
     def _update_metrics(self, scan_id: int, a: scoring.Assessment, findings: list[Finding]) -> None:
-        root = next((f for f in findings if f.check_id == HTTPS_ROOT_CHECK), None)
-        addresses = root.outcome.evidence.get("addresses", {}) if root else {}
+        metrics = _metrics(a, findings)
+        metrics["cap_reasons"] = json.dumps(metrics["cap_reasons"])
+        self.db.execute(f"UPDATE scans SET {', '.join(f'{name}=?' for name in METRICS)} WHERE id=?",  # noqa: S608
+                        (*(metrics[name] for name in METRICS), scan_id))
+
+    def _add_state(self, scan_id: int, at: str, origin: str, engine: int | None, a: scoring.Assessment,
+                   findings: list[Finding]) -> None:
+        """Adds a state to the timeline of a scan; called inside the transaction of its change."""
         self.db.execute(
-            "UPDATE scans SET score_raw=?, score_cap=?, score_final=?, diagnostic_coverage=?, checks_blocked=?, "
-            "addresses_discovered=?, addresses_attempted=?, addresses_conclusive=?, grade_withheld_reason=?, "
-            "cap_reasons=? WHERE id=?",
-            (a.score_raw, a.score_cap, a.score_final, a.diagnostic_coverage, a.blocked,
-             addresses.get("discovered"), addresses.get("attempted"), addresses.get("conclusive"),
-             a.grade_withheld_reason, json.dumps(a.cap_reasons), scan_id))
+            "INSERT INTO scan_states(scan_id, at, origin, engine, score, grade, coverage, evaluation, metrics, checks)"
+            " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (scan_id, at, origin, engine, a.score, a.grade, a.coverage, a.evaluation,
+             json.dumps(_metrics(a, findings), sort_keys=True),
+             json.dumps({f.check_id: f.status.value for f in findings}, sort_keys=True)))
 
     def save_recheck(self, scan_id: int, finding: Finding) -> scoring.Assessment:
         return self.save_rechecks(scan_id, [finding])
@@ -273,4 +308,19 @@ class Scans:
             self.db.execute("UPDATE scans SET score = ?, grade = ?, coverage = ? WHERE id = ?",
                             (assessment.score, assessment.grade, assessment.coverage, scan_id))
             self._update_metrics(scan_id, assessment, scan.current())
+            # Findings of the scan and rechecks judged by the same rules only: otherwise unknown.
+            same_rules = scan.engine == generation.GENERATION
+            self._add_state(scan_id, stamp, "recheck", generation.GENERATION if same_rules else None,
+                            assessment, scan.current())
         return assessment
+
+
+def _metrics(a: scoring.Assessment, findings: list[Finding]) -> dict:
+    """The metrics of schema 4 (schema.METRICS) of an assessment."""
+    root = next((f for f in findings if f.check_id == HTTPS_ROOT_CHECK), None)
+    addresses = root.outcome.evidence.get("addresses", {}) if root else {}
+    return {"score_raw": a.score_raw, "score_cap": a.score_cap, "score_final": a.score_final,
+            "diagnostic_coverage": a.diagnostic_coverage, "checks_blocked": a.blocked,
+            "addresses_discovered": addresses.get("discovered"), "addresses_attempted": addresses.get("attempted"),
+            "addresses_conclusive": addresses.get("conclusive"), "grade_withheld_reason": a.grade_withheld_reason,
+            "cap_reasons": list(a.cap_reasons)}

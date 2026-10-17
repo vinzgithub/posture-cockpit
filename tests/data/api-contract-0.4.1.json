@@ -1,0 +1,477 @@
+{
+ "v0.3.0": {
+  "GET /api/v1/domains": {
+   "example.org": {
+    "address_discovery_complete": null,
+    "address_sampling_limited": null,
+    "addresses": {},
+    "addresses_attempted": null,
+    "addresses_conclusive": null,
+    "addresses_discovered": null,
+    "cap_reasons": [],
+    "certificate_days_left": 60,
+    "checks_applicable": 19,
+    "checks_blocked": 0,
+    "checks_evaluated": 19,
+    "coverage": 1.0,
+    "critical": 0,
+    "diagnostic_coverage": 1.0,
+    "domain": "example.org",
+    "evaluation": "complete",
+    "grade": "A",
+    "grade_withheld_reason": null,
+    "not_evaluated": 0,
+    "perimeter": null,
+    "scanned_at": "2026-10-11T12:00:00+00:00",
+    "score": 100,
+    "score_cap": null,
+    "score_final": 1.0,
+    "score_raw": 1.0,
+    "to_improve": 0
+   },
+   "menuiserie-dupont.example": {
+    "address_discovery_complete": null,
+    "address_sampling_limited": null,
+    "addresses": {},
+    "addresses_attempted": null,
+    "addresses_conclusive": null,
+    "addresses_discovered": null,
+    "cap_reasons": [],
+    "certificate_days_left": 9,
+    "checks_applicable": 19,
+    "checks_blocked": 0,
+    "checks_evaluated": 19,
+    "coverage": 1.0,
+    "critical": 3,
+    "diagnostic_coverage": 1.0,
+    "domain": "menuiserie-dupont.example",
+    "evaluation": "complete",
+    "grade": "C",
+    "grade_withheld_reason": null,
+    "not_evaluated": 0,
+    "perimeter": null,
+    "scanned_at": "2026-10-09T12:00:00+00:00",
+    "score": 57,
+    "score_cap": null,
+    "score_final": 0.57,
+    "score_raw": 0.57,
+    "to_improve": 7
+   }
+  },
+  "POST /api/v1/domains/{name}/scan": {
+   "demo": {
+    "body": {
+     "address_discovery_complete": true,
+     "address_sampling_limited": false,
+     "addresses": {
+      "attempted": 2,
+      "conclusive": 2,
+      "deadline_reached": false,
+      "discovered": 2,
+      "discovery_complete": true,
+      "sampling_limited": false
+     },
+     "addresses_attempted": 2,
+     "addresses_conclusive": 2,
+     "addresses_discovered": 2,
+     "cap_reasons": [],
+     "certificate_days_left": 9,
+     "checks_applicable": 19,
+     "checks_blocked": 0,
+     "checks_evaluated": 19,
+     "coverage": 1.0,
+     "critical": 3,
+     "diagnostic_coverage": 1.0,
+     "domain": "menuiserie-dupont.example",
+     "evaluation": "complete",
+     "grade": "C",
+     "grade_withheld_reason": null,
+     "not_evaluated": 0,
+     "perimeter": null,
+     "scanned_at": "2026-10-17T17:43:52+00:00",
+     "score": 57,
+     "score_cap": null,
+     "score_final": 0.5740740740740741,
+     "score_raw": 0.5740740740740741,
+     "to_improve": 7
+    },
+    "status": 200
+   },
+   "unknown domain": {
+    "body": {
+     "error": "unknown domain"
+    },
+    "status": 404
+   },
+   "without key": {
+    "body": {
+     "error": "unauthorized"
+    },
+    "status": 401
+   }
+  }
+ },
+ "v0.4.0": {
+  "GET /api/v1/domains": {
+   "example.org": {
+    "address_discovery_complete": true,
+    "address_sampling_limited": false,
+    "addresses": {
+     "attempted": 2,
+     "conclusive": 2,
+     "deadline_reached": false,
+     "discovered": 2,
+     "discovery_complete": true,
+     "sampling_limited": false
+    },
+    "addresses_attempted": 2,
+    "addresses_conclusive": 2,
+    "addresses_discovered": 2,
+    "cap_reasons": [],
+    "certificate_days_left": 60,
+    "checks_applicable": 19,
+    "checks_blocked": 0,
+    "checks_evaluated": 19,
+    "coverage": 1.0,
+    "critical": 0,
+    "diagnostic_coverage": 1.0,
+    "domain": "example.org",
+    "evaluation": "complete",
+    "grade": "A",
+    "grade_withheld_reason": null,
+    "not_evaluated": 0,
+    "perimeter": null,
+    "scanned_at": "2026-10-11T12:00:00+00:00",
+    "score": 100,
+    "score_cap": null,
+    "score_final": 1.0,
+    "score_raw": 1.0,
+    "to_improve": 0
+   },
+   "menuiserie-dupont.example": {
+    "address_discovery_complete": true,
+    "address_sampling_limited": false,
+    "addresses": {
+     "attempted": 2,
+     "conclusive": 2,
+     "deadline_reached": false,
+     "discovered": 2,
+     "discovery_complete": true,
+     "sampling_limited": false
+    },
+    "addresses_attempted": 2,
+    "addresses_conclusive": 2,
+    "addresses_discovered": 2,
+    "cap_reasons": [],
+    "certificate_days_left": 9,
+    "checks_applicable": 19,
+    "checks_blocked": 0,
+    "checks_evaluated": 19,
+    "coverage": 1.0,
+    "critical": 3,
+    "diagnostic_coverage": 1.0,
+    "domain": "menuiserie-dupont.example",
+    "evaluation": "complete",
+    "grade": "C",
+    "grade_withheld_reason": null,
+    "not_evaluated": 0,
+    "perimeter": null,
+    "scanned_at": "2026-10-09T12:00:00+00:00",
+    "score": 57,
+    "score_cap": null,
+    "score_final": 0.5740740740740741,
+    "score_raw": 0.5740740740740741,
+    "to_improve": 7
+   }
+  },
+  "POST /api/v1/domains/{name}/scan": {
+   "demo": {
+    "body": {
+     "address_discovery_complete": true,
+     "address_sampling_limited": false,
+     "addresses": {
+      "attempted": 2,
+      "conclusive": 2,
+      "deadline_reached": false,
+      "discovered": 2,
+      "discovery_complete": true,
+      "sampling_limited": false
+     },
+     "addresses_attempted": 2,
+     "addresses_conclusive": 2,
+     "addresses_discovered": 2,
+     "cap_reasons": [],
+     "certificate_days_left": 9,
+     "checks_applicable": 19,
+     "checks_blocked": 0,
+     "checks_evaluated": 19,
+     "coverage": 1.0,
+     "critical": 3,
+     "diagnostic_coverage": 1.0,
+     "domain": "menuiserie-dupont.example",
+     "evaluation": "complete",
+     "grade": "C",
+     "grade_withheld_reason": null,
+     "not_evaluated": 0,
+     "perimeter": null,
+     "scanned_at": "2026-10-17T17:43:52+00:00",
+     "score": 57,
+     "score_cap": null,
+     "score_final": 0.5740740740740741,
+     "score_raw": 0.5740740740740741,
+     "to_improve": 7
+    },
+    "status": 200
+   },
+   "unknown domain": {
+    "body": {
+     "error": "unknown domain"
+    },
+    "status": 404
+   },
+   "without key": {
+    "body": {
+     "error": "unauthorized"
+    },
+    "status": 401
+   }
+  }
+ },
+ "v0.4.1": {
+  "GET /api/v1/domains": {
+   "example.org": {
+    "address_discovery_complete": true,
+    "address_sampling_limited": false,
+    "addresses": {
+     "attempted": 2,
+     "conclusive": 2,
+     "deadline_reached": false,
+     "discovered": 2,
+     "discovery_complete": true,
+     "sampling_limited": false
+    },
+    "addresses_attempted": 2,
+    "addresses_conclusive": 2,
+    "addresses_discovered": 2,
+    "cap_reasons": [],
+    "certificate_days_left": 60,
+    "checks_applicable": 19,
+    "checks_blocked": 0,
+    "checks_evaluated": 19,
+    "coverage": 1.0,
+    "critical": 0,
+    "diagnostic_coverage": 1.0,
+    "domain": "example.org",
+    "evaluation": "complete",
+    "grade": "A",
+    "grade_withheld_reason": null,
+    "not_evaluated": 0,
+    "perimeter": null,
+    "scanned_at": "2026-10-11T12:00:00+00:00",
+    "score": 100,
+    "score_cap": null,
+    "score_final": 1.0,
+    "score_raw": 1.0,
+    "to_improve": 0
+   },
+   "intranet.siege.example": {
+    "address_discovery_complete": true,
+    "address_sampling_limited": false,
+    "addresses": {
+     "attempted": 2,
+     "conclusive": 2,
+     "deadline_reached": false,
+     "discovered": 2,
+     "discovery_complete": true,
+     "sampling_limited": false
+    },
+    "addresses_attempted": 2,
+    "addresses_conclusive": 2,
+    "addresses_discovered": 2,
+    "cap_reasons": [],
+    "certificate_days_left": 60,
+    "checks_applicable": 19,
+    "checks_blocked": 0,
+    "checks_evaluated": 19,
+    "coverage": 1.0,
+    "critical": 0,
+    "diagnostic_coverage": 1.0,
+    "domain": "intranet.siege.example",
+    "evaluation": "complete",
+    "grade": "A",
+    "grade_withheld_reason": null,
+    "not_evaluated": 0,
+    "perimeter": "siege",
+    "scanned_at": "2026-10-10T12:00:00+00:00",
+    "score": 100,
+    "score_cap": null,
+    "score_final": 1.0,
+    "score_raw": 1.0,
+    "to_improve": 0
+   },
+   "menuiserie-dupont.example": {
+    "address_discovery_complete": true,
+    "address_sampling_limited": false,
+    "addresses": {
+     "attempted": 2,
+     "conclusive": 2,
+     "deadline_reached": false,
+     "discovered": 2,
+     "discovery_complete": true,
+     "sampling_limited": false
+    },
+    "addresses_attempted": 2,
+    "addresses_conclusive": 2,
+    "addresses_discovered": 2,
+    "cap_reasons": [],
+    "certificate_days_left": 9,
+    "checks_applicable": 19,
+    "checks_blocked": 0,
+    "checks_evaluated": 19,
+    "coverage": 1.0,
+    "critical": 3,
+    "diagnostic_coverage": 1.0,
+    "domain": "menuiserie-dupont.example",
+    "evaluation": "complete",
+    "grade": "C",
+    "grade_withheld_reason": null,
+    "not_evaluated": 0,
+    "perimeter": null,
+    "scanned_at": "2026-10-09T12:00:00+00:00",
+    "score": 57,
+    "score_cap": null,
+    "score_final": 0.5740740740740741,
+    "score_raw": 0.5740740740740741,
+    "to_improve": 7
+   },
+   "muet.example": {
+    "address_discovery_complete": true,
+    "address_sampling_limited": false,
+    "addresses": {
+     "attempted": 2,
+     "conclusive": 2,
+     "deadline_reached": false,
+     "discovered": 2,
+     "discovery_complete": true,
+     "sampling_limited": false
+    },
+    "addresses_attempted": 2,
+    "addresses_conclusive": 2,
+    "addresses_discovered": 2,
+    "cap_reasons": [],
+    "certificate_days_left": null,
+    "checks_applicable": 9,
+    "checks_blocked": 10,
+    "checks_evaluated": 4,
+    "coverage": 0.439,
+    "critical": 1,
+    "diagnostic_coverage": 0.231,
+    "domain": "muet.example",
+    "evaluation": "not_evaluated",
+    "grade": null,
+    "grade_withheld_reason": null,
+    "not_evaluated": 5,
+    "perimeter": null,
+    "scanned_at": "2026-10-11T12:00:00+00:00",
+    "score": null,
+    "score_cap": null,
+    "score_final": null,
+    "score_raw": null,
+    "to_improve": 2
+   },
+   "provisoire.example": {
+    "address_discovery_complete": true,
+    "address_sampling_limited": false,
+    "addresses": {
+     "attempted": 2,
+     "conclusive": 1,
+     "deadline_reached": false,
+     "discovered": 2,
+     "discovery_complete": true,
+     "sampling_limited": false
+    },
+    "addresses_attempted": 2,
+    "addresses_conclusive": 1,
+    "addresses_discovered": 2,
+    "cap_reasons": [],
+    "certificate_days_left": null,
+    "checks_applicable": 19,
+    "checks_blocked": 0,
+    "checks_evaluated": 9,
+    "coverage": 0.543,
+    "critical": 1,
+    "diagnostic_coverage": 0.543,
+    "domain": "provisoire.example",
+    "evaluation": "undetermined",
+    "grade": null,
+    "grade_withheld_reason": "https_availability_undetermined",
+    "not_evaluated": 10,
+    "perimeter": null,
+    "scanned_at": "2026-10-11T12:00:00+00:00",
+    "score": 82,
+    "score_cap": null,
+    "score_final": 0.8181818181818182,
+    "score_raw": 0.8181818181818182,
+    "to_improve": 0
+   }
+  },
+  "POST /api/v1/domains/{name}/scan": {
+   "demo": {
+    "body": {
+     "address_discovery_complete": true,
+     "address_sampling_limited": false,
+     "addresses": {
+      "attempted": 2,
+      "conclusive": 2,
+      "deadline_reached": false,
+      "discovered": 2,
+      "discovery_complete": true,
+      "sampling_limited": false
+     },
+     "addresses_attempted": 2,
+     "addresses_conclusive": 2,
+     "addresses_discovered": 2,
+     "cap_reasons": [],
+     "certificate_days_left": 9,
+     "checks_applicable": 19,
+     "checks_blocked": 0,
+     "checks_evaluated": 19,
+     "coverage": 1.0,
+     "critical": 3,
+     "diagnostic_coverage": 1.0,
+     "domain": "menuiserie-dupont.example",
+     "evaluation": "complete",
+     "grade": "C",
+     "grade_withheld_reason": null,
+     "not_evaluated": 0,
+     "perimeter": null,
+     "scanned_at": "2026-10-17T17:43:52+00:00",
+     "score": 57,
+     "score_cap": null,
+     "score_final": 0.5740740740740741,
+     "score_raw": 0.5740740740740741,
+     "to_improve": 7
+    },
+    "status": 200
+   },
+   "internal domain": {
+    "body": {
+     "error": "internal scans are disabled on this instance"
+    },
+    "status": 403
+   },
+   "unknown domain": {
+    "body": {
+     "error": "unknown domain"
+    },
+    "status": 404
+   },
+   "without key": {
+    "body": {
+     "error": "unauthorized"
+    },
+    "status": 401
+   }
+  }
+ }
+}

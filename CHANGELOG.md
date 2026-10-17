@@ -1,6 +1,39 @@
 # Changelog
 
-## 0.4.1 — unreleased
+## 0.5.0 — unreleased
+
+In development. Scoring rules, checks, statuses and the keys of the API are unchanged.
+
+**Database: schema 5** (cannot be opened by 0.4.x: going back means restoring the backup made
+before the update, see docs/user/INSTALLATION.md)
+- Before migrating, the server and the account commands write a complete backup archive
+  (database and session key) to `backups/posture-cockpit-before-schema5-<time>.tar.gz`, read it
+  back and compare it with the database; if anything fails, they stop and change nothing.
+  `posture-cockpit info` shows that archive.
+- Each scan records how it was started (`via`: web, API; empty for older scans) and the
+  generation of the rules that judged it (`engine`).
+- A timeline of measured states (`scan_states`), rows only ever added: one when a scan is saved,
+  one after each recheck. Existing scans get one state made of their stored values, never
+  recalculated; a scan already rechecked gets a single state dated from its last recheck.
+- The tables of the scheduled scans and of the events are created, still empty.
+- Two processes starting together on the same data folder apply each migration once.
+
+**Storage**
+- A transaction belongs to the task that opened it: another task using the database meanwhile
+  is refused instead of joining it silently.
+- The audit entry of a deleted domain counts the scans, states, scheduled runs and events removed with it.
+
+**API**: `via` and `engine` added to each domain; every key of 0.4.1 kept as it was.
+
+**Rollback and recette**
+- INSTALLATION (FR, EN): the update to 0.5.0, the return to 0.4.1 by restoring the backup made
+  before the migration, what the return loses (passwords, two-factor authentication, API keys
+  revoked since…) and how to re-apply those changes, including a new session key.
+- `scripts/data-fingerprint.py`: the fingerprint of the data of an instance, read only, without
+  any value of the database; `scripts/docker-recette.sh rollback` uses it, and the CI runs it
+  with the official image of 0.4.1.
+
+## 0.4.1 — 2026-10-17
 
 Maintenance release: simple installation and update with Docker Compose, consistent backups,
 a protected first start. Scoring rules, checks, statuses and the API contract are unchanged;

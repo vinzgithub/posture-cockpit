@@ -51,9 +51,9 @@ def test_existing_databases_open_unchanged_and_work(tmp_path, version, schema):
         assert len(after[table]) == len(old_rows), table
         for old, new in zip(old_rows, after[table], strict=True):
             assert {k: new[k] for k in old} == old, table  # existing columns untouched
-    assert backup.schema_of(folder / "posture_cockpit.db") == 4
+    assert backup.schema_of(folder / "posture_cockpit.db") == 5
     copies = list((folder / "backups").glob("*.db")) if (folder / "backups").exists() else []
-    assert len(copies) == (1 if schema < 4 else 0)  # a copy is made before migrating, only then
+    assert len(copies) == (1 if schema < 5 else 0)  # a copy is made before migrating, only then
 
     with TestClient(app) as client:
         assert log_in(client).status_code == 303
@@ -95,6 +95,6 @@ def test_a_schema_3_backup_restored_into_0_4_1_is_migrated_at_start(tmp_path):
     out.seek(0)
     backup.restore(tmp_path / "new", out)
     app = create_app(Config(data_dir=tmp_path / "new"))
-    assert app.state.services.db.schema_version == 4
+    assert app.state.services.db.schema_version == 5
     with TestClient(app) as client:
         assert log_in(client).status_code == 303

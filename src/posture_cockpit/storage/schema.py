@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 
 from ..core import scoring
 from ..core.model import Finding
@@ -63,6 +63,158 @@ def _scores_with_coverage(conn: sqlite3.Connection) -> None:
         result = scoring.assess(list(current.values()))
         conn.execute("UPDATE scans SET score = ?, grade = ?, coverage = ? WHERE id = ?",
                      (result.score, result.grade, result.coverage, scan_id))
+
+
+# 5 — version 0.5.0. Additive only: every table of 0.5.0, and no stored value recalculated.
+_SCHEMA_5 = """
+ALTER TABLE scans ADD COLUMN via TEXT CHECK (via IN ('web', 'api', 'schedule'));  -- NULL before 0.5.0
+ALTER TABLE scans ADD COLUMN engine INTEGER;   -- generation of the rules (core/generation.py); NULL: unknown
+
+-- One schedule per domain (filled from step 4 of 0.5.0).
+CREATE TABLE schedules (
+    domain_id INTEGER PRIMARY KEY REFERENCES domains(id) ON DELETE CASCADE,
+    frequency TEXT NOT NULL CHECK (frequency IN ('daily', 'weekly', 'monthly')),
+    weekday INTEGER CHECK (weekday BETWEEN 1 AND 7),
+    monthday INTEGER CHECK (monthday BETWEEN 1 AND 31),
+    at_minute INTEGER NOT NULL CHECK (at_minute BETWEEN 0 AND 1439),
+    enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+    next_run_at TEXT,
+    failures INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL,
+    updated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    CHECK ((frequency = 'weekly') = (weekday IS NOT NULL)),
+    CHECK ((frequency = 'monthly') = (monthday IS NOT NULL)));
+
+-- One row per scheduled slot, claimed by one process at a time (a lease), at most two attempts.
+CREATE TABLE schedule_runs (
+    id INTEGER PRIMARY KEY,
+    domain_id INTEGER NOT NULL REFERENCES domains(id) ON DELETE CASCADE,
+    slot TEXT NOT NULL,
+    state TEXT NOT NULL CHECK (state IN ('running', 'done', 'failed', 'skipped', 'interrupted', 'missed')),
+    reason TEXT NOT NULL DEFAULT '',
+    claim TEXT NOT NULL,
+    owner TEXT NOT NULL,
+    scan_id INTEGER REFERENCES scans(id) ON DELETE SET NULL,
+    attempts INTEGER NOT NULL DEFAULT 1 CHECK (attempts BETWEEN 1 AND 2),
+    claimed_at TEXT NOT NULL,
+    lease_until TEXT,
+    finished_at TEXT,
+    CHECK ((state = 'running') = (lease_until IS NOT NULL)),
+    UNIQUE (domain_id, slot));
+CREATE INDEX schedule_runs_by_domain ON schedule_runs(domain_id, claimed_at);
+CREATE INDEX schedule_runs_running ON schedule_runs(state) WHERE state = 'running';
+CREATE UNIQUE INDEX schedule_runs_one_scan ON schedule_runs(scan_id) WHERE scan_id IS NOT NULL;
+
+-- The measured state of a scan, at each moment it changed: when it was made, after each
+-- recheck. Never changed afterwards (rows are only added; they go with their scan).
+CREATE TABLE scan_states (
+    id INTEGER PRIMARY KEY,
+    scan_id INTEGER NOT NULL REFERENCES scans(id) ON DELETE CASCADE,
+    at TEXT NOT NULL,
+    origin TEXT NOT NULL CHECK (origin IN ('scan', 'recheck', 'legacy')),
+    engine INTEGER,
+    score INTEGER,
+    grade TEXT,
+    coverage REAL NOT NULL,
+    evaluation TEXT NOT NULL CHECK (evaluation IN ('not_evaluated', 'undetermined', 'partial', 'complete')),
+    metrics TEXT NOT NULL,   -- JSON: the metrics of schema 4 at that moment
+    checks TEXT NOT NULL);   -- JSON: check id -> status at that moment
+CREATE INDEX scan_states_by_scan ON scan_states(scan_id, at);
+CREATE TRIGGER scan_states_append_only BEFORE UPDATE ON scan_states
+    BEGIN SELECT RAISE(ABORT, 'scan_states is append-only'); END;
+
+-- What changed and deserves attention (filled from step 5 of 0.5.0).
+CREATE TABLE events (
+    id INTEGER PRIMARY KEY,
+    domain_id INTEGER REFERENCES domains(id) ON DELETE CASCADE,
+    category TEXT NOT NULL CHECK (category IN ('security', 'measurement', 'technical')),
+    kind TEXT NOT NULL,
+    subject TEXT NOT NULL DEFAULT '',
+    state TEXT NOT NULL CHECK (state IN ('open', 'resolved', 'notice')),
+    severity TEXT NOT NULL CHECK (severity IN ('critical', 'warning', 'info')),
+    opened_at TEXT NOT NULL,
+    opened_scan_id INTEGER REFERENCES scans(id) ON DELETE SET NULL,
+    updated_at TEXT NOT NULL,
+    resolved_at TEXT,
+    resolved_scan_id INTEGER REFERENCES scans(id) ON DELETE SET NULL,
+    resolution TEXT,
+    detail TEXT NOT NULL DEFAULT '{}');
+CREATE UNIQUE INDEX events_open_domain ON events(domain_id, kind, subject)
+    WHERE state = 'open' AND domain_id IS NOT NULL;
+CREATE UNIQUE INDEX events_open_instance ON events(kind, subject)
+    WHERE state = 'open' AND domain_id IS NULL;
+CREATE INDEX events_by_time ON events(opened_at);
+
+ALTER TABLE users ADD COLUMN events_seen_at TEXT;
+"""
+
+# Frozen with migration 5, like the rest of it: the generation of the rules of the released
+# versions a database of schema 4 can hold (core/generation.py, RELEASED), and the coverage below
+# which a scan is partial (core/scoring.py, FULL_COVERAGE).
+GENERATIONS_OF_SCHEMA_4 = {"0.4.0": 4, "0.4.1": 4}
+FULL_COVERAGE_OF_SCHEMA_4 = 0.9
+
+# The metrics of schema 4, stored in each scan and in each of its states (0.5.0).
+METRICS = ("score_raw", "score_cap", "score_final", "diagnostic_coverage", "checks_blocked",
+           "addresses_discovered", "addresses_attempted", "addresses_conclusive",
+           "grade_withheld_reason", "cap_reasons")
+
+
+def stored_evaluation(score: int | None, coverage: float, grade_withheld_reason: str | None,
+                      full_coverage: float = FULL_COVERAGE_OF_SCHEMA_4) -> str:
+    """The evaluation of a scan from its stored columns, as Assessment.evaluation gives it."""
+    if score is None:
+        return "not_evaluated"
+    if grade_withheld_reason is not None:
+        return "undetermined"
+    return "partial" if coverage < full_coverage else "complete"
+
+
+def _stored_metrics(row: sqlite3.Row | tuple, names: Sequence[str]) -> dict:
+    values = dict(zip(names, row, strict=True))
+    metrics = {name: values[name] for name in METRICS}
+    try:  # stored as JSON text; a value that does not decode is kept as it is, never dropped
+        decoded = json.loads(metrics["cap_reasons"]) if metrics["cap_reasons"] is not None else None
+        if decoded is None or isinstance(decoded, list):
+            metrics["cap_reasons"] = decoded
+    except (TypeError, ValueError):
+        pass
+    return metrics
+
+
+def _schema_5(conn: sqlite3.Connection) -> None:
+    """5 — version 0.5.0: scheduled scans, their runs, events, the origin and the generation of
+    the rules of each scan, and the timeline of its measured states.
+
+    Nothing stored is recalculated and the code of the scoring is never called. Every existing scan
+    gets its generation (exact versions only, see GENERATIONS_OF_SCHEMA_4) and one state, made of
+    its stored values: a scan never rechecked gets a ``scan`` state at the time it was made; a
+    rechecked scan gets a single ``legacy`` state at the time of its last recheck, its stored
+    values being those after that recheck. No state is made up for the moment before a recheck:
+    those values were overwritten and are not known."""
+    from .database import _statements  # database.py imports this module
+
+    for statement in _statements(_SCHEMA_5):
+        conn.execute(statement)
+    for version, generation in GENERATIONS_OF_SCHEMA_4.items():
+        conn.execute("UPDATE scans SET engine = ? WHERE version = ?", (generation, version))
+    columns = ("id", "started_at", "engine", "score", "grade", "coverage", *METRICS)
+    for row in conn.execute(f"SELECT {', '.join(columns)} FROM scans ORDER BY id").fetchall():  # noqa: S608
+        values = dict(zip(columns, row, strict=True))
+        checks = {check_id: status for check_id, status in conn.execute(
+            "SELECT check_id, status FROM findings WHERE scan_id = ? ORDER BY rowid", (values["id"],))}
+        rechecks = conn.execute("SELECT check_id, status, checked_at FROM rechecks WHERE scan_id = ?",
+                                (values["id"],)).fetchall()
+        for check_id, status, _ in rechecks:
+            if check_id in checks:
+                checks[check_id] = status
+        at, origin = (max(r[2] for r in rechecks), "legacy") if rechecks else (values["started_at"], "scan")
+        conn.execute(
+            "INSERT INTO scan_states(scan_id, at, origin, engine, score, grade, coverage, evaluation, metrics, checks)"
+            " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (values["id"], at, origin, values["engine"], values["score"], values["grade"], values["coverage"],
+             stored_evaluation(values["score"], values["coverage"], values["grade_withheld_reason"]),
+             json.dumps(_stored_metrics(row, columns), sort_keys=True), json.dumps(checks, sort_keys=True)))
 
 
 MIGRATIONS: list[Migration] = [
@@ -191,4 +343,5 @@ MIGRATIONS: list[Migration] = [
     ALTER TABLE scans ADD COLUMN grade_withheld_reason TEXT;
     ALTER TABLE scans ADD COLUMN cap_reasons TEXT;
     """,
+    _schema_5,
 ]

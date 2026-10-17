@@ -24,7 +24,7 @@ from ..core.registry import Registry
 from ..i18n import Catalog
 from ..scanner import Scanner
 from ..security import LoginThrottle
-from ..storage import Accounts, AuditLog, CorruptScan, Database, InstanceSettings, Perimeters, Scans, instance_lock
+from ..storage import Accounts, AuditLog, CorruptScan, InstanceSettings, Perimeters, Scans, instance_lock, open_database
 from . import deps, first_run
 from .limits import ScanLimiter
 from .routes import account, admin, api, auth, domains, perimeters, report
@@ -54,7 +54,8 @@ def create_app(config: Config | None = None, registry: Registry | None = None,
             raise StartupError(f"A restoration is in progress on {config.data_dir}: start again once it is "
                                "finished.") from None
         try:
-            db = Database(config.db_path)
+            # A verified backup archive is written before any migration (storage/upgrade.py).
+            db = open_database(config, say=log.warning)
             session_key = secret_key(config.data_dir)
         except BaseException:
             folder_lock.release()
