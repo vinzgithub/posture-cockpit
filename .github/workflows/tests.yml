@@ -96,3 +96,5 @@ jobs:
           docker image inspect -f '{{.Id}} {{.Created}}' "posture-cockpit:${{ matrix.from }}"
       - name: Recette of the update
         run: scripts/docker-recette.sh upgrade "posture-cockpit:${{ matrix.from }}" posture-cockpit:ci
+      - name: Recette of an installation laid out like the production (default names)
+        run: scripts/docker-recette.sh layout "${{ matrix.from }}" "posture-cockpit:${{ matrix.from }}" posture-cockpit:ci

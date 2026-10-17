@@ -171,7 +171,13 @@ Do not copy the volume with `tar` while it runs: the database file may then disa
 
 ## Restoring
 
-Restoring checks the whole archive (content, hashes, integrity, schema) before touching anything, refuses while the application still uses the database, keeps a copy of the replaced data in `/data/backups/`, then puts back the database and the session key.
+Restoring checks the whole archive (content, hashes, integrity, schema) before touching anything, then:
+
+- it takes the data folder for itself, from its first check to its last file (lock `/data/.posture-cockpit.lock`): it refuses to begin while the application or a command uses it, and the application refuses to start until it is over;
+- it saves the replaced data as an ordinary backup, `/data/backups/posture-cockpit-before-restore-<date>.tar.gz`, restorable in turn (or copies it as it is when it is too damaged to be read);
+- it replaces the files all or nothing: if one replacement fails (full disk…), the former files are put back and the message says so.
+
+The lock holds between all the containers of one server that share the volume. On a network file system it holds only if the file server supports locks (NFSv4, NFS with lockd; not SMB/CIFS): never use the same data folder from two servers.
 
 **On the same installation:**
 
@@ -183,7 +189,7 @@ docker compose up -d
 
 **On a new installation** (another server, or a test instance): install it as above without starting it, then restore without `--replace` (its volume is empty) and start it. A backup of an older version is upgraded at start, like any older database. A backup made by a newer version is refused.
 
-As the session key is restored, open sessions stay valid; accounts, two-factor authentication and API tokens are those of the backup.
+As the session key is restored, open sessions stay valid; accounts, two-factor authentication and API tokens are those of the backup. A backup without session key (an instance that never started) gives the replaced instance a **new** key — never its former one, which would open the restored accounts that have the same numbers — and everyone signs in again; a new installation makes its own at its first start.
 
 ## Updating
 

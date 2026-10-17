@@ -171,7 +171,13 @@ Ne copiez pas le volume à chaud avec `tar` : le fichier de la base peut alors �
 
 ## Restauration
 
-La restauration vérifie toute l'archive (contenu, empreintes, intégrité, schéma) avant de toucher à quoi que ce soit, refuse si l'application utilise encore la base, garde une copie des données remplacées dans `/data/backups/`, puis remet la base et la clé de session.
+La restauration vérifie toute l'archive (contenu, empreintes, intégrité, schéma) avant de toucher à quoi que ce soit, puis :
+
+- elle prend le dossier de données pour elle seule, du premier contrôle au dernier fichier (verrou `/data/.posture-cockpit.lock`) : elle refuse de commencer si l'application ou une commande l'utilise, et l'application refuse de démarrer tant qu'elle n'est pas finie ;
+- elle enregistre les données remplacées comme une sauvegarde ordinaire, `/data/backups/posture-cockpit-before-restore-<date>.tar.gz`, restaurable à son tour (ou les copie telles quelles si elles sont trop abîmées pour être lues) ;
+- elle remplace les fichiers tout ou rien : si un remplacement échoue (disque plein…), les anciens fichiers sont remis en place et le message le dit.
+
+Le verrou vaut entre tous les conteneurs d'un même serveur qui partagent le volume. Sur un système de fichiers réseau, il ne vaut que si le serveur de fichiers gère les verrous (NFSv4, NFS avec lockd ; pas SMB/CIFS) : n'utilisez jamais le même dossier de données depuis deux serveurs.
 
 **Sur la même installation :**
 
@@ -183,7 +189,7 @@ docker compose up -d
 
 **Sur une nouvelle installation** (autre serveur, ou instance de test) : installez-la comme ci-dessus sans la démarrer, puis restaurez sans `--replace` (son volume est vide) et démarrez. Une sauvegarde d'une version plus ancienne est mise à niveau au démarrage, comme toute base ancienne. Une sauvegarde faite par une version plus récente est refusée.
 
-La clé de session étant restaurée, les sessions ouvertes restent valides ; les comptes, la double authentification et les jetons d'API sont ceux de la sauvegarde.
+La clé de session étant restaurée, les sessions ouvertes restent valides ; les comptes, la double authentification et les jetons d'API sont ceux de la sauvegarde. Une sauvegarde sans clé de session (instance jamais démarrée) donne une **nouvelle** clé à l'instance remplacée — jamais l'ancienne, qui ouvrirait les comptes restaurés portant les mêmes numéros — et chacun se reconnecte ; une nouvelle installation crée la sienne au premier démarrage.
 
 ## Mise à jour
 

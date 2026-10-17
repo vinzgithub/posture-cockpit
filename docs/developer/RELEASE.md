@@ -11,7 +11,7 @@
 | `test (3.11)`, `test (3.12)`, `test (3.13)` | Ruff, mypy, the whole suite (including databases made by v0.3.0 and v0.4.0) |
 | `browser` | The pages in Chromium, on a desktop and on phones |
 | `docker` | The image, the recette of `scripts/docker-recette.sh install`, then the whole suite **inside the image** (the libraries and OpenSSL it ships) |
-| `upgrade (v0.3.0)`, `upgrade (v0.4.0)` | An instance made by the released image of these versions (rebuilt from their tag), updated to the image of the repository, then back to v0.4.0 |
+| `upgrade (v0.3.0)`, `upgrade (v0.4.0)` | An instance made by the released image of these versions (rebuilt from their tag), updated to the image of the repository, then back to v0.4.0; and an installation laid out like the production (the `compose.yaml` of that version, in a `posture-cockpit` folder), moved to the new `compose.yaml` on the same volume |
 
 The checks the recette passed are listed in the annotations of the run.
 
@@ -59,6 +59,12 @@ Tags published (`scripts/release_tags.py`):
 | `v0.3.3` (a fix of an older line) | `0.3.3`, `0.3` — never `latest` |
 | `v0.4.2-rc.1`, "pre-release" box ticked | `0.4.2-rc.1` only — neither `0.4` nor `latest` |
 
-A version already published is never overwritten: the publication fails. The tag must match the repository (for a pre-release, `pyproject.toml` says `0.4.2rc1` and `compose.yaml` keeps the final version `0.4.2`; the pre-release is tested with `POSTURE_COCKPIT_IMAGE=ghcr.io/vinzgithub/posture-cockpit:0.4.2-rc.1`).
+Publication happens in three steps, each checked (`scripts/registry_tag.py`):
+
+1. **State of the version in the registry.** Absent: publish. Published from the same commit: an interrupted publication resumes without rebuilding. Published from another commit, or from an unknown one: **refused**, a published version is never overwritten. A registry that cannot be read (authentication refused, error, timeout) stops everything: nothing is guessed.
+2. **Both architectures pushed under the exact version only.**
+3. **Moving tags** (`X.Y`, `latest`) pointed at that digest, then **every tag read back** and the digests compared.
+
+A failure between 2 and 3 leaves the exact version published and the moving tags where they were: re-running the job ("Re-run failed jobs") resumes at step 3. On a pull request, all of it is rehearsed against a registry started in the job (`localhost:5000`), refusals included. The tag must match the repository (for a pre-release, `pyproject.toml` says `0.4.2rc1` and `compose.yaml` keeps the final version `0.4.2`; the pre-release is tested with `POSTURE_COCKPIT_IMAGE=ghcr.io/vinzgithub/posture-cockpit:0.4.2-rc.1`).
 
 **Once**: after the first publication, make the package public (GitHub → Packages → posture-cockpit → Package settings → Change visibility → Public), so that installing needs no account. This choice is **irreversible**: a public package cannot become private again.

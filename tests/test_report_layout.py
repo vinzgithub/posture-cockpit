@@ -81,7 +81,9 @@ def test_the_method_is_no_longer_cut_from_its_heading(catalog):
                       and "".join(box.element.itertext()).strip() == catalog.text("fr", "report.method")]
     assert method_heading and set(method_heading) == set(_pages_of(document, "method"))
     # The annex follows on the same page, unless the method already fills most of it (0.4.1: the
-    # list of what could not be measured is shorter, so the method moved up a page).
+    # list of what could not be measured is shorter, so the method moved up a page). Checked by
+    # eye on the PDFs of the demo and of a redirected site, in French and English: the method
+    # ends at 79 to 82 % of the page, the annex heading and its first rows would not fit below.
     annex = _pages_of(document, "annex-title")[0]
     if annex != method_heading[0]:
         assert annex == method_heading[0] + 1

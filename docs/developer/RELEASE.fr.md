@@ -11,7 +11,7 @@
 | `test (3.11)`, `test (3.12)`, `test (3.13)` | Ruff, mypy, toute la suite (dont les bases faites par v0.3.0 et v0.4.0) |
 | `browser` | Les pages dans Chromium, sur un ordinateur et des téléphones |
 | `docker` | L'image, la recette de `scripts/docker-recette.sh install`, puis toute la suite **dans l'image** (bibliothèques et OpenSSL qu'elle embarque) |
-| `upgrade (v0.3.0)`, `upgrade (v0.4.0)` | Une instance faite par l'image publiée de ces versions (reconstruite depuis leur tag), mise à jour vers l'image du dépôt, puis retour à v0.4.0 |
+| `upgrade (v0.3.0)`, `upgrade (v0.4.0)` | Une instance faite par l'image publiée de ces versions (reconstruite depuis leur tag), mise à jour vers l'image du dépôt, puis retour à v0.4.0 ; et une installation disposée comme la production (le `compose.yaml` de la version, dans un dossier `posture-cockpit`), passée au nouveau `compose.yaml` sur le même volume |
 
 Les vérifications réussies de la recette sont listées dans les annotations de l'exécution.
 
@@ -59,6 +59,12 @@ POSTURE_COCKPIT_IMAGE=posture-cockpit:recette
 | `v0.3.3` (correctif d'une branche plus ancienne) | `0.3.3`, `0.3` — jamais `latest` |
 | `v0.4.2-rc.1`, case « pre-release » cochée | `0.4.2-rc.1` seulement — ni `0.4` ni `latest` |
 
-Une version déjà publiée n'est jamais écrasée : la publication échoue. Le tag doit correspondre au dépôt (pour une préversion, `pyproject.toml` dit `0.4.2rc1` et `compose.yaml` garde la version finale `0.4.2` ; on teste la préversion avec `POSTURE_COCKPIT_IMAGE=ghcr.io/vinzgithub/posture-cockpit:0.4.2-rc.1`).
+La publication se fait en trois temps, chacun vérifié (`scripts/registry_tag.py`) :
+
+1. **État de la version dans le registre.** Absente : on publie. Publiée depuis le même commit : une publication interrompue reprend sans reconstruire. Publiée depuis un autre commit, ou depuis un commit inconnu : **refus**, une version publiée n'est jamais écrasée. Un registre illisible (authentification refusée, erreur, délai) arrête tout : rien n'est deviné.
+2. **Envoi des deux architectures sous la version exacte seulement.**
+3. **Étiquettes mobiles** (`X.Y`, `latest`) pointées sur ce même digest, puis **relecture de chaque étiquette** et comparaison des digests.
+
+Un échec entre 2 et 3 laisse la version exacte publiée et les étiquettes mobiles où elles étaient : relancer le job (« Re-run failed jobs ») reprend à l'étape 3. Sur une PR, tout cela est rejoué sur un registre lancé dans le job (`localhost:5000`), y compris les refus. Le tag doit correspondre au dépôt (pour une préversion, `pyproject.toml` dit `0.4.2rc1` et `compose.yaml` garde la version finale `0.4.2` ; on teste la préversion avec `POSTURE_COCKPIT_IMAGE=ghcr.io/vinzgithub/posture-cockpit:0.4.2-rc.1`).
 
 **Une seule fois** : après la première publication, rendre le paquet public (GitHub → Packages → posture-cockpit → Package settings → Change visibility → Public), pour que l'installation n'ait besoin d'aucun compte. Ce choix est **irréversible** : un paquet public ne peut pas redevenir privé.

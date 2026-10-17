@@ -11,6 +11,12 @@
 #                                                       backup, restore, refusals
 #   scripts/docker-recette.sh upgrade OLD_IMAGE IMAGE   data made by OLD_IMAGE, then IMAGE, then
 #                                                       back to OLD_IMAGE when it has schema 4
+#   scripts/docker-recette.sh layout OLD_TAG OLD_IMAGE IMAGE
+#                                                       an installation made like the production: the
+#                                                       compose.yaml of OLD_TAG in a folder named
+#                                                       posture-cockpit, then the new compose.yaml there.
+#                                                       Uses the default names: refuses to run where
+#                                                       a container or volume of that name exists.
 #   scripts/docker-recette.sh quick IMAGE [VERSION]     start, health, PDF libraries (another architecture)
 set -euo pipefail
 
@@ -184,6 +190,11 @@ install_recette() {  # install_recette IMAGE VERSION
   if in_container "$copy" posture-cockpit restore --replace - < "$WORK/backup.tar.gz" > "$WORK/out.txt" 2>&1; then fail "restore accepted while the server runs"; fi
   grep -q "stop Posture Cockpit first" "$WORK/out.txt" || fail "message: $(cat "$WORK/out.txt")"
   ok "restore refused while the server uses the database"
+  if compose "$copy" run --rm --no-deps -T posture-cockpit posture-cockpit restore --replace - < "$WORK/backup.tar.gz" > "$WORK/out.txt" 2>&1; then
+    fail "restore accepted from a second container while the server runs"
+  fi
+  grep -q "stop Posture Cockpit first" "$WORK/out.txt" || fail "message: $(cat "$WORK/out.txt")"
+  ok "restore refused from a second container sharing the volume (lock of the data folder)"
   compose "$copy" stop >/dev/null 2>&1
   expect_output "former data is kept" compose "$copy" run --rm --no-deps -T posture-cockpit posture-cockpit restore --replace - < "$WORK/backup.tar.gz"
   start "$copy"
@@ -242,6 +253,50 @@ upgrade_recette() {  # upgrade_recette OLD_IMAGE IMAGE
   fi
 }
 
+layout_recette() {  # layout_recette OLD_TAG OLD_IMAGE IMAGE: the default names of a real installation
+  local tag=$1 old=$2 image=$3 name=posture-cockpit version key volume=posture-cockpit_posture-cockpit-data
+  if docker container inspect posture-cockpit >/dev/null 2>&1 || docker volume inspect "$volume" >/dev/null 2>&1; then
+    fail "a container or volume named posture-cockpit exists here: this recette uses those names, run it elsewhere"
+  fi
+  version=$(docker run --rm --entrypoint python "$image" -c 'import posture_cockpit; print(posture_cockpit.__version__)')
+  say "Installation made with the compose.yaml of $tag, in a folder named posture-cockpit"
+  mkdir -p "$WORK/$name"
+  git -C "$ROOT" show "$tag:compose.yaml" \
+    | sed -e "s|^\(    image:\).*|\1 $old|" -e 's|"8080:8080"|"127.0.0.1:18084:8080"|' > "$WORK/$name/compose.yaml"
+  grep -q "127.0.0.1:18084:8080" "$WORK/$name/compose.yaml" || fail "the compose.yaml of $tag has an unexpected port line"
+  PROJECTS+=("$name")
+  echo "POSTURE_COCKPIT_PORT=18084" > "$WORK/$name/.env"  # read by url(); the old file ignores it
+  start "$name"
+  create_admin "$name" "" demo
+  key=$(key_hash "$name")
+  [ "$(docker volume ls -q | grep '^posture-cockpit_')" = "$volume" ] || fail "volume: $(docker volume ls -q)"
+  ok "data in the volume $volume, container posture-cockpit"
+
+  say "The new compose.yaml in the same folder, settings in .env"
+  compose "$name" down >/dev/null 2>&1   # the volume stays
+  cp "$ROOT/compose.yaml" "$WORK/$name/compose.yaml"
+  printf 'POSTURE_COCKPIT_IMAGE=%s\nPOSTURE_COCKPIT_PORT=18084\nPOSTURE_COCKPIT_BIND=127.0.0.1\n' "$image" > "$WORK/$name/.env"
+  start "$name"
+  expect_version "$name" "$version"
+  [ "$(docker volume ls -q | grep '^posture-cockpit_')" = "$volume" ] || fail "a second volume appeared: $(docker volume ls -q)"
+  docker container inspect posture-cockpit >/dev/null 2>&1 || fail "the container is no longer named posture-cockpit"
+  [ "$(key_hash "$name")" = "$key" ] || fail "the session key changed"
+  log_in "$name"
+  expect_output "1 account(s), 1 domain(s), 1 scan(s)" in_container "$name" posture-cockpit info
+  ok "same volume, same container name, same key, same data with the new compose.yaml"
+
+  if [ "$tag" = v0.4.0 ]; then
+    say "Back to the compose.yaml and image of $tag"
+    compose "$name" down >/dev/null 2>&1
+    git -C "$ROOT" show "$tag:compose.yaml" \
+      | sed -e "s|^\(    image:\).*|\1 $old|" -e 's|"8080:8080"|"127.0.0.1:18084:8080"|' > "$WORK/$name/compose.yaml"
+    echo "POSTURE_COCKPIT_PORT=18084" > "$WORK/$name/.env"
+    start "$name"
+    log_in "$name"
+    ok "$tag runs again on the volume left by $version"
+  fi
+}
+
 quick_recette() {  # quick_recette IMAGE VERSION: another architecture, under emulation
   local image=$1 version=$2 name=pc-recette-quick
   image_checks "$image"
@@ -256,6 +311,7 @@ command=${1:-}
 case "$command" in
   install) install_recette "$2" "${3:-$(sed -n 's/^version = "\(.*\)"/\1/p' "$ROOT/pyproject.toml")}" ;;
   upgrade) upgrade_recette "$2" "$3" ;;
+  layout) layout_recette "$2" "$3" "$4" ;;
   quick) quick_recette "$2" "${3:-$(sed -n 's/^version = "\(.*\)"/\1/p' "$ROOT/pyproject.toml")}" ;;
   *) sed -n '2,15p' "$0"; exit 2 ;;
 esac
