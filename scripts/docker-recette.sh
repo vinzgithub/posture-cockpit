@@ -18,10 +18,11 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 WORK=$(mktemp -d)
 PASSWORD="correct horse 42"
 PROJECTS=()
+PASSED=()
 STEP=""
 
 say() { printf '\n\033[1m== %s\033[0m\n' "$*"; STEP=$*; }
-ok() { printf '   ok: %s\n' "$*"; }
+ok() { printf '   ok: %s\n' "$*"; PASSED+=("$*"); }
 fail() { printf '::error::%s: %s\n' "${STEP:-recette}" "$*" >&2; exit 1; }
 
 cleanup() {
@@ -259,3 +260,7 @@ case "$command" in
   *) sed -n '2,15p' "$0"; exit 2 ;;
 esac
 say "Recette $command: everything passed"
+if [ -n "${GITHUB_ACTIONS:-}" ]; then  # an annotation of the run: the checks that passed
+  summary=$(printf -- '- %s%%0A' "${PASSED[@]}")
+  echo "::notice title=docker-recette ${command} (${#PASSED[@]} checks passed)::${summary}"
+fi
