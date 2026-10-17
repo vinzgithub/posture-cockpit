@@ -36,7 +36,7 @@ def test_first_state_has_no_comparison():
 ])
 def test_uncomparable_states_never_expose_delta(override, reason):
     previous = state()
-    current = state(**override, at="2026-10-18T10:00:00+00:00")
+    current = state(**{"at": "2026-10-18T10:00:00+00:00", **override})
     result = compare(previous, current)
     assert result.comparable is False
     assert result.reason == reason
