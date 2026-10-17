@@ -80,7 +80,7 @@ This document is the map of the code: where things are, how a scan flows, and ho
 
 One SQLite file in the data folder, in WAL mode, readable by its owner only. Tables: `users`, `totp`, `recovery_codes`, `api_tokens`, `perimeters`, `domains` (with `perimeter_id`), `scans` (score, grade, coverage, perimeter), `findings`, `rechecks`, `audit_log`, `meta`.
 
-**Migrations**: `storage/schema.py` holds a list of SQL scripts or Python functions. The database remembers how many it applied (`meta.schema_version`) and applies the next ones at start-up, each in a transaction, with foreign keys switched off and checked (`PRAGMA foreign_key_check`) before the commit, as SQLite documents for rebuilding a table. Before migrating a database that holds data, a copy is written to `backups/`. To change the schema, **append a migration to the list**; never edit one that has been released.
+**Migrations**: `storage/schema.py` holds a list of SQL scripts or Python functions. The database remembers how many it applied (`meta.schema_version`) and applies the next ones at start-up, each in a transaction, with foreign keys switched off and checked (`PRAGMA foreign_key_check`) before the commit, as SQLite documents for rebuilding a table. Before migrating a database that holds data, a copy is written to `backups/`. To change the schema, **append a migration to the list**; never edit one that has been released. A database whose schema is newer than the list (written by a later release) is refused at start-up, untouched (`UnsupportedSchema`). `storage/backup.py` makes and restores consistent backups (`posture-cockpit backup`, `restore`).
 
 | Version | Migration |
 |---|---|
@@ -144,6 +144,13 @@ Parameters: `{name}`. A parameter whose name ends with `_on` is an ISO date, wri
 - `tests/test_perimeters.py` and `tests/test_app_security.py` cover access rights, the audit log, sign-in protections and scan limits.
 
 One test needs an IPv6 loopback address and is skipped on machines without one.
+
+Since 0.4.1, `tests/test_v041_migrations.py` opens databases made by the real code of v0.3.0 and
+v0.4.0 (SQL dumps in `tests/data/`, written by `tests/data/make_legacy_databases.py`), and the CI
+(`.github/workflows/tests.yml`) also runs `scripts/docker-recette.sh` on the built image (new
+installation, Docker protections, setup code, backup and restore, refusals, updates from the
+released v0.3.0 and v0.4.0 images and rollback) and the whole suite inside the image. Release
+process: [RELEASE.md](RELEASE.md).
 
 ## 10. Conventions
 

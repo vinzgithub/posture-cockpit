@@ -19,7 +19,6 @@
   {% if scan.version.startswith("0.1.") %}<p class="small muted">{{ t("history.recalculated") }}</p>{% endif %}
   <p class="coverage {{ 'coverage-partial' if result.partial or result.score is none }}">
     {% if result.score is not none %}{{ t('v04.score_only', score=result.score) if result.undetermined else t('details.result', score=result.score, grade=result.grade) }}{% else %}{{ t('score.not_evaluated') }}{% endif %}
-    · {{ t('score.coverage', evaluated=result.evaluated, applicable=result.applicable, percent=result.coverage_percent) }}
   </p>
 </div>
 

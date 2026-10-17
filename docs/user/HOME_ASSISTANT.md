@@ -113,6 +113,11 @@ stored coverage (with the same API rounding), checks_blocked is 0, score_raw and
 (or null when no score exists), and score_cap is null. Address counts remain null. `not_evaluated` counts only errors, excluding
 blocked checks. Existing keys and authentication remain unchanged.
 
+**Precision (0.4.1).** `coverage` and `diagnostic_coverage` are ratios between 0 and 1 rounded to
+3 decimals (in 0.4.0, `diagnostic_coverage` was not rounded for 0.4 scans). Pages and the PDF show
+the whole percentage **rounded down**: 0.8996 shows as "89 %" while the API gives `0.9`. Compare
+`coverage` with the thresholds the scoring uses (0.5 and 0.9) rather than with a rounded percentage.
+
 
 An unreadable stored analysis is isolated. The domains endpoint keeps returning valid
 summaries for other domains and returns an entry with `domain`, `scan_id` and

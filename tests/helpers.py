@@ -16,9 +16,14 @@ def page_csrf(client, path: str = "/settings") -> str:
     return csrf_of(client.get(path).text)
 
 
+def setup_code(app) -> str:
+    """The one-time code the application wrote to its log at start (web/first_run.py)."""
+    return app.state.setup_code
+
+
 def setup_account(client, demo: bool = False, lang: str = "fr"):
-    data = {"csrf": page_csrf(client, "/setup"), "username": "vincent", "password": PASSWORD,
-            "password2": PASSWORD, "lang": lang}
+    data = {"csrf": page_csrf(client, "/setup"), "setup_code": setup_code(client.app), "username": "vincent",
+            "password": PASSWORD, "password2": PASSWORD, "lang": lang}
     if demo:
         data["demo"] = "on"
     return client.post("/setup", data=data, follow_redirects=False)

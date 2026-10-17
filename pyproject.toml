@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "posture-cockpit"
-version = "0.4.0"
+version = "0.4.1"
 description = "Self-hosted passive security check of a domain (mail, TLS, web, DNS) with a guided plan of fixes and a PDF report."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -28,7 +28,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.8", "mypy>=1.13"]
+dev = ["pytest>=8", "ruff>=0.8", "mypy>=1.13", "pyyaml>=6"]
 # Browser tests (tests/browser), run by their own CI job.
 browser = ["playwright==1.56.0"]
 

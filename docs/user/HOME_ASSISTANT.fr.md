@@ -113,6 +113,11 @@ stocké divisé par 100 (ou null sans score), et score_cap vaut null. Les compte
 restent nulls. `not_evaluated` compte les erreurs,
 sans les contrôles bloqués. Les champs existants et l’authentification sont conservés.
 
+**Précision (0.4.1).** `coverage` et `diagnostic_coverage` sont des rapports entre 0 et 1 arrondis à
+3 décimales (en 0.4.0, `diagnostic_coverage` ne l’était pas pour les analyses 0.4). Les pages et le
+PDF affichent le pourcentage arrondi à l’entier inférieur : 0,8996 s’affiche « 89 % » alors que l’API
+donne `0.9`. Comparez `coverage` aux seuils de la notation (0,5 et 0,9) plutôt qu’à un pourcentage arrondi.
+
 
 Une analyse stockée illisible est isolée. L’API des domaines continue à fournir les
 résultats des domaines sains ; l’entrée endommagée contient `domain`, `scan_id` et

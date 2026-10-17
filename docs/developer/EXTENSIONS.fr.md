@@ -149,11 +149,13 @@ Puis, sur un vrai domaine : `pip install -e .` dans le dossier de l'extension, e
 - **Avec Docker** : une image qui part de la nôtre :
 
   ```dockerfile
-  FROM ghcr.io/vinzgithub/posture-cockpit:latest
+  FROM ghcr.io/vinzgithub/posture-cockpit:0.4.1
   USER root
   COPY mon-extension /tmp/mon-extension
   RUN pip install --no-cache-dir /tmp/mon-extension && rm -rf /tmp/mon-extension
-  USER cockpit
+  USER 10001:10001
   ```
+
+  Puis, dans le `.env` de l'installation : `POSTURE_COCKPIT_IMAGE=<votre image>`, et `docker compose up -d`.
 
 `posture-cockpit extensions` liste ce qui est chargé ; la page **Administration** aussi, avec un interrupteur par extension et l'erreur exacte d'une extension qui n'a pas pu être chargée.

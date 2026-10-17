@@ -7,6 +7,7 @@ Run with:  uvicorn --factory posture_cockpit.web.app:create_app
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 
 from fastapi import FastAPI, Request
@@ -17,14 +18,14 @@ from starlette.exceptions import HTTPException
 from starlette.middleware.sessions import SessionMiddleware
 
 from .. import __version__
-from ..config import Config, secret_key
+from ..config import Config, StartupError, prepare_data_dir, secret_key
 from ..core.network import Network
 from ..core.registry import Registry
 from ..i18n import Catalog
 from ..scanner import Scanner
 from ..security import LoginThrottle
-from ..storage import Accounts, AuditLog, CorruptScan, Database, InstanceSettings, Perimeters, Scans
-from . import deps
+from ..storage import Accounts, AuditLog, CorruptScan, Database, InstanceSettings, Perimeters, Scans, instance_lock
+from . import deps, first_run
 from .limits import ScanLimiter
 from .routes import account, admin, api, auth, domains, perimeters, report
 from .services import STATIC_DIR, TEMPLATES_DIR, Services
@@ -33,13 +34,34 @@ from .services import STATIC_DIR, TEMPLATES_DIR, Services
 CSP = ("default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; font-src 'self'; "
        "form-action 'self'; base-uri 'none'; object-src 'none'; frame-ancestors {frame_ancestors}")
 
+log = logging.getLogger("uvicorn.error")
+
 
 def create_app(config: Config | None = None, registry: Registry | None = None,
                network_factory: Callable[[str], Network] | None = None) -> FastAPI:
     """``registry`` and ``network_factory`` let the tests use their own checks and recorded answers."""
     config = config or Config.from_env()
     registry = registry or Registry.discover()
-    db = Database(config.db_path)
+    try:
+        # A folder the application cannot write, an unknown schema or a damaged key stop the start
+        # here, with a message saying what to do, rather than with an error on the first request.
+        prepare_data_dir(config.data_dir)
+        # Shared with the commands, never with a restoration (storage/instance_lock.py): kept until
+        # the application stops.
+        try:
+            folder_lock = instance_lock.shared(config.data_dir)
+        except instance_lock.Busy:
+            raise StartupError(f"A restoration is in progress on {config.data_dir}: start again once it is "
+                               "finished.") from None
+        try:
+            db = Database(config.db_path)
+            session_key = secret_key(config.data_dir)
+        except BaseException:
+            folder_lock.release()
+            raise
+    except StartupError as error:
+        log.error("Posture Cockpit cannot start: %s", error)
+        raise
     settings = InstanceSettings(db)
     services = Services(
         config=config, db=db, accounts=Accounts(db), scans=Scans(db), perimeters=Perimeters(db), audit=AuditLog(db),
@@ -53,6 +75,15 @@ def create_app(config: Config | None = None, registry: Registry | None = None,
 
     app = FastAPI(title="Posture Cockpit", version=__version__, docs_url=None, redoc_url=None, openapi_url=None)
     app.state.services = services
+    app.state.folder_lock = folder_lock
+    app.router.on_shutdown.append(folder_lock.release)
+    # While no account exists, /setup asks for a one-time code written to the log (first_run.py).
+    app.state.setup_code = None
+    if services.accounts.count() == 0:
+        app.state.setup_code = first_run.prepare(db, config.setup_code)
+        first_run.announce(app.state.setup_code, configured=bool(config.setup_code))
+    else:
+        first_run.clear(db)
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
     @app.middleware("http")
@@ -70,7 +101,7 @@ def create_app(config: Config | None = None, registry: Registry | None = None,
             response.headers["Cache-Control"] = "no-store"
         return response
 
-    app.add_middleware(SessionMiddleware, secret_key=secret_key(config.data_dir), session_cookie=config.session_cookie,
+    app.add_middleware(SessionMiddleware, secret_key=session_key, session_cookie=config.session_cookie,
                        max_age=config.session_max_age, same_site="lax", https_only=config.cookie_secure)
 
     _add_error_pages(app)

@@ -260,7 +260,7 @@ def test_a_domain_that_could_not_be_checked_is_not_evaluated_everywhere(signed_i
 
     plan = signed_in.get("/domains/down.example").text
     assert "Non évalué" in plan and "Note impossible" in plan and "100</strong>" not in plan
-    assert re.search(r"Couverture \d+\xa0% : \d+ contrôles évalués sur \d+", plan)
+    assert re.search(r"Couverture de notation \d+\xa0% : \d+ contrôles évalués sur \d+", plan)
     # The recorded timeouts are reported as LiveNetwork reports real ones (0.3.1: a plain network error).
     assert "contrôles non évalués" in plan and "Délai dépassé lors de la connexion au serveur" in plan
     listing = signed_in.get("/domains").text
@@ -287,6 +287,6 @@ def test_score_is_the_same_on_every_surface(signed_in):
     computed = scoring.assess(stored.current())
     assert (stored.score, stored.grade) == (computed.score, computed.grade) == (57, "C")
     page = signed_in.get(f"/domains/{DEMO}").text
-    assert '<strong>57</strong><span>/100</span>' in page and "Couverture 100" in page
+    assert '<strong>57</strong><span>/100</span>' in page and "Couverture de notation 100" in page
     context = report_context(s.catalog, "fr", stored)
     assert (context["result"].score, context["result"].grade) == (57, "C")

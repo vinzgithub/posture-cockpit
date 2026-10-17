@@ -53,6 +53,10 @@ def _certificate_days(findings: Iterable[Finding]) -> int | None:
     return int(cert.outcome.params["days"])
 
 
+def _ratio(value: float | None) -> float | None:
+    return None if value is None else round(value, 3)
+
+
 def _summary(scan: Scan) -> dict:
     """What a monitoring tool needs. ``score`` and ``grade`` are null when the scan is not evaluated
     (too little could be checked); ``evaluation`` says which case applies."""
@@ -67,7 +71,8 @@ def _summary(scan: Scan) -> dict:
         "grade": result.grade,
         "evaluation": evaluation,
         "coverage": round(result.coverage, 3),
-        "diagnostic_coverage": result.diagnostic_coverage if modern else round(scan.coverage, 3),
+        # Ratios rounded to 3 decimals, like coverage (0.4.1: diagnostic_coverage was not rounded).
+        "diagnostic_coverage": (_ratio(result.diagnostic_coverage) if modern else round(scan.coverage, 3)),
         "checks_blocked": result.blocked if modern else 0,
         "score_raw": result.score_raw if modern else (scan.score / 100 if scan.score is not None else None),
         "score_cap": result.score_cap if modern else None,

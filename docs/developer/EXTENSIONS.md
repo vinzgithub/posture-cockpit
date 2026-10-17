@@ -149,11 +149,13 @@ Then, on a real domain: `pip install -e .` in the extension folder, and `posture
 - **With Docker**: an image based on ours:
 
   ```dockerfile
-  FROM ghcr.io/vinzgithub/posture-cockpit:latest
+  FROM ghcr.io/vinzgithub/posture-cockpit:0.4.1
   USER root
   COPY my-extension /tmp/my-extension
   RUN pip install --no-cache-dir /tmp/my-extension && rm -rf /tmp/my-extension
-  USER cockpit
+  USER 10001:10001
   ```
+
+  Then, in the `.env` of the installation: `POSTURE_COCKPIT_IMAGE=<your image>`, and `docker compose up -d`.
 
 `posture-cockpit extensions` lists what is loaded; so does the **Administration** page, with a switch per extension and the exact error of an extension that could not be loaded.

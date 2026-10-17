@@ -127,6 +127,12 @@ def finding_summary(catalog: Catalog, lang: str, finding: Finding, domain: str) 
     Notes are the other anomalies a check found besides the one its verdict describes
     (``evidence["notes"]``: translation keys with their parameters). Incomplete legacy DNS
     observations get a truthful generic wording."""
+    return " ".join([finding_verdict(catalog, lang, finding, domain), *_notes(catalog, lang, finding, domain)])
+
+
+def finding_verdict(catalog: Catalog, lang: str, finding: Finding, domain: str) -> str:
+    """The verdict of a finding alone, without its notes: for the places that sum up (the
+    areas of the PDF report, the list of what could not be measured)."""
     values = {"domain": domain, **finding.outcome.params}
     key = finding.outcome.summary
     if "zone" not in values:
@@ -135,7 +141,7 @@ def finding_summary(catalog: Catalog, lang: str, finding: Finding, domain: str) 
             values["zone"] = recorded_zone
         elif key in _LEGACY_DNS_TEXT:
             key = _LEGACY_DNS_TEXT[key]
-    return " ".join([catalog.text(lang, key, values), *_notes(catalog, lang, finding, domain)])
+    return catalog.text(lang, key, values)
 
 
 def _notes(catalog: Catalog, lang: str, finding: Finding, domain: str) -> list[str]:

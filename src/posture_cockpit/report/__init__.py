@@ -29,7 +29,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from .. import __version__
 from ..core import scoring
 from ..core.model import Effort, Finding, Status
-from ..i18n import Catalog, finding_summary, fmt_date
+from ..i18n import Catalog, finding_summary, finding_verdict, fmt_date
 from ..storage import Scan
 from ..timezones import UTC, local, offset_label
 
@@ -103,7 +103,10 @@ def report_context(catalog: Catalog, lang: str, scan: Scan, author: str = "", tz
         diagnosis = t("report.diagnosis.not_evaluated", evaluated=result.evaluated, applicable=result.applicable)
         conclusion = t("report.diagnosis.plan_unscored", n=len(prescriptions)) if prescriptions else ""
     elif prescriptions:
-        diagnosis = t("report.diagnosis.issues", **numbers)
+        # A count of zero is left out of the sentence rather than written as "0 can be improved".
+        diagnosis = t("report.diagnosis.issues" if numbers["fail"] and numbers["warn"]
+                      else "report.diagnosis.issues_no_warn" if numbers["fail"] else "report.diagnosis.issues_no_fail",
+                      **numbers)
         conclusion = t("report.diagnosis.plan_partial" if result.partial else "report.diagnosis.plan",
                        n=len(prescriptions), minutes=minutes, grade=plan.target.grade,
                        coverage=result.coverage_percent)
@@ -118,17 +121,28 @@ def report_context(catalog: Catalog, lang: str, scan: Scan, author: str = "", tz
         if assessment.score is None:
             # The category may have reliable FAIL/WARN findings despite insufficient coverage.
             comment = (t("report.area_unscored_with_finding",
-                         finding=_text(catalog, lang, worst.outcome.summary, worst, scan.domain))
+                         finding=finding_verdict(catalog, lang, worst, scan.domain))
                        if worst else t("report.area_not_evaluated"))
         elif worst:
-            comment = _text(catalog, lang, worst.outcome.summary, worst, scan.domain)
+            # The verdict only: its details are in the prescription and the annex.
+            comment = finding_verdict(catalog, lang, worst, scan.domain)
         else:
             comment = t("report.all_ok")
         categories.append({"label": t(f"category.{category}"), "score": assessment.score,
                            "partial": assessment.partial, "comment": comment})
 
+    # What could not be measured, by cause. Checks with the same reason share one line (the ten
+    # dependents of a refused HTTPS say the same thing); an address needs no reason: its heading
+    # is the cause.
+    def gap_reason(f: Finding) -> str:
+        if f.status is Status.BLOCKED:
+            return t("v04.gap.blocked")
+        if f.outcome.evidence.get("cause") == scoring.CAUSE_DEPENDENCY:
+            return t("v04.gap.dependency")
+        return finding_verdict(catalog, lang, f, scan.domain)
+
     gaps = [{"cause": f.outcome.evidence.get("cause", "dependency" if f.status is Status.BLOCKED else "network"),
-             "title": t(f"{f.check_id}.title"), "reason": _text(catalog, lang, f.outcome.summary, f, scan.domain)}
+             "title": t(f"{f.check_id}.title"), "reason": gap_reason(f)}
             for f in findings if f.status in {Status.ERROR, Status.BLOCKED}]
 
     root = next((f for f in findings if f.check_id == "web.https_redirect"), None)
@@ -137,8 +151,7 @@ def report_context(catalog: Catalog, lang: str, scan: Scan, author: str = "", tz
             for address, observed in observation.get("addresses", {}).items():
                 if observed["class"] in {"unknown", "untestable", "tls_only"}:
                     cause = observed.get("cause", "network")
-                    gaps.append({"cause": cause, "title": f"{host} ({address})",
-                                 "reason": t("v04.cause." + cause)})
+                    gaps.append({"cause": cause, "title": f"{host} ({address})", "reason": ""})
 
     annex = []
     for f in findings:
@@ -167,9 +180,17 @@ def report_context(catalog: Catalog, lang: str, scan: Scan, author: str = "", tz
         "diagnosis": diagnosis, "conclusion": conclusion, "prescriptions": prescriptions,
         "improvements": improvements, "categories": categories, "annex": annex, "gaps": gaps,
         "checks_count": len(findings), "addresses": scan.addresses(), "plan": plan,
-        "gap_groups": {cause: [g for g in gaps if g["cause"] == cause]
+        "gap_groups": {cause: _same_reason([g for g in gaps if g["cause"] == cause])
                        for cause in ("network", "dependency", "tool", "policy", "budget")},
     }
+
+
+def _same_reason(gaps: list[dict]) -> list[dict]:
+    """One line per reason, in the order of first appearance: titles joined, reason once."""
+    lines: dict[str, list[str]] = {}
+    for gap in gaps:
+        lines.setdefault(gap["reason"], []).append(gap["title"])
+    return [{"titles": titles, "reason": reason} for reason, titles in lines.items()]
 
 
 def render_html(catalog: Catalog, lang: str, scan: Scan, author: str = "", tz: tzinfo = UTC, *,

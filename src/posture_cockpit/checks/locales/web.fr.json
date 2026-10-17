@@ -109,7 +109,7 @@
   "web.https_redirect.note.no_route": "{count:adresse non testée|adresses non testées} depuis l'analyseur, faute de route ({addresses}).",
   "web.https_redirect.note.legacy": "{count:adresse refuse|adresses refusent} TLS 1.2 et 1.3 sans que l'analyseur puisse essayer TLS 1.0 ou 1.1 ({addresses}).",
   "web.https_redirect.note.policy": "{count:adresse exclue|adresses exclues} par la règle réseau de l'analyse ({addresses}).",
-  "web.https_redirect.note.timeout": "{count:adresse sans réponse concluante|adresses sans réponse concluante} ({addresses}).",
+  "web.https_redirect.note.timeout": "{count:adresse non concluante|adresses non concluantes} ({addresses}).",
   "web.https_redirect.note.no_http": "{count:adresse négocie|adresses négocient} TLS sans répondre en HTTP ({addresses}).",
   "web.https_redirect.attribution.undetermined": "Depuis l'analyseur, HTTPS de {host} est refusé. La cause n'a pas pu être localisée : elle peut venir de la destination ou du chemin réseau de l'analyseur.",
   "web.https_redirect.attribution.destination": "Depuis l'analyseur, HTTPS de {host} est refusé. Une autre négociation TLS du domaine a réussi depuis l'analyseur ({other}) : le refus est propre à {address} pour ce nom. L'analyse ne dit pas s'il vient du serveur ou d'un équipement placé devant lui.",

@@ -141,24 +141,16 @@ Voir [SECURITY.md](SECURITY.md).
 
 ## 🐳 Installation
 
-```yaml
-# compose.yaml
-services:
-  posture-cockpit:
-    image: ghcr.io/vinzgithub/posture-cockpit:latest
-    container_name: posture-cockpit
-    restart: unless-stopped
-    ports: ["8080:8080"]
-    volumes: ["posture-cockpit-data:/data"]
-volumes:
-  posture-cockpit-data:
-```
+Docker Compose 2.24 ou plus récent, dans un dossier vide :
 
 ```bash
+mkdir posture-cockpit && cd posture-cockpit
+curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.4.1/compose.yaml
 docker compose up -d
+docker compose logs posture-cockpit   # le code d'initialisation du premier compte
 ```
 
-Ouvrez `http://<serveur>:8080`, créez le compte administrateur, et cochez **« Analyser le domaine de démonstration »** pour découvrir l'outil. Tous les réglages, la sauvegarde et la mise à jour : [docs/user/INSTALLATION.fr.md](docs/user/INSTALLATION.fr.md).
+Ouvrez `http://<serveur>:8080/setup`, saisissez le code, créez le compte administrateur, et cochez **« Analyser le domaine de démonstration »** pour découvrir l'outil. L'image est préconstruite (amd64 et arm64), versionnée, sans privilèges et en lecture seule ; les réglages (port, fuseau, proxy inverse) vont dans un fichier `.env` facultatif. Réglages, sauvegarde, restauration, mise à jour et retour arrière : [docs/user/INSTALLATION.fr.md](docs/user/INSTALLATION.fr.md).
 
 ### En ligne de commande
 
@@ -167,6 +159,7 @@ posture-cockpit scan mon-domaine.fr          # le résultat dans le terminal (ri
 posture-cockpit scan mon-domaine.fr --json
 posture-cockpit extensions                   # les extensions chargées et leurs contrôles
 posture-cockpit disable-totp <identifiant>   # téléphone perdu et plus de codes de secours
+posture-cockpit backup --output sauvegarde.tar.gz   # sauvegarde cohérente (base et clé de session)
 ```
 
 ---
