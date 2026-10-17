@@ -9,8 +9,11 @@ can read while a scan is being saved.
 Migrations: :data:`~.schema.MIGRATIONS` is a list of SQL scripts, or Python
 functions for changes SQL alone cannot make (recomputing values). The database
 remembers how many it has applied (``meta.schema_version``) and applies the
-next ones at start-up, each in its own transaction. To change the schema,
-*append* a migration; never edit one that has been released.
+next ones at start-up, each in its own transaction, which takes the write lock (BEGIN
+IMMEDIATE) and reads the version again: of two processes starting together, one migrates and
+the other finds the work done (0.5.0). To change the schema, *append* a migration; never edit one
+that has been released. The server and the commands open the database through
+storage/upgrade.py, which writes a verified backup archive before any migration.
 
 Before migrating a database that already holds data, a copy of it is written
 to ``backups/`` next to it. While migrating, foreign keys are switched off (the
@@ -48,6 +51,8 @@ from ..config import StartupError
 from .schema import MIGRATIONS, Migration
 
 Row = sqlite3.Row
+BUSY_TIMEOUT_MS = 5000
+MIGRATION_WAIT_MS = 300_000  # a migration of another process on the same file, at start-up
 
 
 class UnsupportedSchema(StartupError):
@@ -92,7 +97,7 @@ class Database:
         try:
             self._conn.execute("PRAGMA foreign_keys = ON")
             self._conn.execute("PRAGMA journal_mode = WAL")
-            self._conn.execute("PRAGMA busy_timeout = 5000")
+            self._conn.execute(f"PRAGMA busy_timeout = {BUSY_TIMEOUT_MS}")
             self._conn.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
             self._migrate(migrations)
         except sqlite3.DatabaseError as error:
@@ -197,15 +202,29 @@ class Database:
             self.backup(f"schema{first - 1}")
         with self._lock:
             self._conn.execute("PRAGMA foreign_keys = OFF")  # has no effect inside a transaction
+            # Another process migrating the same file holds the write lock: wait for it to finish.
+            self._conn.execute(f"PRAGMA busy_timeout = {MIGRATION_WAIT_MS}")
             try:
                 for version in range(first, len(migrations) + 1):
-                    self._apply(version, migrations[version - 1])
+                    self._apply(version, migrations[version - 1], len(migrations))
             finally:
+                self._conn.execute(f"PRAGMA busy_timeout = {BUSY_TIMEOUT_MS}")
                 self._conn.execute("PRAGMA foreign_keys = ON")
 
-    def _apply(self, version: int, migration: Migration) -> None:
-        self._conn.execute("BEGIN")
+    def _apply(self, version: int, migration: Migration, known: int) -> None:
+        """Applies one migration in its own transaction, unless another process did meanwhile.
+
+        BEGIN IMMEDIATE takes the write lock before the schema version is read again (0.5.0): two
+        processes starting together on the same database apply each migration once."""
+        self._conn.execute("BEGIN IMMEDIATE")
         try:
+            row = self._conn.execute("SELECT value FROM meta WHERE key = 'schema_version'").fetchone()
+            current = int(row[0]) if row and str(row[0]).isdigit() else 0
+            if current > known:
+                raise UnsupportedSchema(self.path, current, known)
+            if current >= version:  # applied by another process while this one waited
+                self._conn.execute("ROLLBACK")
+                return
             if callable(migration):
                 migration(self._conn)
             else:
@@ -229,8 +248,14 @@ class Database:
         folder = self.path.parent / "backups"
         folder.mkdir(exist_ok=True)
         stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-        target = folder / f"{self.path.stem}-{label}-{stamp}.db"
-        _private_file(target)
+        target, n = folder / f"{self.path.stem}-{label}-{stamp}.db", 1
+        while True:  # two processes starting together make their copies in the same second (0.5.0)
+            try:
+                os.close(os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600))
+                break
+            except FileExistsError:
+                n += 1
+                target = folder / f"{self.path.stem}-{label}-{stamp}-{n}.db"
         copy = sqlite3.connect(str(target))
         try:
             with self._lock:
