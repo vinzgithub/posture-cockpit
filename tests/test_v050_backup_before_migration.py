@@ -2,10 +2,10 @@
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """0.5.0: a verified backup archive before any migration (storage/upgrade.py).
 
-The migration to schema 5 comes in a later commit; these tests add a dummy fifth migration to the
-real ones, on the database made by the code of v0.4.1 (schema 4). The path of the server and of
-the account commands is also checked with the real migrations, on the database of v0.3.0
-(schema 3 to 4)."""
+Most tests replace the migration to schema 5 by a dummy one (the four migrations of 0.4.1, then
+the dummy), on the database made by the code of v0.4.1 (schema 4): they check the backup, not
+the migration (test_v050_migration.py). The path of the server and of the account commands is
+checked with the real migrations, on the database of v0.3.0."""
 
 import hashlib
 import json
@@ -25,7 +25,7 @@ from posture_cockpit.storage.schema import MIGRATIONS
 from posture_cockpit.web.app import create_app
 
 DATA = Path(__file__).parent / "data"
-DUMMY = [*MIGRATIONS, "CREATE TABLE v050_dummy(x INTEGER)"]
+DUMMY = [*MIGRATIONS[:4], "CREATE TABLE v050_dummy(x INTEGER)"]
 KEY = "k" * 64
 CONTENT = {"users": 2, "domains": 5, "scans": 5}
 
@@ -177,11 +177,11 @@ def test_no_archive_for_a_new_instance_nor_for_a_database_already_up_to_date(tmp
     open_database(Config(data_dir=new), DUMMY).close()
     open_database(Config(data_dir=new), DUMMY).close()
     assert backup.schema_of(new / "posture_cockpit.db") == 5 and not (new / "backups").exists()
-    current = legacy(tmp_path / "current")  # schema 4, the real migrations: nothing to do
-    open_database(Config(data_dir=current)).close()
-    assert not (current / "backups").exists()
-    assert backup.schema_of(current / "posture_cockpit.db") == 4
-    assert upgrade.read_meta(current / "posture_cockpit.db", "upgrade_backup") is None
+    current = legacy(tmp_path / "current")
+    open_database(Config(data_dir=current), DUMMY).close()
+    [first] = archives(current)
+    open_database(Config(data_dir=current), DUMMY).close()  # up to date: nothing to do
+    assert archives(current) == [first] and len(list((current / "backups").glob("*.db"))) == 1
 
 
 def test_a_database_written_by_a_newer_version_is_refused_without_any_archive(tmp_path):
@@ -240,7 +240,7 @@ def start_instance(folder: str, barrier, results) -> None:
     """One process starting on the data folder (run by multiprocessing)."""
     try:
         barrier.wait(timeout=30)
-        db = open_database(Config(data_dir=Path(folder)), [*MIGRATIONS, slow_migration])
+        db = open_database(Config(data_dir=Path(folder)), [*MIGRATIONS[:4], slow_migration])
         results.put(("started", db.schema_version))
         db.close()
     except BaseException as error:  # reported by the test
@@ -249,7 +249,7 @@ def start_instance(folder: str, barrier, results) -> None:
 
 def test_two_processes_migrating_together_apply_each_migration_once(tmp_path):
     folder = legacy(tmp_path / "a")
-    Database(folder / "posture_cockpit.db").close()  # in WAL mode, as an instance always is
+    Database(folder / "posture_cockpit.db", MIGRATIONS[:4]).close()  # in WAL mode, as an instance always is
     context = multiprocessing.get_context("spawn")
     barrier, results = context.Barrier(2), context.Queue()
     processes = [context.Process(target=start_instance, args=(str(folder), barrier, results)) for _ in range(2)]

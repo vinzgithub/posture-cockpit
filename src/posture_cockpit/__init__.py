@@ -12,4 +12,4 @@ Package layout (details in docs/ARCHITECTURE.md):
 - ``cli``      command-line tools (scan from a terminal, account rescue).
 """
 
-__version__ = "0.4.1"
+__version__ = "0.5.0"

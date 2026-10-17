@@ -37,7 +37,7 @@ async def scan_and_save(s: Services, domain: str, user: Row | None, *, perimeter
         result = await s.scanner.scan(domain, perimeter, history=s.scans.https_history(domain))
     user_id = user["id"] if user else None
     domain_id = s.scans.add_domain(domain, user_id, perimeter.id if perimeter else None)
-    scan_id = s.scans.save(domain_id, result, __version__, user_id, perimeter.name if perimeter else "")
+    scan_id = s.scans.save(domain_id, result, __version__, user_id, perimeter.name if perimeter else "", via=via)
     s.audit.record("scan.internal" if perimeter else "scan", user=user, target=domain, client=client, via=via,
                    perimeter=perimeter.name if perimeter else "")
     return scan_id

@@ -46,7 +46,7 @@ def test_a_backup_made_while_the_server_runs_holds_what_the_wal_holds(tmp_path, 
     wal = tmp_path / "a" / "posture_cockpit.db-wal"
     assert wal.exists() and wal.stat().st_size > 0  # recent writes still in the journal
     out, manifest = archive(tmp_path / "a")
-    assert manifest["schema"] == 4 and manifest["counts"] == {"users": 1, "domains": 1, "scans": 1}
+    assert manifest["schema"] == 5 and manifest["counts"] == {"users": 1, "domains": 1, "scans": 1}
     with tarfile.open(fileobj=out, mode="r:gz") as tar:
         assert tar.getnames() == ["manifest.json", "posture_cockpit.db", ".secret_key"]
         assert all(m.mode == 0o600 for m in tar.getmembers())
@@ -163,7 +163,7 @@ def test_the_command_line(tmp_path, network, monkeypatch, capsys):
     assert cli.main(["check-backup", str(written[0])]) == 0
     assert "Backup complete and readable" in capsys.readouterr().out
     assert cli.main(["info"]) == 0
-    assert "schema 4 (up to date), 1 account(s)" in capsys.readouterr().out
+    assert "schema 5 (up to date), 1 account(s)" in capsys.readouterr().out
     assert cli.main(["restore", str(written[0]), "--replace"]) == 2  # the server still has it open
     assert "stop Posture Cockpit first" in capsys.readouterr().err
     app.state.services.db.close()

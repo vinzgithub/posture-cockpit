@@ -250,7 +250,7 @@ async def history_detail(request: Request, name: str, scan_id: str, user: Row = 
 async def delete(request: Request, name: str, user: Row = Depends(require_user),
                  form: FormData = Depends(checked_form)):
     domain = visible_domain(request, name, user)
-    services(request).scans.delete_domain(domain["id"])
-    audit(request, "domain.deleted", user=user, target=name, perimeter=domain["perimeter"] or "")
+    removed = services(request).scans.delete_domain(domain["id"])
+    audit(request, "domain.deleted", user=user, target=name, perimeter=domain["perimeter"] or "", **removed)
     flash(request, "ok", "flash.domain_deleted", name=name)
     return redirect("/domains")
