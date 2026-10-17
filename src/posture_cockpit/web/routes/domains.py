@@ -235,8 +235,8 @@ async def history_page(request: Request, name: str, page: str = "1", user: Row =
     try:
         recent = s.scans.latest_states(domain["id"])
         if recent:
-            comparison = compare(Snapshot.from_row(recent[1]) if len(recent) > 1 else None,
-                                 Snapshot.from_row(recent[0]))
+            comparison = compare(Snapshot.from_row(dict(recent[1])) if len(recent) > 1 else None,
+                                 Snapshot.from_row(dict(recent[0])))
     except (ValueError, TypeError, KeyError):
         comparison = None
     return render(request, "history.html", domain=domain, history=rows, results=results,
