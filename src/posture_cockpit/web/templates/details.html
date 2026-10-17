@@ -12,7 +12,6 @@
   <p class="small"><a href="/domains/{{ scan.domain }}/history">{{ t("details.history") }}</a></p>
   <p class="coverage {{ 'coverage-partial' if result.partial or result.score is none }}">
     {% if result.score is not none %}{{ t('v04.score_only', score=result.score) if result.undetermined else t('details.result', score=result.score, grade=result.grade) }}{% else %}{{ t('score.not_evaluated') }}{% endif %}
-    · {{ t('score.coverage', evaluated=result.evaluated, applicable=result.applicable, percent=result.coverage_percent) }}
   </p>
 </div>
 

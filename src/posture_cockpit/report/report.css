@@ -64,7 +64,15 @@ code { font: 400 8.5pt "IBM Plex Mono", monospace; color: #5A554B; }
 .areas .bar { width: 120pt; }
 
 .improvements { margin: 0; padding-left: 14pt; }
-.improvements li { margin: 0 0 5pt; font-size: 9.5pt; }
+.improvements li { margin: 0 0 5pt; font-size: 9.5pt; break-inside: avoid; page-break-inside: avoid; }
+/* What could not be measured: a cause stays with its first line. */
+.gaps-cause { font: 600 10.5pt "Newsreader"; margin: 8pt 0 3pt; break-after: avoid; page-break-after: avoid; }
+/* The indicators under the masthead: one compact, quiet block that a page break never splits. */
+.v04-indicators, .v04-notes { margin-top: 8pt; font-size: 9pt; color: #5A554B; break-inside: avoid; page-break-inside: avoid; }
+.v04-indicators p, .v04-notes p { margin: 0 0 2pt; }
+.v04-undetermined { color: #8A2C1D; font-weight: 600; }
+.areas tr { break-inside: avoid; page-break-inside: avoid; }
+p { orphans: 3; widows: 3; }
 .improvements .gain { color: #6B6559; font-family: "IBM Plex Mono"; font-size: 8.5pt; white-space: nowrap; }
 .method { font-size: 9pt; color: #5A554B; }
 .method-block { break-inside: avoid; page-break-inside: avoid; }

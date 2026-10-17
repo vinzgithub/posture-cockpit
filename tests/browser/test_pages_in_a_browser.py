@@ -177,3 +177,24 @@ def test_provisional_score_and_blocked_links_in_browser(visit):
     expect(blocked).to_have_count(10)
     blocked.first.locator('a').click()
     expect(page.locator('#web\\.https_redirect')).to_be_in_viewport()
+
+
+@pytest.mark.parametrize('device', [None, 'Pixel 7', 'iPhone SE'])
+def test_every_result_page_fits_the_screen_and_states_its_coverage_once(visit, device):
+    """0.4.1: one sentence for the scoring coverage per page, the help when blocked checks make
+    the two coverages differ, and no page wider than the screen, on a desktop and on phones."""
+    from worlds import DOMAIN
+
+    page, _ = visit(secure=True, device=device)
+    for domain in (DEMO_DOMAIN, DOMAIN, 'blocked.example'):
+        for path in ('', '/details', '/history', '/history/1' if domain == DEMO_DOMAIN else ''):
+            page.goto(f'/domains/{domain}{path}')
+            assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), (domain, path)
+            if path in ('', '/details'):
+                assert page.get_by_text('Couverture de notation').count() == 1, (domain, path)
+                help_line = page.locator('.coverage-help')
+                expect(help_line).to_have_count(1 if domain == 'blocked.example' else 0)
+    page.goto('/domains')
+    assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+    page.goto('/domains/blocked.example')
+    expect(page.locator('li.status-blocked').first).to_contain_text('Passage automatique en HTTPS')

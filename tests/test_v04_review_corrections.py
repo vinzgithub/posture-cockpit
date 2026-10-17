@@ -154,8 +154,7 @@ def test_inconclusive_count_on_pages_and_pdf(client, world, language, extra):
     scan = s.scans.latest(s.scans.domain(DOMAIN)['id'])
     n = 2 if extra else 1
     assert scan.nonconclusive() == n
-    key = 'v04.nonconclusive.' + ('one' if n == 1 else 'many')
-    expected = s.catalog.text(language, key, {'n': n})
+    expected = s.catalog.text(language, 'v04.undetermined_count', {'n': n})
     for suffix in ('', '/details', '/history', f'/history/{scan.id}'):
         page = client.get('/domains/' + DOMAIN + suffix)
         assert page.status_code == 200 and expected in page.text
@@ -207,8 +206,8 @@ def test_inconclusive_count_excludes_policy_blocked_addresses(client, world, lan
     addresses = scan.addresses()
     assert (addresses['discovered'], addresses['attempted'], addresses['conclusive']) == (3, 2, 1)
     assert scan.assessment().undetermined and scan.nonconclusive() == 1
-    expected = s.catalog.text(language, 'v04.nonconclusive.one', {'n': 1})
-    incorrect = s.catalog.text(language, 'v04.nonconclusive.many', {'n': 2})
+    expected = s.catalog.text(language, 'v04.undetermined_count', {'n': 1})
+    incorrect = s.catalog.text(language, 'v04.undetermined_count', {'n': 2})
     for suffix in ('', '/details', '/history', f'/history/{scan.id}'):
         page = client.get('/domains/' + DOMAIN + suffix)
         assert page.status_code == 200 and expected in page.text and incorrect not in page.text

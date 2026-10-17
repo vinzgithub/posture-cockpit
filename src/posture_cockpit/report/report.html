@@ -40,14 +40,17 @@
 
     <div class="v04-indicators">
       <p>{{ t('v04.diagnostic', percent=((result.diagnostic_coverage or 0) * 100) | int) }} · {{ t('v04.blocked', n=result.blocked) }}</p>
+      {% if result.blocked %}<p>{{ t('v04.coverage_help') }}</p>{% endif %}
       <p>{% if addresses %}{{ t('v04.addresses', discovered=addresses.discovered, attempted=addresses.attempted, conclusive=addresses.conclusive) }}{% else %}{{ t('v04.addresses_unknown') }}{% endif %}</p>
       {% if addresses.sampling_limited %}<p>{{ t('v04.sampling') }}</p>{% endif %}
       {% if addresses and not addresses.discovery_complete %}<p>{{ t('v04.discovery') }}</p>{% endif %}
       {% if addresses.deadline_reached %}<p>{{ t('v04.deadline') }}</p>{% endif %}
     </div>
-    {% if result.undetermined %}<p>{{ t('v04.undetermined') }} {{ t('v04.nonconclusive.' ~ ('one' if scan.nonconclusive() == 1 else 'many'), n=scan.nonconclusive()) }}</p>{% endif %}
-    {% for reason in result.cap_reasons %}<p>{{ t('v04.cap.' ~ reason) }}</p>{% endfor %}
-    {% if plan.provisional %}<p>{{ t('v04.provisional') }} : {{ plan.target.score }}–{{ plan.target_max.score }}/100</p>{% endif %}
+    <div class="v04-notes">
+      {% if result.undetermined %}<p class="v04-undetermined">{{ t('v04.undetermined_count', n=scan.nonconclusive()) }}</p>{% endif %}
+      {% for reason in result.cap_reasons %}<p>{{ t('v04.cap.' ~ reason) }}</p>{% endfor %}
+      {% if plan.provisional %}<p>{{ t('v04.provisional') }} : {{ plan.target.score }}–{{ plan.target_max.score }}/100</p>{% endif %}
+    </div>
     <p class="section-label">{{ t('report.diagnosis') }}</p>
     <p class="diagnosis">{{ diagnosis }}{% if conclusion %} <em>{{ conclusion }}</em>{% endif %}</p>
 
@@ -101,8 +104,8 @@
 
     {% if gaps %}
     <p class="section-label">{{ t('v04.gaps') }}</p>
-    {% for cause, group in gap_groups.items() if group %}<h3>{{ t('v04.cause.' ~ cause) }}</h3>
-    <ul class="improvements">{% for g in group %}<li><strong>{{ g.title }}</strong> — {{ g.reason }}</li>{% endfor %}</ul>{% endfor %}
+    {% for cause, group in gap_groups.items() if group %}<h3 class="gaps-cause">{{ t('v04.cause.' ~ cause) }}</h3>
+    <ul class="improvements gaps">{% for g in group %}<li><strong>{{ g.titles | join(', ') }}</strong>{% if g.reason %} — {{ g.reason }}{% endif %}</li>{% endfor %}</ul>{% endfor %}
     {% endif %}
 
     <div class="method-block">

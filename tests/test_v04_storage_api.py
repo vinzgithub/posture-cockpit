@@ -92,7 +92,7 @@ def test_metrics_roundtrip_api_and_pdf(tmp_path, data, evaluation):
         assert 'None' not in html and 'v04.' not in html
         assert str(a.score) in html
         if a.undetermined:
-            assert catalog.text(lang, 'v04.undetermined') in html
+            assert catalog.text(lang, 'v04.undetermined_count', {'n': scan.nonconclusive()}) in html
         pdf = build_pdf(catalog, lang, scan)
         assert pdf.startswith(b'%PDF-') and len(pdf) > 10000
     scans.db.close()

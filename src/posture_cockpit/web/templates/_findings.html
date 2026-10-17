@@ -14,7 +14,7 @@
           <span class="badge badge-{{ f.status.value }}">{{ t('status.' ~ f.status.value) }}</span>
           {% if f.check_id in rechecks %}<span class="muted small">{{ t('details.rechecked', date=date(rechecks[f.check_id].checked_at)) }}</span>{% endif %}
         </p>
-        {% if f.status.value == 'blocked' %}<p><a href="#web.https_redirect">{{ t('v04.blocked_by') }}</a></p>{% endif %}
+        {% if f.status.value == 'blocked' %}<p><a href="#web.https_redirect">{{ t('v04.blocked_by', root=t(root_check ~ '.title')) }}</a></p>{% endif %}
         <p>{{ summary(f, scan.domain) }}</p>
         {% if f.outcome.evidence %}
         <details>

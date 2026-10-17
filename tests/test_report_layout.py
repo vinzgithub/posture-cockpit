@@ -80,8 +80,14 @@ def test_the_method_is_no_longer_cut_from_its_heading(catalog):
                       if "section-label" in _classes(box)
                       and "".join(box.element.itertext()).strip() == catalog.text("fr", "report.method")]
     assert method_heading and set(method_heading) == set(_pages_of(document, "method"))
-    # The annex follows on the same page instead of leaving most of it blank.
-    assert _pages_of(document, "annex-title")[0] == method_heading[0]
+    # The annex follows on the same page, unless the method already fills most of it (0.4.1: the
+    # list of what could not be measured is shorter, so the method moved up a page).
+    annex = _pages_of(document, "annex-title")[0]
+    if annex != method_heading[0]:
+        assert annex == method_heading[0] + 1
+        page = document.pages[method_heading[0] - 1]
+        bottom = max(box.position_y + box.height for box in _boxes(page._page_box) if "method" in _classes(box))
+        assert bottom > 0.6 * page.height, "a mostly blank page before the annex"
 
 
 def test_no_page_ends_with_a_heading_whatever_the_length(catalog):

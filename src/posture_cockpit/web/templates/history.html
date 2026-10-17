@@ -12,7 +12,7 @@
 <section class="panel history-panel">
 {% if history | length > 1 %}<svg class="history-trend" viewBox="0 0 210 110" role="img" aria-label="{{ t('details.history') }}">
 {% for h in history | reverse %}{% if h.score is not none and h.id not in unreadable %}
-<circle class="trend-{{ 'provisional' if h.grade_withheld_reason else 'graded' }}" cx="{{ 5 + loop.index0 * 200 / ([history | length - 1, 1] | max) }}" cy="{{ 105 - h.score }}" r="3"><title>{{ h.started_at }} : {{ h.score }}/100{% if h.grade_withheld_reason %} · {{ t('v04.undetermined') }} {{ t('v04.nonconclusive.' ~ ('one' if h.addresses_attempted - h.addresses_conclusive == 1 else 'many'), n=h.addresses_attempted - h.addresses_conclusive) }}{% endif %}</title></circle>
+<circle class="trend-{{ 'provisional' if h.grade_withheld_reason else 'graded' }}" cx="{{ 5 + loop.index0 * 200 / ([history | length - 1, 1] | max) }}" cy="{{ 105 - h.score }}" r="3"><title>{{ h.started_at }} : {{ h.score }}/100{% if h.grade_withheld_reason %} · {{ t('v04.undetermined_count', n=h.addresses_attempted - h.addresses_conclusive) }}{% endif %}</title></circle>
 {% endif %}{% endfor %}</svg>{% endif %}
 <div class="table-scroll history-scroll"><table class="table history">
 <thead><tr><th>{{ t('details.history_date') }}</th><th>{{ t('details.history_result') }}</th><th>{{ t('details.history_coverage') }}</th><th>{{ t('history.origin') }}</th><th>{{ t('details.history_version') }}</th><th>{{ t('history.actions') }}</th></tr></thead>
