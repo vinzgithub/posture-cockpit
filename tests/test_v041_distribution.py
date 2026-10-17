@@ -153,11 +153,20 @@ def test_the_release_workflow_publishes_only_a_published_release_after_the_tests
     image = workflow["jobs"]["image"]
     assert image["needs"] == "tests" and workflow["jobs"]["tests"]["uses"] == "./.github/workflows/tests.yml"
     assert image["env"]["PUBLISH"] == "${{ github.event_name == 'release' }}"
+    # a pull request publishes to the registry of the job, never to ghcr.io
+    assert "localhost:5000/posture-cockpit" in image["env"]["IMAGE"] and "registry" in image["services"]
     text = (ROOT / ".github/workflows/release.yml").read_text()
     assert "value=latest" not in text and "type=raw" not in text  # tags come from release_tags.py only
-    build = next(s for s in image["steps"] if s.get("id") == "build")["with"]
-    assert build["push"] == "${{ env.PUBLISH == 'true' }}" and build["sbom"] is True
-    assert build["provenance"] == "mode=max" and build["platforms"] == "linux/amd64,linux/arm64"
+    steps = {s.get("id") or s.get("name"): s for s in image["steps"]}
+    order = [s.get("id") or s.get("name") for s in image["steps"]]
+    assert order.index("registry") < order.index("build") < order.index("tags")
+    build = steps["build"]
+    assert build["if"] == "steps.registry.outputs.state == 'absent'"   # resumed or refused otherwise
+    assert build["with"]["tags"] == "${{ env.IMAGE }}:${{ steps.release.outputs.version }}"  # the exact version only
+    assert build["with"]["sbom"] is True and build["with"]["provenance"] == "mode=max"
+    assert build["with"]["platforms"] == "linux/amd64,linux/arm64"
+    assert "state=other" in steps["registry"]["run"] and "exit 1" in steps["registry"]["run"]
+    assert "imagetools create" in steps["tags"]["run"] and "registry_tag.py digest" in steps["tags"]["run"]
     tests = yaml.safe_load((ROOT / ".github/workflows/tests.yml").read_text())
     assert "workflow_call" in tests[True]
     # the names the branch protection of main requires

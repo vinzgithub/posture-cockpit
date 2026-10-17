@@ -3,12 +3,22 @@
 #
 # Publishes the image ghcr.io/vinzgithub/posture-cockpit when a GitHub release is published
 # (the explicit act of validation), after the whole test suite and the Docker recette.
-# On a pull request that touches the image, the same workflow runs as a dry run: same checks,
-# both architectures built, nothing logged in, nothing pushed.
+# On a pull request that touches the image, the same steps run as a dry run against a registry
+# started in the job (localhost:5000): nothing is logged in to, nothing reaches ghcr.io.
 #
 # Tags (scripts/release_tags.py): the exact version always; X.Y and latest for a final version
 # only, and never backwards. A pre-release (v0.4.2-rc.1, "pre-release" box ticked) never moves
-# X.Y nor latest. A version already published is never overwritten.
+# X.Y nor latest.
+#
+# Publication in three steps, each checked (scripts/registry_tag.py):
+# 1. the state of the exact version in the registry: absent (publish), built from this commit
+#    (an interrupted publication resumes without rebuilding), built from another commit or from
+#    an unknown one (refused: a published version is never overwritten). A registry that cannot
+#    be read (authentication, network, error) stops everything: nothing is guessed;
+# 2. both architectures pushed under the exact version only;
+# 3. the moving tags (X.Y, latest) pointed at that digest, then every tag read back and compared.
+# A failure between 2 and 3 leaves the exact version published and the moving tags where they
+# were; re-running the job resumes at step 3.
 name: release
 on:
   release:
@@ -44,9 +54,14 @@ jobs:
     permissions:
       contents: read
       packages: write
+    services:
+      registry:  # the target of the dry run; unused when a release is published
+        image: registry:2
+        ports:
+          - 5000:5000
     env:
-      IMAGE: ghcr.io/${{ github.repository }}
       PUBLISH: ${{ github.event_name == 'release' }}
+      IMAGE: ${{ github.event_name == 'release' && format('ghcr.io/{0}', github.repository) || 'localhost:5000/posture-cockpit' }}
       TAG: ${{ github.event.release.tag_name }}
       PRERELEASE: ${{ github.event.release.prerelease }}
     steps:
@@ -63,6 +78,11 @@ jobs:
           fi
       - uses: docker/setup-qemu-action@v4
       - uses: docker/setup-buildx-action@v4
+        with:
+          driver-opts: network=host  # reaches the registry of the dry run
+          buildkitd-config-inline: |
+            [registry."localhost:5000"]
+              http = true
 
       - name: Build for amd64
         uses: docker/build-push-action@v7
@@ -94,21 +114,27 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Refuse to overwrite a published version
-        if: env.PUBLISH == 'true'
+      - name: State of the version in the registry
+        id: registry
+        env:
+          REGISTRY_USER: ${{ github.actor }}
+          REGISTRY_PASSWORD: ${{ env.PUBLISH == 'true' && secrets.GITHUB_TOKEN || '' }}
         run: |
-          if docker buildx imagetools inspect "$IMAGE:${{ steps.release.outputs.version }}" > /dev/null 2>&1; then
-            echo "::error::$IMAGE:${{ steps.release.outputs.version }} is already published: make a new version"
+          python3 scripts/registry_tag.py state "$IMAGE:${{ steps.release.outputs.version }}" --revision "$GITHUB_SHA" \
+            >> "$GITHUB_OUTPUT"
+          if grep -q '^state=other$' "$GITHUB_OUTPUT"; then
+            echo "::error::$IMAGE:${{ steps.release.outputs.version }} is already published from another commit: make a new version"
             exit 1
           fi
-      - name: Build both architectures${{ github.event_name == 'release' && ' and publish' || ' (dry run, not pushed)' }}
+      - name: Push both architectures under the exact version
         id: build
+        if: steps.registry.outputs.state == 'absent'
         uses: docker/build-push-action@v7
         with:
           context: .
           platforms: linux/amd64,linux/arm64
-          push: ${{ env.PUBLISH == 'true' }}
-          tags: ${{ steps.release.outputs.tags }}
+          push: true
+          tags: ${{ env.IMAGE }}:${{ steps.release.outputs.version }}
           labels: |
             org.opencontainers.image.version=${{ steps.release.outputs.version }}
             org.opencontainers.image.revision=${{ github.sha }}
@@ -122,12 +148,42 @@ jobs:
           provenance: mode=max
           sbom: true
           cache-from: type=gha
+      - name: Point the other tags at the same digest, then read every tag back
+        id: tags
+        env:
+          DIGEST: ${{ steps.build.outputs.digest || steps.registry.outputs.digest }}
+          TAGS: ${{ steps.release.outputs.tags }}
+          REGISTRY_USER: ${{ github.actor }}
+          REGISTRY_PASSWORD: ${{ env.PUBLISH == 'true' && secrets.GITHUB_TOKEN || '' }}
+        run: |
+          [ -n "$DIGEST" ] || { echo "::error::no digest for the published version"; exit 1; }
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+          for tag in ${TAGS//,/ }; do
+            if [ "$tag" != "$IMAGE:${{ steps.release.outputs.version }}" ]; then
+              docker buildx imagetools create --tag "$tag" "$IMAGE@$DIGEST"
+            fi
+          done
+          for tag in ${TAGS//,/ }; do
+            found=$(python3 scripts/registry_tag.py digest "$tag")
+            [ "$found" = "$DIGEST" ] || { echo "::error::$tag points at $found instead of $DIGEST"; exit 1; }
+            echo "$tag -> $found"
+          done
+      - name: "Dry run: the guards work on a real registry"
+        if: env.PUBLISH != 'true'
+        run: |
+          version="$IMAGE:${{ steps.release.outputs.version }}"
+          python3 scripts/registry_tag.py state "$version" --revision "$GITHUB_SHA" | grep -qx 'state=same'
+          python3 scripts/registry_tag.py state "$version" --revision 0000000 | grep -qx 'state=other'
+          python3 scripts/registry_tag.py state "$IMAGE:9.9.9" --revision "$GITHUB_SHA" | grep -qx 'state=absent'
+          status=0; python3 scripts/registry_tag.py state localhost:5999/nothing:1 --revision x || status=$?
+          [ "$status" = 2 ] || { echo "::error::an unreachable registry must stop the publication"; exit 1; }
+          echo "::notice title=Publication guards::resume (same commit), refusal (other commit), absent tag and unreachable registry behave as expected on localhost:5000"
       - name: Summary
         run: |
           {
-            echo "### ${{ env.PUBLISH == 'true' && 'Published' || 'Dry run (nothing pushed)' }}: ${{ steps.release.outputs.version }}"
+            echo "### ${{ env.PUBLISH == 'true' && 'Published' || 'Dry run on localhost:5000 (nothing reached ghcr.io)' }}: ${{ steps.release.outputs.version }}"
             echo
             echo "Tags: \`${{ steps.release.outputs.tags }}\`"
             echo
-            echo "Digest: \`${{ steps.build.outputs.digest }}\`"
+            echo "Digest: \`${{ steps.tags.outputs.digest }}\` (registry state before: ${{ steps.registry.outputs.state }})"
           } >> "$GITHUB_STEP_SUMMARY"
