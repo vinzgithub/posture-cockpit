@@ -6,7 +6,7 @@
 
 **Mail · Certificates · Website · DNS · Guided plan of fixes · PDF report · Two-factor authentication · Extensions**
 
-🇫🇷 [Lire en français](README.fr.md)
+🇫🇷 [Lire en français](README.fr.md) · 🗺️ [Roadmap](ROADMAP.md)
 
 <br>
 
