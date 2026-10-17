@@ -21,25 +21,37 @@
 </div>
 {% endif %}
 {% if history | length > 1 %}
-<div class="history-chart" style="margin:12px 0 18px;max-height:130px;overflow:hidden">
-  <svg class="history-trend" viewBox="0 0 230 90" preserveAspectRatio="none" style="display:block;width:100%;height:95px;max-height:95px" role="img" aria-label="{{ t('details.history') }}">
-    <line x1="8" y1="8" x2="222" y2="8" stroke="currentColor" stroke-opacity=".12" stroke-dasharray="2 3"/>
-    <line x1="8" y1="82" x2="222" y2="82" stroke="currentColor" stroke-opacity=".2"/>
-    {% set plot = namespace(points=[], valid=0) %}
+<div class="history-chart" style="margin:14px 0 18px;max-width:850px">
+  <svg class="history-trend" viewBox="0 0 640 148" style="display:block;width:100%;height:auto;max-height:200px" role="img" aria-label="{{ t('details.history') }}">
+    <line x1="50" y1="16" x2="622" y2="16" stroke="currentColor" stroke-opacity=".12" stroke-dasharray="3 4"/>
+    <line x1="50" y1="106" x2="622" y2="106" stroke="currentColor" stroke-opacity=".25"/>
+    <text x="42" y="19" font-size="10" text-anchor="end" fill="currentColor">100</text>
+    <text x="42" y="109" font-size="10" text-anchor="end" fill="currentColor">0</text>
+    {# Connect only the latest two full scans when their state comparison is established.
+       Never imply a comparable trend across unverified earlier data. #}
+    {% if comparison and comparison.comparable and history | length > 1 and
+          history[0].score is not none and history[1].score is not none and
+          history[0].id not in unreadable and history[1].id not in unreadable and
+          history[0].id == latest_id and history[0].started_at != history[1].started_at %}
+      {% set xnew = 50 + (history | length - 1) * 572 / ([history | length - 1, 1] | max) %}
+      {% set xold = 50 + (history | length - 2) * 572 / ([history | length - 1, 1] | max) %}
+      <line x1="{{ xold }}" y1="{{ 106 - history[1].score * 0.9 }}"
+            x2="{{ xnew }}" y2="{{ 106 - history[0].score * 0.9 }}"
+            stroke="#3862c7" stroke-width="2" vector-effect="non-scaling-stroke"/>
+    {% endif %}
     {% for h in history | reverse %}
       {% if h.score is not none and h.id not in unreadable %}
-        {% set x = 8 + loop.index0 * 214 / ([history | length - 1, 1] | max) %}
-        {% set y = 82 - h.score * 0.74 %}
-        {% set plot.points = plot.points + [('%s,%s' | format(x, y))] %}
-        {% set plot.valid = plot.valid + 1 %}
+      {% set x = 50 + loop.index0 * 572 / ([history | length - 1, 1] | max) %}
+      {% set y = 106 - h.score * 0.9 %}
+      <circle cx="{{ x }}" cy="{{ y }}" r="4" fill="#3862c7">
+        <title>{{ date(h.started_at) }} {{ local_time(h.started_at) }} : {{ h.score }}/100</title>
+      </circle>
+      <text x="{{ x }}" y="{{ y - 9 }}" font-size="10" text-anchor="middle" fill="currentColor">{{ h.score }}</text>
+      {% if loop.first or loop.last %}
+      <text x="{{ x }}" y="126" font-size="10" text-anchor="{{ 'start' if loop.first else 'end' }}" fill="currentColor">{{ date(h.started_at) }}</text>
+      {% endif %}
       {% endif %}
     {% endfor %}
-    {% if plot.valid == history | length and plot.valid > 1 %}
-    <polyline points="{{ plot.points | join(' ') }}" fill="none" stroke="currentColor" stroke-width="1.2" stroke-opacity=".6" vector-effect="non-scaling-stroke"/>
-    {% endif %}
-    {% for h in history | reverse %}{% if h.score is not none and h.id not in unreadable %}
-    <circle class="trend-{{ 'provisional' if h.grade_withheld_reason else 'graded' }}" cx="{{ 8 + loop.index0 * 214 / ([history | length - 1, 1] | max) }}" cy="{{ 82 - h.score * 0.74 }}" r="2.7"><title>{{ h.started_at }} : {{ h.score }}/100</title></circle>
-    {% endif %}{% endfor %}
   </svg>
 </div>
 {% endif %}
