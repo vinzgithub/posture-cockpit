@@ -193,16 +193,31 @@ As the session key is restored, open sessions stay valid; accounts, two-factor a
 
 ## Updating
 
-1. Make a backup (above).
+1. Make a backup (above), and keep a copy away from the server.
 2. Replace `compose.yaml` with the one of the new version, then restart:
 
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.4.2/compose.yaml   # the version you want
+curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.5.0/compose.yaml   # the version you want
 docker compose up -d
 docker compose exec posture-cockpit posture-cockpit info
 ```
 
-Docker downloads the new image and recreates the container on the same volume. At start, the database is upgraded automatically; when its schema changes, a copy of the former database is first written to `/data/backups/`. Your `.env` is left as it is.
+Docker downloads the new image and recreates the container on the same volume. At start, the database is upgraded automatically. Your `.env` is left as it is; if it sets `POSTURE_COCKPIT_IMAGE`, change it to the new version.
+
+**When the schema changes** (0.5.0: from schema 4 to 5), the application first writes a complete backup — database and session key — to `/data/backups/posture-cockpit-before-schema5-<date>.tar.gz`. It then reads it back and compares it with the database: schema, accounts, domains, scans, session key. It needs free space of twice the database; before updating, `posture-cockpit info` says how much. If any of this fails, nothing is migrated and the application does not start: the message says why (table below), and the database is left as it was. The account commands (`reset-password`, …) do the same when they find a database to migrate. Afterwards, `info` shows that backup:
+
+```
+Backup before the last update: backups/posture-cockpit-before-schema5-20261020T081500Z.tar.gz (schema 4 to 5, 2026-10-20T08:15:00+00:00, verified)
+```
+
+Keep a copy of it away from the server too:
+
+```bash
+umask 077
+docker compose exec -T posture-cockpit cat /data/backups/posture-cockpit-before-schema5-<date>.tar.gz > before-0.5.0.tar.gz
+```
+
+Once migrated to schema 5, the database can no longer be opened by 0.4.x: going back is a restoration (below).
 
 0.4.1 keeps the schema 4 of 0.4.0: going from 0.4.0 to 0.4.1, or back from 0.4.1 to 0.4.0, does not change the database.
 
@@ -210,14 +225,46 @@ Docker downloads the new image and recreates the container on the same volume. A
 
 ## Rollback
 
-Put back the `compose.yaml` of the previous version and restart:
+**Same schema** (0.4.0 and 0.4.1, schema 4): put back the `compose.yaml` of the previous version and restart.
 
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.4.0/compose.yaml
 docker compose up -d
 ```
 
-That is enough while both versions have the same database schema (0.4.0 and 0.4.1: schema 4). If the update changed the schema, the former version refuses to start on the upgraded database (message `uses schema N`): restore the backup made before the update (`restore --replace`, above), or the automatic copy in `/data/backups/`.
+**From 0.5.0 to 0.4.1** (schema 5 to 4): the image of 0.4.1 refuses the migrated database (`uses schema 5; this version of Posture Cockpit handles schema 4 at most`) and changes nothing. Restore the backup made before the update, with the image of 0.4.1:
+
+```bash
+docker compose stop
+curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.4.1/compose.yaml   # and POSTURE_COCKPIT_IMAGE in .env, if set
+docker compose run --rm --no-deps posture-cockpit ls /data/backups                    # the name of posture-cockpit-before-schema5-<date>.tar.gz
+docker compose run --rm --no-deps -T posture-cockpit posture-cockpit check-backup /data/backups/posture-cockpit-before-schema5-<date>.tar.gz
+docker compose run --rm --no-deps -T posture-cockpit posture-cockpit restore --replace /data/backups/posture-cockpit-before-schema5-<date>.tar.gz
+docker compose up -d
+docker compose exec posture-cockpit posture-cockpit info                              # schema 4 (up to date)
+```
+
+The copy kept away from the server is restored the same way, from the standard input (`restore --replace - < before-0.5.0.tar.gz`). The restoration first saves the data of 0.5.0 to `/data/backups/posture-cockpit-before-restore-<date>.tar.gz`: nothing done since the update is destroyed, and the image of 0.5.0 can restore that archive to take up the update again where it was left.
+
+**From 0.5.0 to 0.4.0 or earlier**: these versions do not refuse a newer schema and would run on it, with errors. Never start them on the migrated database. 0.4.0 has no `restore` command: restore the backup with the image of 0.5.0 (the commands above, with the `compose.yaml` of 0.5.0), then put back the `compose.yaml` of 0.4.0 and start.
+
+**What the return loses: everything done after the backup.** The data comes back as it was at the moment of the update:
+
+- scans and rechecks made since, domains added or deleted, perimeters and settings changed;
+- accounts created since disappear; accounts deleted since come back, with their former rights; a role given or removed since is undone;
+- **passwords** changed or reset since: the former one works again;
+- **two-factor authentication** enabled since is off again; disabled since, it is on again with its former secret and recovery codes; recovery codes used or renewed since come back;
+- **API keys** created since disappear; **revoked since, they work again**;
+- the sign-outs forced since (password change, two-factor change) are undone: sessions they ended become valid again, since the session key is that of the backup;
+- the audit entries since.
+
+**Re-apply the security changes made since the update.** The audit log of the data saved by the restoration (`posture-cockpit-before-restore-<date>.tar.gz`) lists them: restore that archive into a test instance (section below, never over your installation) and read Administration → Audit log. Then, on the restored installation: revoke again the API keys revoked since, change again the passwords changed since (above all one changed because it had leaked), disable or enable two-factor authentication again, delete again the accounts deleted since, check the role of each account. If a session that was ended since must not come back, make a new session key — every browser is signed out:
+
+```bash
+docker compose stop
+docker compose run --rm --no-deps posture-cockpit rm /data/.secret_key
+docker compose up -d   # a new key is made at start
+```
 
 ## From an older `compose.yaml`
 
@@ -252,6 +299,8 @@ The application refuses to start, saying what to do (`docker compose logs postur
 | `The database … uses schema N; this version … handles schema M at most` | The database comes from a newer version. Run that one again, or restore a backup made before. Nothing was changed. |
 | `The session key … is empty or damaged` | Restore `.secret_key` from a backup, or delete it: a new key is created and every browser is signed out. |
 | `The database … cannot be opened` | The database file is damaged: restore a backup. |
+| `Not enough free space in /data to back up the database before updating it` | The backup made before a migration needs twice the size of the database. Free some space (old archives of `/data/backups/`, kept elsewhere first), then start again. Nothing was changed. |
+| `The backup before the update could not be written` or `… failed its verification` | The backup made before a migration could not be written or read back identical. Nothing was migrated; the archive that failed was deleted. Check the disk (`df`, `docker system df`), then start again. |
 
 ## Without Docker
 

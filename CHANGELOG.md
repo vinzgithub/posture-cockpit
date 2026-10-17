@@ -21,7 +21,17 @@ before the update, see docs/user/INSTALLATION.md)
 **Storage**
 - A transaction belongs to the task that opened it: another task using the database meanwhile
   is refused instead of joining it silently.
-- The audit entry of a deleted domain counts the scans and states removed with it.
+- The audit entry of a deleted domain counts the scans, states, scheduled runs and events removed with it.
+
+**API**: `via` and `engine` added to each domain; every key of 0.4.1 kept as it was.
+
+**Rollback and recette**
+- INSTALLATION (FR, EN): the update to 0.5.0, the return to 0.4.1 by restoring the backup made
+  before the migration, what the return loses (passwords, two-factor authentication, API keys
+  revoked since…) and how to re-apply those changes, including a new session key.
+- `scripts/data-fingerprint.py`: the fingerprint of the data of an instance, read only, without
+  any value of the database; `scripts/docker-recette.sh rollback` uses it, and the CI runs it
+  with the official image of 0.4.1.
 
 ## 0.4.1 — 2026-10-17
 
