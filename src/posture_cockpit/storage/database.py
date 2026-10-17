@@ -20,12 +20,23 @@ commit. The database file is readable by its owner only.
 
 A database whose schema is newer than the migrations this version knows (written by a
 later release) is refused at start-up and left untouched: running on it could damage it.
+
+One owner per transaction (0.5.0). The connection is shared by the whole process, and its lock
+lets the thread that holds it in again: every asyncio task runs on that same thread. A task that
+waited (``await``) inside a transaction would let another task's statements join it, and roll back
+with it, without either of them knowing. So a transaction remembers the thread and the task that
+opened it, and any use of the connection by another one while it is open raises
+:class:`TransactionOwnerError` instead. Another *thread* simply waits for the lock, as before.
+The rule it enforces: no ``await`` inside ``with db.transaction():`` (tests/test_v050_contract.py
+checks the code for it).
 """
 
 from __future__ import annotations
 
+import asyncio
 import os
 import sqlite3
+import threading
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -50,6 +61,19 @@ class UnsupportedSchema(StartupError):
             "made before the update (see docs/user/INSTALLATION.md, Rollback). Nothing was changed.")
 
 
+class TransactionOwnerError(RuntimeError):
+    """The connection was used by another task or thread while a transaction was open."""
+
+
+def _current_owner() -> tuple[int, asyncio.Task[Any] | None]:
+    """The thread, and the asyncio task when there is one, that uses the connection now."""
+    try:
+        task = asyncio.current_task()
+    except RuntimeError:  # no event loop in this thread
+        task = None
+    return threading.get_ident(), task
+
+
 def utcnow() -> str:
     """Current time as stored in the database: ISO 8601, UTC, to the second."""
     return datetime.now(UTC).replace(microsecond=0).isoformat()
@@ -61,6 +85,7 @@ class Database:
         self.path = path
         self._lock = RLock()
         self._depth = 0  # transactions in progress on this connection (see transaction())
+        self._owner: tuple[int, asyncio.Task[Any] | None] | None = None  # who opened the transaction
         _private_file(path)
         self._conn = sqlite3.connect(str(path), check_same_thread=False, isolation_level=None)
         self._conn.row_factory = sqlite3.Row
@@ -82,20 +107,32 @@ class Database:
         self._conn.close()
 
     # ---------------------------------------------------------------- queries
+    def _check_owner(self) -> None:
+        """Called with the lock held: refuses a use of the connection by anyone but the owner of
+        the open transaction (see the module documentation)."""
+        if self._depth and self._owner != _current_owner():
+            raise TransactionOwnerError(
+                "The database was used by another task while a transaction was open. A transaction "
+                "must end before its task waits (no await inside 'with db.transaction():').")
+
     def execute(self, sql: str, params: Sequence[Any] = ()) -> sqlite3.Cursor:
         with self._lock:
+            self._check_owner()
             return self._conn.execute(sql, params)
 
     def executemany(self, sql: str, rows: Sequence[Sequence[Any]]) -> None:
         with self._lock:
+            self._check_owner()
             self._conn.executemany(sql, rows)
 
     def all(self, sql: str, params: Sequence[Any] = ()) -> list[Row]:
         with self._lock:
+            self._check_owner()
             return self._conn.execute(sql, params).fetchall()
 
     def one(self, sql: str, params: Sequence[Any] = ()) -> Row | None:
         with self._lock:
+            self._check_owner()
             return self._conn.execute(sql, params).fetchone()
 
     def value(self, sql: str, params: Sequence[Any] = ()) -> Any:
@@ -108,9 +145,11 @@ class Database:
 
         A transaction inside another one joins it (0.4.1): an inner failure undoes the whole outer
         transaction. ``immediate`` takes the write lock at once, so that two processes checking
-        then writing the same rows run one after the other instead of failing."""
+        then writing the same rows run one after the other instead of failing. Only the thread and
+        task that opened it may use the connection until it ends (0.5.0, see the module documentation)."""
         with self._lock:
             if self._depth:
+                self._check_owner()
                 self._depth += 1
                 try:
                     yield
@@ -118,14 +157,14 @@ class Database:
                     self._depth -= 1
                 return
             self._conn.execute("BEGIN IMMEDIATE" if immediate else "BEGIN")
-            self._depth = 1
+            self._depth, self._owner = 1, _current_owner()
             try:
                 yield
             except BaseException:
                 self._conn.execute("ROLLBACK")
                 raise
             finally:
-                self._depth = 0
+                self._depth, self._owner = 0, None
             self._conn.execute("COMMIT")
 
     # ------------------------------------------------------------------- meta
@@ -185,6 +224,8 @@ class Database:
 
     def backup(self, label: str) -> Path:
         """Copies the database to ``backups/<name>-<label>-<time>.db`` next to it and returns the path."""
+        with self._lock:
+            self._check_owner()  # before writing anything
         folder = self.path.parent / "backups"
         folder.mkdir(exist_ok=True)
         stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
@@ -193,6 +234,7 @@ class Database:
         copy = sqlite3.connect(str(target))
         try:
             with self._lock:
+                self._check_owner()
                 self._conn.backup(copy)
         finally:
             copy.close()
