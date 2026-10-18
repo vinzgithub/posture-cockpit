@@ -623,5 +623,6 @@
   "events.kind.coverage_loss": "Coverage loss",
   "events.severity.critical": "Critical",
   "events.severity.warning": "Warning",
-  "events.severity.info": "Information"
+  "events.severity.info": "Information",
+  "events.kind.schedule_failures": "Repeated scheduled scan failures"
 }
