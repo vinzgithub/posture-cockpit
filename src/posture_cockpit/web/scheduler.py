@@ -189,7 +189,9 @@ class Scheduler:
             else:  # a retry keeps its row; it is looked at again later, while still in time
                 self._defer(schedule, now, TICK.total_seconds())
             return
-        keep_free = 1 if self.s.scan_limiter.concurrent >= 2 else 0
+        # Never monopolize the only scan slot when an instance is configured with
+        # a concurrency limit of one: human-triggered scans retain priority.
+        keep_free = 1
         try:
             release = self.s.scan_limiter.take(PRINCIPAL, keep_free=keep_free)
         except TooManyScans as e:  # nothing written: the slot stays due
