@@ -142,6 +142,16 @@ def _add_error_pages(app: FastAPI) -> None:
         async def handler(request: Request, exc: Exception):
             if _wants_json(request):
                 return JSONResponse({"error": message}, status_code=status)
+            if isinstance(exc, deps.NeedAdminConfirm):
+                # A confirmation unlocks the original page, never replays a POST.
+                # A schedule form returns to its GET details page, not /admin.
+                path = request.url.path
+                target = "/admin"
+                if request.method == "GET":
+                    target = path + (f"?{request.url.query}" if request.url.query else "")
+                elif request.method == "POST" and path.startswith("/domains/") and path.endswith("/schedule"):
+                    target = path[:-len("/schedule")] + "/details#schedule"
+                request.session["admin_return"] = deps.local_path(target, "/admin")
             return deps.redirect(url)
         return handler
 
