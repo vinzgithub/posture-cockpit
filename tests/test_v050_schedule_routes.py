@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Scheduled-scan configuration: authorization, CSRF, persistence and UI."""
 
-from helpers import DEMO, PASSWORD, page_csrf, post, setup_account
+from helpers import DEMO, PASSWORD, post, setup_account
 
 
 def _ready(client):
@@ -50,13 +50,11 @@ def test_invalid_schedule_does_not_change_existing_definition(client):
 
 
 def test_configure_schedule_requires_recent_admin_confirmation_and_csrf(client):
-    _ready(client)
+    setup_account(client, demo=True)
     url = f"/domains/{DEMO}/schedule"
     response = client.post(url, data={"frequency": "daily", "time": "05:00", "enabled": "on"},
                            follow_redirects=False)
     assert response.status_code == 403
-    with client.session_transaction() as session:
-        session["admin_until"] = 0
     response = post(client, url, f"/domains/{DEMO}/details",
                     frequency="daily", time="05:00", enabled="on")
     assert response.status_code == 303 and response.headers["location"] == "/admin/confirm"
