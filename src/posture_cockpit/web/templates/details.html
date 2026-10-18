@@ -81,7 +81,7 @@
   <div class="table-scroll"><table class="table">
     <thead><tr><th>{{ t('schedule.run.slot') }}</th><th>{{ t('schedule.run.state') }}</th><th>{{ t('schedule.run.when') }}</th></tr></thead>
     <tbody>{% for run in schedule_runs %}
-      <tr><td>{{ run.slot }}</td><td>{{ t('schedule.run.' ~ run.state) }}</td>
+      <tr><td>{{ date(run.slot[:10]) }} {{ run.slot[11:] }}</td><td>{{ t('schedule.run.' ~ run.state) }}</td>
       <td>{{ date(run.claimed_at) }} {{ local_time(run.claimed_at) }}</td></tr>
     {% endfor %}</tbody>
   </table></div>
