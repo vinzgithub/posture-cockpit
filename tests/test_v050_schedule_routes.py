@@ -91,3 +91,20 @@ def test_schedule_form_has_frequency_sensitive_fields(client):
     assert "data-schedule-form" in page.text
     for kind in ("time", "weekday", "monthday"):
         assert f'data-schedule-field="{kind}"' in page.text
+
+
+
+def test_schedule_run_slot_is_rendered_as_nominal_local_time(client):
+    """The slot is a local wall time: do not convert it from UTC or expose ISO syntax."""
+    services = _ready(client)
+    domain = services.scans.domain(DEMO)
+    services.db.execute(
+        "INSERT INTO schedule_runs(domain_id, slot, state, reason, claim, owner, attempts, claimed_at,"
+        " finished_at) VALUES(?, ?, 'done', '', ?, 'test:1', 1, ?, ?)",
+        (domain["id"], "2026-10-18T18:18", "test-claim", "2026-10-18T16:23:56+00:00",
+         "2026-10-18T16:23:56+00:00"),
+    )
+    page = client.get(f"/domains/{DEMO}/details")
+    assert page.status_code == 200
+    assert "18 octobre 2026 18:18" in page.text
+    assert "2026-10-18T18:18" not in page.text
