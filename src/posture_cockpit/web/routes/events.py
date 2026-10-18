@@ -3,6 +3,8 @@
 """In-app event center. No external notifications or changes to security scoring."""
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 from fastapi import APIRouter, Depends, Request
 from starlette.datastructures import FormData
 
@@ -15,7 +17,7 @@ router = APIRouter(prefix="/events")
 
 @router.get("")
 async def list_events(request: Request, state: str = "open", severity: str = "all",
-                      category: str = "all", domain: str = "",
+                      category: str = "all", domain: str = "", period: str = "all",
                       user: Row = Depends(require_user)):
     if state not in ("open", "resolved", "notice", "all"):
         state = "open"
@@ -23,6 +25,8 @@ async def list_events(request: Request, state: str = "open", severity: str = "al
         severity = "all"
     if category not in ("security", "measurement", "technical", "all"):
         category = "all"
+    if period not in ("all", "7", "30", "90"):
+        period = "all"
     domain = domain.strip()[:253]
     query = (
         "SELECT e.*, d.name AS domain_name, d.perimeter_id "
@@ -43,10 +47,14 @@ async def list_events(request: Request, state: str = "open", severity: str = "al
     if domain:
         query += "AND d.name=? "
         params.append(domain.lower())
+    if period != "all":
+        query += "AND datetime(e.updated_at) >= datetime(?) "
+        params.append((datetime.now(UTC) - timedelta(days=int(period))).isoformat())
     query += "ORDER BY e.updated_at DESC, e.id DESC LIMIT 100"
     rows = services(request).db.all(query, params)
     return render(request, "events.html", events=rows, event_state=state,
-                  event_severity=severity, event_category=category, event_domain=domain)
+                  event_severity=severity, event_category=category, event_domain=domain,
+                  event_period=period)
 
 
 @router.post("/seen")
