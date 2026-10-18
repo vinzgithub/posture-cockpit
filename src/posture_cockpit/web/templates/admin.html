@@ -66,6 +66,22 @@
   {% if internal_enabled %}<div><a class="btn btn-secondary" href="/admin/perimeters/new">{{ t('perimeter.new') }}</a></div>{% endif %}
 </section>
 
+<section class="panel" id="schedule">
+  <h2>{{ t('admin.schedule.title') }}</h2>
+  <p class="scheduler-state scheduler-{{ scheduler.state }}">{{ t('admin.scheduler.' ~ scheduler.state) }}</p>
+  {% if scheduler.heartbeat_at %}<p class="small muted">{{ t('admin.scheduler.heartbeat') }} : {{ date(scheduler.heartbeat_at.isoformat()) }} {{ local_time(scheduler.heartbeat_at.isoformat()) }}</p>{% endif %}
+  <h3>{{ t('admin.schedule.upcoming') }}</h3>
+  {% if upcoming %}
+  <div class="table-scroll"><table class="table"><thead><tr><th>{{ t('admin.schedule.domain') }}</th><th>{{ t('admin.schedule.next') }}</th></tr></thead>
+  <tbody>{% for sch in upcoming %}<tr><td>{{ sch.domain }}</td><td>{% if sch.next_run_at %}{{ date(sch.next_run_at) }} {{ local_time(sch.next_run_at) }}{% else %}—{% endif %}</td></tr>{% endfor %}</tbody></table></div>
+  {% else %}<p class="muted">{{ t('admin.schedule.none') }}</p>{% endif %}
+  <h3>{{ t('admin.schedule.problems') }}</h3>
+  {% if run_problems %}
+  <div class="table-scroll"><table class="table"><thead><tr><th>{{ t('admin.schedule.domain') }}</th><th>{{ t('schedule.run.slot') }}</th><th>{{ t('schedule.run.state') }}</th></tr></thead>
+  <tbody>{% for run in run_problems %}<tr><td>{{ run.domain }}</td><td>{{ run.slot }}</td><td>{{ t('schedule.run.' ~ run.state) }}</td></tr>{% endfor %}</tbody></table></div>
+  {% else %}<p class="muted">{{ t('admin.schedule.no_problems') }}</p>{% endif %}
+</section>
+
 <section class="panel" id="extensions">
   <h2>{{ t('admin.extensions') }}</h2>
   <p class="muted">{{ t('admin.extensions_help') }}</p>

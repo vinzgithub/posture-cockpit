@@ -8,7 +8,7 @@ Routes reach them with ``services(request)``. Tests reach them through
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from fastapi import Request
@@ -20,6 +20,7 @@ from ..i18n import Catalog
 from ..scanner import Scanner
 from ..security import LoginThrottle
 from ..storage import Accounts, AuditLog, Database, InstanceSettings, Perimeters, Scans
+from ..storage.schedules import Schedules
 from .limits import ScanLimiter
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
@@ -42,6 +43,10 @@ class Services:
     account_throttle: LoginThrottle  # sign-in failures by account name
     scan_limiter: ScanLimiter
     templates: Jinja2Templates
+    schedules: Schedules
+    # Domains whose full scan runs in this process now (0.5.0): a scheduled scan of one of them
+    # is skipped, the result being on its way (web/scanning.py).
+    in_progress: set[str] = field(default_factory=set)
 
 
 def services(request: Request) -> Services:

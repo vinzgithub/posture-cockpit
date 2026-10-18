@@ -13,13 +13,14 @@ tasks and DNS hosts without reloading, copy buttons, spinner while scanning).
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response
 from starlette.datastructures import FormData
 from starlette.exceptions import HTTPException
 
-from ...core import providers, scoring
+from ...core import providers, schedule_time, scoring
 from ...core.compare import Snapshot, compare
 from ...core.engine import normalize_domain
 from ...core.model import Finding, Status
@@ -27,6 +28,7 @@ from ...core.network import NetworkError
 from ...i18n import finding_summary
 from ...scanner import DEMO_DOMAIN, InternalScansDisabled
 from ...storage import CorruptScan, Row, Scan
+from ...storage.schedules import Schedule
 from ..deps import (
     audit,
     checked_form,
@@ -37,6 +39,7 @@ from ..deps import (
     number_or_404,
     redirect,
     render,
+    require_admin,
     require_user,
     stored_scan,
     t,
@@ -183,14 +186,74 @@ async def choose_dns_host(request: Request, name: str, user: Row = Depends(requi
 @router.get("/{name}/details")
 async def details(request: Request, name: str, user: Row = Depends(require_user)):
     """Every check with its raw values: the page for the technician."""
-    s = services(request)
     domain = visible_domain(request, name, user)
+    return details_page(request, domain, user)
+
+
+def _schedule_form(schedule: Schedule | None) -> dict[str, object]:
+    if schedule is None:
+        return {"frequency": "off", "time": "05:00", "weekday": "1", "monthday": "1", "enabled": False}
+    d = schedule.definition
+    return {"frequency": d.frequency, "time": schedule_time.format_time(d.at_minute),
+            "weekday": str(d.weekday or 1), "monthday": str(d.monthday or 1), "enabled": schedule.enabled}
+
+
+def details_page(request: Request, domain: Row, user: Row, status: int = 200, **context):
+    s = services(request)
     scan = s.scans.latest(domain["id"])
     if scan is None:
         return redirect("/domains")
-    return render(request, "details.html", scan=scan, categories=_by_category(scan), summary=_summary(request),
-                  result=scan.assessment(), registry=s.registry, rechecks=scan.rechecks, domain=domain,
-                  history=s.scans.history(domain["id"]), full_coverage=scoring.FULL_COVERAGE)
+    schedule = s.schedules.get(domain["id"])
+    form = context.pop("schedule_form", None)
+    if form is None:
+        form = _schedule_form(schedule)
+    return render(request, "details.html", status=status, scan=scan, categories=_by_category(scan),
+                  summary=_summary(request), result=scan.assessment(), registry=s.registry, rechecks=scan.rechecks,
+                  domain=domain, history=s.scans.history(domain["id"]), full_coverage=scoring.FULL_COVERAGE,
+                  schedule=schedule, schedule_form=form, can_schedule=bool(user["is_admin"]),
+                  schedule_runs=s.schedules.runs(domain["id"], limit=10), **context)
+
+
+@router.post("/{name}/schedule")
+async def update_schedule(request: Request, name: str, user: Row = Depends(require_admin),
+                          form: FormData = Depends(checked_form)):
+    """Recently confirmed administrators alone may create, pause or remove a schedule."""
+    s = services(request)
+    domain = visible_domain(request, name, user)
+    frequency = field(form, "frequency", 10)
+    if frequency == "off":
+        before = s.schedules.remove(domain["id"])
+        if before is not None:
+            audit(request, "schedule.removed", user=user, target=name, before=before.describe())
+        scheduler = getattr(request.app.state, "scheduler", None)
+        if scheduler is not None:
+            scheduler.wake()
+        flash(request, "ok", "flash.schedule_removed")
+        return redirect(f"/domains/{name}/details#schedule")
+
+    typed_time = field(form, "time", 5)
+    typed_weekday = field(form, "weekday", 2)
+    typed_monthday = field(form, "monthday", 2)
+    enabled = form.get("enabled") == "on"
+    try:
+        weekday = int(typed_weekday) if frequency == "weekly" else None
+        monthday = int(typed_monthday) if frequency == "monthly" else None
+        definition = schedule_time.Definition(frequency, schedule_time.parse_time(typed_time), weekday, monthday)
+    except ValueError:
+        values = {"frequency": frequency, "time": typed_time, "weekday": typed_weekday,
+                  "monthday": typed_monthday, "enabled": enabled}
+        return details_page(request, domain, user, status=400, schedule_form=values,
+                            schedule_error=t(request, "schedule.error"))
+
+    before, after = s.schedules.set(domain["id"], definition, enabled=enabled,
+                                    user_id=user["id"], now=datetime.now(UTC))
+    audit(request, "schedule.updated", user=user, target=name,
+          before=before.describe() if before else None, after=after.describe())
+    scheduler = getattr(request.app.state, "scheduler", None)
+    if scheduler is not None:
+        scheduler.wake()
+    flash(request, "ok", "flash.schedule_saved")
+    return redirect(f"/domains/{name}/details#schedule")
 
 
 def _by_category(scan: Scan) -> dict[str, list[Finding]]:

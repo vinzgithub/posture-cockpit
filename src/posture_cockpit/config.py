@@ -63,6 +63,9 @@ class Config:
     # One-time code that protects the creation of the first account. Empty: a new random code at
     # each start while no account exists, written to the server log (see web/first_run.py).
     setup_code: str = ""
+    # Scheduled scans (0.5.0): POSTURE_COCKPIT_SCHEDULER, on unless set to off. Off by default for
+    # a Config built directly (the tests), so that only the tests of the scheduler start one.
+    scheduler: bool = False
 
     def __post_init__(self) -> None:
         check_cookie_name(self.session_cookie, secure=self.cookie_secure)
@@ -91,6 +94,7 @@ class Config:
             timezone=instance_zone(os.environ.get(ENV_PREFIX + "TIMEZONE"), os.environ.get("TZ")),
             session_cookie=_env("SESSION_COOKIE", DEFAULT_SESSION_COOKIE).strip(),
             setup_code=_env("SETUP_CODE", "").strip(),
+            scheduler=_env_bool("SCHEDULER", True),
         )
         check_dkim_selectors(_env("DKIM_SELECTORS", ""))
         return config
