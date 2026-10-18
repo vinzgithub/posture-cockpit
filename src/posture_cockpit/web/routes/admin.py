@@ -12,6 +12,7 @@ written to the audit log. Internal perimeters have their own module
 from __future__ import annotations
 
 import time
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Request
 from starlette.datastructures import FormData
@@ -34,6 +35,7 @@ from ..deps import (
     require_admin_unconfirmed,
     t,
 )
+from ..scheduler import status as scheduler_status
 from ..services import services
 
 router = APIRouter(prefix="/admin")
@@ -71,7 +73,9 @@ def admin_page(request: Request, me: Row, status: int = 200, **context):
     return render(request, "admin.html", status=status, me=me, users=s.accounts.all(), extensions=extensions,
                   load_errors=s.registry.errors, report_author=s.settings.report_author(),
                   min_length=MIN_PASSWORD_LENGTH, perimeters=s.perimeters.all(),
-                  internal_enabled=s.config.internal_scans, audit_entries=s.audit.latest(8), **context)
+                  internal_enabled=s.config.internal_scans, audit_entries=s.audit.latest(8),
+                  scheduler=scheduler_status(s, getattr(request.app.state, 'scheduler', None), datetime.now(UTC)),
+                  upcoming=s.schedules.upcoming(10), run_problems=s.schedules.runs(limit=10, not_done=True), **context)
 
 
 @router.get("")
