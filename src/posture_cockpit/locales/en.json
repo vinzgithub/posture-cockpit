@@ -537,5 +537,15 @@
   "v04.cause.tool": "Analyzer limitation",
   "v04.cause.policy": "Network policy",
   "v04.cause.budget": "Time budget",
-  "error.scan_unreadable": "This scan is unreadable: the stored data is corrupt. Other scans remain available."
+  "error.scan_unreadable": "This scan is unreadable: the stored data is corrupt. Other scans remain available.",
+  "v050.comparison.heading": "Since the previous measurement",
+  "v050.comparison.delta": "Score change: {points} points",
+  "v050.comparison.unavailable": "Score change cannot be compared",
+  "v050.comparison.reason.no_previous": "no earlier measurement",
+  "v050.comparison.reason.legacy": "incomplete historical data",
+  "v050.comparison.reason.engine": "different or unknown scoring rules",
+  "v050.comparison.reason.checks": "different set of checks",
+  "v050.comparison.reason.not_evaluated": "at least one measurement was not evaluated",
+  "v050.comparison.reason.undetermined": "provisional HTTPS result",
+  "v050.comparison.reason.partial": "scoring coverage below 90%"
 }

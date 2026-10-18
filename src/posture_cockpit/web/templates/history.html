@@ -10,10 +10,51 @@
   <p class="lead">{{ t('history.count', n=total) }}</p>
 </div>
 <section class="panel history-panel">
-{% if history | length > 1 %}<svg class="history-trend" viewBox="0 0 210 110" role="img" aria-label="{{ t('details.history') }}">
-{% for h in history | reverse %}{% if h.score is not none and h.id not in unreadable %}
-<circle class="trend-{{ 'provisional' if h.grade_withheld_reason else 'graded' }}" cx="{{ 5 + loop.index0 * 200 / ([history | length - 1, 1] | max) }}" cy="{{ 105 - h.score }}" r="3"><title>{{ h.started_at }} : {{ h.score }}/100{% if h.grade_withheld_reason %} · {{ t('v04.undetermined_count', n=h.addresses_attempted - h.addresses_conclusive) }}{% endif %}</title></circle>
-{% endif %}{% endfor %}</svg>{% endif %}
+{% if comparison %}
+<div class="history-comparison" aria-live="polite">
+  <strong>{{ t('v050.comparison.heading') }}</strong>
+  {% if comparison.comparable %}
+    <p>{{ t('v050.comparison.delta', points=('%+d' | format(comparison.score_delta))) }}</p>
+  {% else %}
+    <p>{{ t('v050.comparison.unavailable') }} — {{ t('v050.comparison.reason.' ~ comparison.reason) }}</p>
+  {% endif %}
+</div>
+{% endif %}
+{% if history | length > 1 %}
+<div class="history-chart" style="margin:14px 0 18px;max-width:850px">
+  <svg class="history-trend" viewBox="0 0 640 148" style="display:block;width:100%;height:auto;max-height:200px" role="img" aria-label="{{ t('details.history') }}">
+    <line x1="50" y1="16" x2="622" y2="16" stroke="currentColor" stroke-opacity=".12" stroke-dasharray="3 4"/>
+    <line x1="50" y1="106" x2="622" y2="106" stroke="currentColor" stroke-opacity=".25"/>
+    <text x="42" y="19" font-size="10" text-anchor="end" fill="currentColor">100</text>
+    <text x="42" y="109" font-size="10" text-anchor="end" fill="currentColor">0</text>
+    {# Connect only the latest two full scans when their state comparison is established.
+       Never imply a comparable trend across unverified earlier data. #}
+    {% if comparison and comparison.comparable and history | length > 1 and
+          history[0].score is not none and history[1].score is not none and
+          history[0].id not in unreadable and history[1].id not in unreadable and
+          history[0].id == latest_id and history[0].started_at != history[1].started_at %}
+      {% set xnew = 50 + (history | length - 1) * 572 / ([history | length - 1, 1] | max) %}
+      {% set xold = 50 + (history | length - 2) * 572 / ([history | length - 1, 1] | max) %}
+      <line x1="{{ xold }}" y1="{{ 106 - history[1].score * 0.9 }}"
+            x2="{{ xnew }}" y2="{{ 106 - history[0].score * 0.9 }}"
+            stroke="#3862c7" stroke-width="2" vector-effect="non-scaling-stroke"/>
+    {% endif %}
+    {% for h in history | reverse %}
+      {% if h.score is not none and h.id not in unreadable %}
+      {% set x = 50 + loop.index0 * 572 / ([history | length - 1, 1] | max) %}
+      {% set y = 106 - h.score * 0.9 %}
+      <circle class="trend-{{ 'provisional' if h.grade_withheld_reason else 'graded' }}" cx="{{ x }}" cy="{{ y }}" r="4" fill="{{ 'none' if h.grade_withheld_reason else '#3862c7' }}" stroke="#3862c7" stroke-width="1.5">
+        <title>{{ date(h.started_at) }} {{ local_time(h.started_at) }} : {{ h.score }}/100</title>
+      </circle>
+      <text x="{{ x }}" y="{{ y - 9 }}" font-size="10" text-anchor="middle" fill="currentColor">{{ h.score }}</text>
+      {% if loop.first or loop.last %}
+      <text x="{{ x }}" y="126" font-size="10" text-anchor="{{ 'start' if loop.first else 'end' }}" fill="currentColor">{{ date(h.started_at) }}</text>
+      {% endif %}
+      {% endif %}
+    {% endfor %}
+  </svg>
+</div>
+{% endif %}
 <div class="table-scroll history-scroll"><table class="table history">
 <thead><tr><th>{{ t('details.history_date') }}</th><th>{{ t('details.history_result') }}</th><th>{{ t('details.history_coverage') }}</th><th>{{ t('history.origin') }}</th><th>{{ t('history.via') }}</th><th>{{ t('details.history_version') }}</th><th>{{ t('history.actions') }}</th></tr></thead>
 <tbody>
@@ -23,9 +64,11 @@
   <td class="history-date"><time datetime="{{ h.started_at }}">{{ date(h.started_at) }} <span class="history-clock">{{ local_time(h.started_at) }}</span></time>
     <span class="history-meta"><span class="muted">{{ t('history.number', id=h.id) }}</span>{% if h.id == latest_id %} <span class="badge badge-latest" title="{{ t('history.latest_label') }}">{{ t('history.latest') }}</span>{% endif %}</span></td>
   <td class="history-result">{% if h.id in unreadable %}{{ t("error.scan_unreadable") }}{% elif h.score is not none and h.id not in unreadable %}<span class="grade grade-{{ h.grade or 'none' }}">{{ h.grade or '–' }}</span> <span class="history-score">{{ h.score }}/100</span>{% if h.grade_withheld_reason %}<p>{{ t("v04.undetermined") }}</p>{% endif %}{% else %}{{ t('score.not_evaluated') }}{% endif %}</td>
-  <td class="history-coverage {{ 'coverage-partial' if h.coverage < full_coverage }}" data-label="{{ t('details.history_coverage') }}"><span>{{ (h.coverage * 100 + 0.000001) | int }}&nbsp;%</span>
+  <td class="history-coverage {{ 'coverage-partial' if h.coverage < full_coverage }}" data-label="{{ t('details.history_coverage') }}">
+    <span>{{ (h.coverage * 100 + 0.000001) | int }}&nbsp;%</span>
     {% if r and h.diagnostic_coverage is not none %}{{ indicators(r, address_results.get(h.id, {})) }}{% elif h.diagnostic_coverage is none and h.id not in unreadable %}<span>{{ t('v04.addresses_unknown') }}</span>{% endif %}
-    {% if r %}<span class="history-evaluated muted">{{ t('history.evaluated', evaluated=r.evaluated, applicable=r.applicable) }}</span>{% endif %}</td>
+    {% if r %}<span class="history-evaluated muted">{{ t('history.evaluated', evaluated=r.evaluated, applicable=r.applicable) }}</span>{% endif %}
+  </td>
   <td class="history-origin" data-label="{{ t('history.origin') }}">{{ t('history.origin_perimeter', name=h.perimeter) if h.perimeter else t('history.origin_internet') }}</td>
   <td class="history-via" data-label="{{ t('history.via') }}">{% if h.via %}{{ t('history.via.' ~ h.via) }}{% else %}<span title="{{ t('history.via.unknown') }}" aria-label="{{ t('history.via.unknown') }}">—</span>{% endif %}</td>
   <td class="history-version" data-label="{{ t('details.history_version') }}">{{ h.version }}</td>

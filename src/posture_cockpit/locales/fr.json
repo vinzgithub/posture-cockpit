@@ -537,5 +537,15 @@
   "v04.cause.tool": "Limite de l’analyseur",
   "v04.cause.policy": "Politique réseau",
   "v04.cause.budget": "Budget de temps",
-  "error.scan_unreadable": "Cette analyse est illisible : les données enregistrées sont corrompues. Les autres analyses restent disponibles."
+  "error.scan_unreadable": "Cette analyse est illisible : les données enregistrées sont corrompues. Les autres analyses restent disponibles.",
+  "v050.comparison.heading": "Depuis la mesure précédente",
+  "v050.comparison.delta": "Évolution du score : {points} points",
+  "v050.comparison.unavailable": "Évolution du score non comparable",
+  "v050.comparison.reason.no_previous": "aucune mesure précédente",
+  "v050.comparison.reason.legacy": "historique antérieur incomplet",
+  "v050.comparison.reason.engine": "méthodes de notation différentes ou inconnues",
+  "v050.comparison.reason.checks": "ensemble des contrôles différent",
+  "v050.comparison.reason.not_evaluated": "au moins une mesure non évaluée",
+  "v050.comparison.reason.undetermined": "résultat HTTPS provisoire",
+  "v050.comparison.reason.partial": "couverture de notation inférieure à 90 %"
 }
