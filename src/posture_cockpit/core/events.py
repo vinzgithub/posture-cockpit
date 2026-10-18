@@ -51,7 +51,7 @@ def derive(previous: Snapshot | None, current: Snapshot) -> tuple[Candidate, ...
     if comparison.comparable and comparison.score_delta is not None:
         if comparison.score_delta <= -10 and not any(c.action == "open" for c in result):
             result.append(Candidate("security", "score_drop", "", "warning", "open",
-                                    {"delta": str(comparison.score_delta)}))
+                                    {"delta": str(comparison.score_delta), "baseline_score": str(previous.score)}))
         elif comparison.score_delta >= 0:
             result.append(Candidate("security", "score_drop", "", "info", "resolve", {}))
     # Coverage loss and recovery are measurement concerns, not vulnerabilities.
