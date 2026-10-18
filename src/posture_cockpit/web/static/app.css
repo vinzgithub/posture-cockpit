@@ -527,3 +527,11 @@ span.side-link-icon svg { width: 13px; height: 13px; }
 .history-trend { width: min(100%, 34rem); height: 10rem; }
 .trend-graded { fill: #285ea6; stroke: #285ea6; }
 .trend-provisional { fill: none; stroke: #65758b; stroke-width: 1.5; }
+
+/* v0.5.0 scheduled scans — responsive, semantic states, existing palette. */
+.tag-schedule { display:inline-block; padding:2px 8px; border-radius:6px; background:var(--accent-soft); color:var(--accent-text); font-size:12px; font-weight:700; }
+.schedule-line { margin:8px 0 0; }
+.scheduler-state { display:inline-block; padding:5px 12px; border-radius:6px; font-size:13px; font-weight:700; }
+.scheduler-here, .scheduler-elsewhere { background:var(--ok-soft); color:var(--ok-text); }
+.scheduler-off { background:var(--surface-2); color:var(--ink-2); }
+.scheduler-stalled { background:var(--fail-soft); color:var(--fail-text); }
