@@ -98,6 +98,8 @@ def test_schedule_run_slot_is_rendered_as_nominal_local_time(client):
     """The slot is a local wall time: do not convert it from UTC or expose ISO syntax."""
     services = _ready(client)
     domain = services.scans.domain(DEMO)
+    post(client, f"/domains/{DEMO}/schedule", f"/domains/{DEMO}/details",
+         frequency="daily", time="18:18", enabled="on")
     services.db.execute(
         "INSERT INTO schedule_runs(domain_id, slot, state, reason, claim, owner, attempts, claimed_at,"
         " finished_at) VALUES(?, ?, 'done', '', ?, 'test:1', 1, ?, ?)",
