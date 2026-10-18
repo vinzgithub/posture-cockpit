@@ -296,6 +296,11 @@ class Scans:
             (scan_id, at, origin, engine, a.score, a.grade, a.coverage, a.evaluation,
              json.dumps(_metrics(a, findings), sort_keys=True),
              json.dumps({f.check_id: f.status.value for f in findings}, sort_keys=True)))
+        # Same transaction as the immutable measurement; no orphan event on a crash.
+        from .events import record_state
+        domain_id = self.db.value("SELECT domain_id FROM scans WHERE id=?", (scan_id,))
+        if domain_id is not None:
+            record_state(self.db, int(domain_id), scan_id)
 
     def save_recheck(self, scan_id: int, finding: Finding) -> scoring.Assessment:
         return self.save_rechecks(scan_id, [finding])
