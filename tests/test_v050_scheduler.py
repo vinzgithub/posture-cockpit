@@ -209,6 +209,20 @@ def test_the_people_keep_a_slot_and_a_busy_limiter_writes_nothing(tmp_path):
         pc.close()
 
 
+def test_single_concurrency_slot_is_reserved_for_manual_scans(tmp_path):
+    pc = Instance(tmp_path, max_concurrent_scans=1)
+    try:
+        domain_id = pc.domain()
+        pc.schedule(domain_id)
+        pc.at_next(domain_id)
+        pc.tick()
+        assert pc.runs() == []
+        assert pc.scheduled_scans() == []
+        assert pc.s.scan_limiter.running == 0
+    finally:
+        pc.close()
+
+
 def test_the_hourly_share_of_the_scheduler_defers_until_it_frees(tmp_path):
     pc = Instance(tmp_path, scans_per_hour=1)
     try:
