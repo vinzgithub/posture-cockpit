@@ -64,6 +64,25 @@
     fetch(form.action, { method: "POST", body, headers: { "X-CSRF-Token": csrf } }).catch(() => {});
   });
 
+  // Schedule fields: progressively enhance the server-rendered form.
+  // When JavaScript is unavailable, every control stays visible and usable.
+  document.querySelectorAll("[data-schedule-form]").forEach((form) => {
+    const frequency = form.querySelector('select[name="frequency"]');
+    if (!frequency) return;
+    function syncScheduleFields() {
+      const current = frequency.value;
+      form.querySelectorAll("[data-schedule-field]").forEach((field) => {
+        const kind = field.dataset.scheduleField;
+        const visible = kind === "time" ? current !== "off"
+          : kind === "weekday" ? current === "weekly"
+          : kind === "monthday" ? current === "monthly" : true;
+        field.hidden = !visible;
+      });
+    }
+    frequency.addEventListener("change", syncScheduleFields);
+    syncScheduleFields();
+  });
+
   // ------------------------------------------------------------ copy buttons
   // navigator.clipboard only exists in secure contexts (HTTPS, localhost): at
   // http://192.168.x.x it is undefined. The older copy command still works there
