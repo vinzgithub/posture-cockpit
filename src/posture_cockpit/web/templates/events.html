@@ -32,6 +32,11 @@
     <label class="field">{{ t('events.domain') }}
       <input type="text" name="domain" value="{{ event_domain }}" maxlength="253">
     </label>
+    <label class="field">{{ t('events.period') }}
+      <select name="period">{% for value in ('all','7','30','90') %}
+        <option value="{{ value }}" {% if value == event_period %}selected{% endif %}>{{ t('events.period.' ~ value) }}</option>
+      {% endfor %}</select>
+    </label>
     <div><button type="submit" class="btn btn-primary">{{ t('events.apply') }}</button></div>
   </form>
   {% if events %}
