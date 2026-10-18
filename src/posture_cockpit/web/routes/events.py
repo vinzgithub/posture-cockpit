@@ -14,9 +14,16 @@ router = APIRouter(prefix="/events")
 
 
 @router.get("")
-async def list_events(request: Request, state: str = "open", user: Row = Depends(require_user)):
+async def list_events(request: Request, state: str = "open", severity: str = "all",
+                      category: str = "all", domain: str = "",
+                      user: Row = Depends(require_user)):
     if state not in ("open", "resolved", "notice", "all"):
         state = "open"
+    if severity not in ("critical", "warning", "info", "all"):
+        severity = "all"
+    if category not in ("security", "measurement", "technical", "all"):
+        category = "all"
+    domain = domain.strip()[:253]
     query = (
         "SELECT e.*, d.name AS domain_name, d.perimeter_id "
         "FROM events e LEFT JOIN domains d ON d.id=e.domain_id "
@@ -27,9 +34,19 @@ async def list_events(request: Request, state: str = "open", user: Row = Depends
     if state != "all":
         query += "AND e.state=? "
         params.append(state)
+    if severity != "all":
+        query += "AND e.severity=? "
+        params.append(severity)
+    if category != "all":
+        query += "AND e.category=? "
+        params.append(category)
+    if domain:
+        query += "AND d.name=? "
+        params.append(domain.lower())
     query += "ORDER BY e.updated_at DESC, e.id DESC LIMIT 100"
     rows = services(request).db.all(query, params)
-    return render(request, "events.html", events=rows, event_state=state)
+    return render(request, "events.html", events=rows, event_state=state,
+                  event_severity=severity, event_category=category, event_domain=domain)
 
 
 @router.post("/seen")
