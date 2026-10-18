@@ -26,10 +26,8 @@ def test_partial_improvement_does_not_claim_resolution():
 
 
 def test_inconclusive_results_do_not_create_or_resolve_security_alert():
-    assert derive(state("fail"), state("blocked", coverage=.89)) == (
-        # Coverage concerns are separate from the check's security status.
-        derive(state("fail"), state("blocked", coverage=.89))[0],
-    )
+    assert all(item.kind != "check" for item in
+               derive(state("fail"), state("blocked", coverage=.89)))
     assert all(item.kind != "check" for item in derive(state("error"), state("ok")))
     assert all(item.kind != "check" for item in derive(state("fail"), state("na")))
 
