@@ -101,3 +101,12 @@ def test_score_drop_remains_open_until_original_baseline_is_recovered(client):
         state = s.db.value("SELECT state FROM events WHERE domain_id=? AND kind='score_drop'",
                            (domain["id"],))
         assert state == ("resolved" if score == baseline else "open")
+
+
+def test_event_center_has_one_state_filter_not_stacked_duplicate_links(client):
+    setup_account(client, demo=True)
+    response = client.get("/events")
+    assert response.status_code == 200
+    assert response.text.count('name="state"') == 1
+    assert 'class="side-links"' not in response.text
+    assert 'class="form-grid events-filters"' in response.text
