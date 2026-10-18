@@ -13,6 +13,27 @@
          {% if state == event_state %}aria-current="page"{% endif %}>{{ t('events.state.' ~ state) }}</a>
     {% endfor %}
   </nav>
+  <form method="get" action="/events" class="form-grid">
+    <label class="field">{{ t('events.state.heading') }}
+      <select name="state">{% for value in ('open','resolved','notice','all') %}
+        <option value="{{ value }}" {% if value == event_state %}selected{% endif %}>{{ t('events.state.' ~ value) }}</option>
+      {% endfor %}</select>
+    </label>
+    <label class="field">{{ t('events.severity') }}
+      <select name="severity">{% for value in ('all','critical','warning','info') %}
+        <option value="{{ value }}" {% if value == event_severity %}selected{% endif %}>{{ t('events.severity.' ~ value) }}</option>
+      {% endfor %}</select>
+    </label>
+    <label class="field">{{ t('events.category') }}
+      <select name="category">{% for value in ('all','security','measurement','technical') %}
+        <option value="{{ value }}" {% if value == event_category %}selected{% endif %}>{{ t('events.category.' ~ value) }}</option>
+      {% endfor %}</select>
+    </label>
+    <label class="field">{{ t('events.domain') }}
+      <input type="text" name="domain" value="{{ event_domain }}" maxlength="253">
+    </label>
+    <div><button type="submit" class="btn btn-primary">{{ t('events.apply') }}</button></div>
+  </form>
   {% if events %}
   <div class="table-scroll"><table class="table">
     <thead><tr>
