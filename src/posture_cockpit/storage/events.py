@@ -25,13 +25,16 @@ def record_state(db: Database, domain_id: int, scan_id: int) -> None:
     stamp = current.at
     for item in derive(previous, current):
         opened = db.one(
-            "SELECT id, severity FROM events WHERE domain_id=? AND kind=? AND subject=? AND state='open'",
+            "SELECT id, severity, detail FROM events WHERE domain_id=? AND kind=? AND subject=? AND state='open'",
             (domain_id, item.kind, item.subject))
         if item.action == "open":
             if opened:
-                # Repeated failures update evidence; never change the original opening time.
+                # Preserve the original score baseline until it really recovers.
+                detail = dict(item.detail)
+                if item.kind == "score_drop":
+                    detail["baseline_score"] = json.loads(opened["detail"])["baseline_score"]
                 db.execute("UPDATE events SET severity=?, updated_at=?, detail=? WHERE id=?",
-                           (item.severity, stamp, json.dumps(item.detail, sort_keys=True), opened["id"]))
+                           (item.severity, stamp, json.dumps(detail, sort_keys=True), opened["id"]))
             else:
                 db.execute(
                     "INSERT INTO events(domain_id,category,kind,subject,state,severity,opened_at,"
@@ -42,6 +45,11 @@ def record_state(db: Database, domain_id: int, scan_id: int) -> None:
             db.execute("UPDATE events SET severity='warning', updated_at=?, detail=? WHERE id=?",
                        (stamp, json.dumps(item.detail, sort_keys=True), opened["id"]))
         elif opened and item.action == "resolve":
+            if item.kind == "score_drop":
+                # A +1 rebound does not repair a -15 decline.
+                baseline = json.loads(opened["detail"])["baseline_score"]
+                if current.score is None or current.score < int(baseline):
+                    continue
             db.execute("UPDATE events SET state='resolved', severity='info', updated_at=?, resolved_at=?, "
                        "resolved_scan_id=?, resolution='confirmed', detail=? WHERE id=?",
                        (stamp, stamp, scan_id, json.dumps(item.detail, sort_keys=True), opened["id"]))
