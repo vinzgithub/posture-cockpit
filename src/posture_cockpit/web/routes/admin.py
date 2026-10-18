@@ -29,6 +29,7 @@ from ..deps import (
     field,
     flash,
     lang_of,
+    local_path,
     redirect,
     render,
     require_admin,
@@ -55,7 +56,8 @@ async def confirm(request: Request, user: Row = Depends(require_admin_unconfirme
         return render(request, "admin_confirm.html", status=400, error=t(request, problem))
     succeeded(request)
     request.session["admin_until"] = int(time.time()) + ADMIN_CONFIRM_SECONDS
-    return redirect("/admin")
+    # Consume once; the destination is a local GET page, not the protected POST.
+    return redirect(local_path(request.session.pop("admin_return", "/admin"), "/admin"))
 
 
 def admin_page(request: Request, me: Row, status: int = 200, **context):
