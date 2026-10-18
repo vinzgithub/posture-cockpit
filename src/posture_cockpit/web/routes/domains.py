@@ -210,7 +210,8 @@ def details_page(request: Request, domain: Row, user: Row, status: int = 200, **
     return render(request, "details.html", status=status, scan=scan, categories=_by_category(scan),
                   summary=_summary(request), result=scan.assessment(), registry=s.registry, rechecks=scan.rechecks,
                   domain=domain, history=s.scans.history(domain["id"]), full_coverage=scoring.FULL_COVERAGE,
-                  schedule=schedule, schedule_form=form, can_schedule=bool(user["is_admin"]), **context)
+                  schedule=schedule, schedule_form=form, can_schedule=bool(user["is_admin"]),
+                  schedule_runs=s.schedules.runs(domain["id"], limit=10), **context)
 
 
 @router.post("/{name}/schedule")
