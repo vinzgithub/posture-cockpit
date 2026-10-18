@@ -1,0 +1,41 @@
+{# Copyright © 2026 Vincent Fournet · SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 -#}
+{% extends "base.html" %}
+{% block title %}{{ t('events.title') }} · Posture Cockpit{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>{{ t('events.title') }}</h1>
+  <p class="lead">{{ t('events.intro') }}</p>
+</div>
+<section class="panel">
+  <nav class="side-links" aria-label="{{ t('events.filter') }}">
+    {% for state in ('open', 'resolved', 'notice', 'all') %}
+      <a class="btn btn-secondary" href="/events?state={{ state }}"
+         {% if state == event_state %}aria-current="page"{% endif %}>{{ t('events.state.' ~ state) }}</a>
+    {% endfor %}
+  </nav>
+  {% if events %}
+  <div class="table-scroll"><table class="table">
+    <thead><tr>
+      <th>{{ t('events.date') }}</th><th>{{ t('events.domain') }}</th>
+      <th>{{ t('events.type') }}</th><th>{{ t('events.severity') }}</th>
+      <th>{{ t('events.state.heading') }}</th>
+    </tr></thead>
+    <tbody>
+    {% for e in events %}
+    <tr>
+      <td>{{ date(e.updated_at) }} {{ local_time(e.updated_at) }}</td>
+      <td>{% if e.domain_name %}<a href="/domains/{{ e.domain_name }}/details">{{ e.domain_name }}</a>{% else %}{{ t('events.instance') }}{% endif %}</td>
+      <td>{{ t('events.kind.' ~ e.kind) }}{% if e.subject %} · <code>{{ e.subject }}</code>{% endif %}</td>
+      <td>{{ t('events.severity.' ~ e.severity) }}</td>
+      <td>{{ t('events.state.' ~ e.state) }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}<p class="muted">{{ t('events.empty') }}</p>{% endif %}
+  <form action="/events/seen" method="post">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <button class="btn btn-secondary" type="submit">{{ t('events.mark_seen') }}</button>
+  </form>
+</section>
+{% endblock %}
