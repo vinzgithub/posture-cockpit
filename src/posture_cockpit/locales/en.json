@@ -552,7 +552,7 @@
   "schedule.title": "Scheduled scan",
   "schedule.help": "Automatic scans run at the chosen time in the instance's time zone. Only a recently confirmed administrator can change schedules.",
   "schedule.frequency": "Frequency",
-  "schedule.frequency.off": "None (disable)",
+  "schedule.frequency.off": "Disabled (no schedule)",
   "schedule.frequency.daily": "Daily",
   "schedule.frequency.weekly": "Weekly",
   "schedule.frequency.monthly": "Monthly",
