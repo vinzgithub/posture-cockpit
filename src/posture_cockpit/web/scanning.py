@@ -8,6 +8,9 @@ audit log, with the perimeter it ran in.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
+
 from .. import __version__
 from ..core.model import Finding
 from ..storage import Perimeter, Row
@@ -16,6 +19,18 @@ from .services import Services
 
 def _who(user: Row | None, client: str) -> str:
     return f"user:{user['id']}" if user else f"client:{client}"
+
+
+@contextmanager
+def scanning(s: Services, domain: str) -> Iterator[None]:
+    """Marks a full scan of ``domain`` as running in this process, until it ends (0.5.0)."""
+    already = domain in s.in_progress
+    s.in_progress.add(domain)
+    try:
+        yield
+    finally:
+        if not already:
+            s.in_progress.discard(domain)
 
 
 def perimeter_of(s: Services, domain: Row | None) -> Perimeter | None:
@@ -33,7 +48,7 @@ async def scan_and_save(s: Services, domain: str, user: Row | None, *, perimeter
 
     The caller has checked that ``user`` may scan this domain in this perimeter.
     Raises TooManyScans over the limits."""
-    with s.scan_limiter.slot(_who(user, client)):
+    with s.scan_limiter.slot(_who(user, client)), scanning(s, domain):
         result = await s.scanner.scan(domain, perimeter, history=s.scans.https_history(domain))
     user_id = user["id"] if user else None
     domain_id = s.scans.add_domain(domain, user_id, perimeter.id if perimeter else None)

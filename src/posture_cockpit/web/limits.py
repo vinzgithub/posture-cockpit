@@ -9,6 +9,9 @@ queued: the page or the script says so and can try again.
 
 Kept in memory, for the process: run one uvicorn worker (the default) so the
 limits hold for the whole instance.
+
+The scheduler (0.5.0) takes its slots as the principal ``system:scheduler``, with its own
+hourly share, and leaves one slot free (``keep_free``): a person is never kept waiting by it.
 """
 
 from __future__ import annotations
@@ -41,18 +44,35 @@ class ScanLimiter:
         """Holds one of the concurrent slots while the scan runs. Raises TooManyScans.
 
         ``counts=False``: does not use the hourly share (re-running a single check)."""
+        release = self.take(who, counts=counts)
+        try:
+            yield
+        finally:
+            release()
+
+    def take(self, who: str, *, counts: bool = True, keep_free: int = 0) -> Callable[[], None]:
+        """Takes a slot and returns the function that gives it back (called once). Raises
+        TooManyScans. ``keep_free``: refuses unless that many slots stay free after this one."""
         now = self._clock()
         started = self._started.setdefault(who, deque())
         while started and now - started[0] >= 3600:
             started.popleft()
         if counts and len(started) >= self.per_hour:
             raise TooManyScans("quota", retry_after=int(3600 - (now - started[0])) + 1)
-        if self._running >= self.concurrent:
+        if self._running >= self.concurrent - keep_free:
             raise TooManyScans("busy", retry_after=10)
         if counts:
             started.append(now)
         self._running += 1
-        try:
-            yield
-        finally:
-            self._running -= 1
+        released = False
+
+        def release() -> None:
+            nonlocal released
+            if not released:
+                released = True
+                self._running -= 1
+        return release
+
+    @property
+    def running(self) -> int:
+        return self._running
