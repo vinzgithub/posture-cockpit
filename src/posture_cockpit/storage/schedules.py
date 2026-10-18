@@ -258,6 +258,12 @@ class Schedules:
                             " reason = '' WHERE id = ? AND state = 'running' AND claim = ?",
                             (scan_id, iso(now), claim.run_id, claim.token))
             self.db.execute("UPDATE schedules SET failures = 0 WHERE domain_id = ?", (claim.domain_id,))
+            # A successful scheduled scan conclusively resolves a consecutive-failure incident.
+            self.db.execute(
+                "UPDATE events SET state='resolved', severity='info', resolved_at=?, updated_at=?, "
+                "resolved_scan_id=?, resolution='scheduled_scan_succeeded' "
+                "WHERE domain_id=? AND kind='schedule_failures' AND subject='' AND state='open'",
+                (iso(now), iso(now), scan_id, claim.domain_id))
         return scan_id
 
     def _holds(self, claim: Claim) -> bool:
@@ -275,6 +281,19 @@ class Schedules:
             if cur.rowcount != 1:
                 return False
             self.db.execute("UPDATE schedules SET failures = failures + 1 WHERE domain_id = ?", (claim.domain_id,))
+            failures = int(self.db.value("SELECT failures FROM schedules WHERE domain_id=?", (claim.domain_id,)) or 0)
+            if failures >= 3:
+                # One live incident per domain; update rather than flood the event center.
+                existing = self.db.one(
+                    "SELECT id FROM events WHERE domain_id=? AND kind='schedule_failures' "
+                    "AND subject='' AND state='open'", (claim.domain_id,))
+                if existing:
+                    self.db.execute("UPDATE events SET updated_at=? WHERE id=?", (iso(now), existing["id"]))
+                else:
+                    self.db.execute(
+                        "INSERT INTO events(domain_id,category,kind,subject,state,severity,opened_at,updated_at) "
+                        "VALUES(?,'technical','schedule_failures','','open','warning',?,?)",
+                        (claim.domain_id, iso(now), iso(now)))
             self._refresh(claim.domain_id, now)
         return True
 
