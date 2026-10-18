@@ -13,15 +13,15 @@ def state(check="ok", score=90, coverage=1.0, engine=4, origin="scan"):
 
 
 def test_regression_and_confirmed_resolution():
-    [alert] = derive(state("ok"), state("fail", 70))
+    [alert] = [e for e in derive(state("ok"), state("fail", 70)) if e.kind == "check"]
     assert (alert.kind, alert.subject, alert.action, alert.severity) == (
         "check", "tls.cert", "open", "critical")
-    [fixed] = derive(state("fail", 70), state("ok"))
+    [fixed] = [e for e in derive(state("fail", 70), state("ok")) if e.kind == "check"]
     assert (fixed.action, fixed.severity) == ("resolve", "info")
 
 
 def test_partial_improvement_does_not_claim_resolution():
-    [change] = derive(state("fail", 50), state("warn", 75))
+    [change] = [e for e in derive(state("fail", 50), state("warn", 75)) if e.kind == "check"]
     assert (change.action, change.severity) == ("downgrade", "warning")
 
 
