@@ -242,7 +242,18 @@ def render(request: Request, template: str, status: int = 200, **context: Any) -
         """The hour of a stored time, in the instance's time zone: "09:19"."""
         return local(value, zone).strftime("%H:%M") if value else ""
 
+    viewer = current_user(request)
+    unread = 0
+    if viewer is not None:
+        unread = int(s.db.value(
+            "SELECT COUNT(*) FROM events e LEFT JOIN domains d ON d.id=e.domain_id "
+            "WHERE e.updated_at > COALESCE(?, '') "
+            "AND (? OR (e.domain_id IS NOT NULL AND d.perimeter_id IS NULL)) "
+            "AND (e.domain_id IS NULL OR d.id IS NOT NULL)",
+            (viewer["events_seen_at"], int(bool(viewer["is_admin"])))) or 0)
+
     base = {
+        "unread_events": unread,
         "lang": lang,
         "user": current_user(request),
         "version": __version__,
