@@ -624,5 +624,12 @@
   "events.severity.critical": "Critical",
   "events.severity.warning": "Warning",
   "events.severity.info": "Information",
-  "events.kind.schedule_failures": "Repeated scheduled scan failures"
+  "events.kind.schedule_failures": "Repeated scheduled scan failures",
+  "events.apply": "Apply filters",
+  "events.category": "Category",
+  "events.category.security": "Security",
+  "events.category.measurement": "Measurement",
+  "events.category.technical": "Technical",
+  "events.category.all": "All",
+  "events.severity.all": "All"
 }
