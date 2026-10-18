@@ -623,5 +623,6 @@
   "events.kind.coverage_loss": "Perte de couverture",
   "events.severity.critical": "Critique",
   "events.severity.warning": "Avertissement",
-  "events.severity.info": "Information"
+  "events.severity.info": "Information",
+  "events.kind.schedule_failures": "Échecs répétés des analyses programmées"
 }
