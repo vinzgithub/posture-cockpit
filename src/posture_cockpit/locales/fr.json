@@ -624,5 +624,12 @@
   "events.severity.critical": "Critique",
   "events.severity.warning": "Avertissement",
   "events.severity.info": "Information",
-  "events.kind.schedule_failures": "Échecs répétés des analyses programmées"
+  "events.kind.schedule_failures": "Échecs répétés des analyses programmées",
+  "events.apply": "Filtrer",
+  "events.category": "Catégorie",
+  "events.category.security": "Sécurité",
+  "events.category.measurement": "Mesure",
+  "events.category.technical": "Technique",
+  "events.category.all": "Toutes",
+  "events.severity.all": "Toutes"
 }
