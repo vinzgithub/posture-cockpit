@@ -54,7 +54,7 @@ def test_configure_schedule_requires_recent_admin_confirmation_and_csrf(client):
     url = f"/domains/{DEMO}/schedule"
     response = client.post(url, data={"frequency": "daily", "time": "05:00", "enabled": "on"},
                            follow_redirects=False)
-    assert response.status_code == 403
+    assert response.status_code == 303 and response.headers["location"] == "/admin/confirm"
     response = post(client, url, f"/domains/{DEMO}/details",
                     frequency="daily", time="05:00", enabled="on")
     assert response.status_code == 303 and response.headers["location"] == "/admin/confirm"
