@@ -66,3 +66,28 @@ def test_scheduler_status_is_shown_in_administration(client):
     assert page.status_code == 200
     assert "Analyses programmées" in page.text
     assert "Prochaines analyses" in page.text
+
+
+def test_admin_confirmation_returns_to_schedule_without_replaying_post(client):
+    setup_account(client, demo=True)
+    detail = f"/domains/{DEMO}/details"
+    schedule_url = f"/domains/{DEMO}/schedule"
+    response = post(client, schedule_url, detail, frequency="daily", time="05:00", enabled="on")
+    assert response.status_code == 303
+    assert response.headers["location"] == "/admin/confirm"
+    response = post(client, "/admin/confirm", "/admin/confirm", password=PASSWORD)
+    assert response.status_code == 303
+    assert response.headers["location"] == detail + "#schedule"
+    assert client.app.state.services.db.value("SELECT COUNT(*) FROM schedules") == 0
+    response = post(client, schedule_url, detail, frequency="daily", time="05:00", enabled="on")
+    assert response.status_code == 303
+    assert client.app.state.services.db.value("SELECT COUNT(*) FROM schedules") == 1
+
+
+def test_schedule_form_has_frequency_sensitive_fields(client):
+    _ready(client)
+    page = client.get(f"/domains/{DEMO}/details")
+    assert page.status_code == 200
+    assert "data-schedule-form" in page.text
+    for kind in ("time", "weekday", "monthday"):
+        assert f'data-schedule-field="{kind}"' in page.text
