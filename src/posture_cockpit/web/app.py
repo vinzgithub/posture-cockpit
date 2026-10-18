@@ -25,9 +25,11 @@ from ..i18n import Catalog
 from ..scanner import Scanner
 from ..security import LoginThrottle
 from ..storage import Accounts, AuditLog, CorruptScan, InstanceSettings, Perimeters, Scans, instance_lock, open_database
+from ..storage.schedules import Schedules
 from . import deps, first_run
 from .limits import ScanLimiter
 from .routes import account, admin, api, auth, domains, perimeters, report
+from .scheduler import Scheduler
 from .services import STATIC_DIR, TEMPLATES_DIR, Services
 
 # Strict policy: no inline script or style, nothing loaded from elsewhere.
@@ -72,11 +74,17 @@ def create_app(config: Config | None = None, registry: Registry | None = None,
         throttle=LoginThrottle(), account_throttle=LoginThrottle(max_failures=10, lock_seconds=900),
         scan_limiter=ScanLimiter(config.max_concurrent_scans, config.scans_per_hour),
         templates=Jinja2Templates(directory=TEMPLATES_DIR),
+        schedules=Schedules(db, config.timezone),
     )
 
     app = FastAPI(title="Posture Cockpit", version=__version__, docs_url=None, redoc_url=None, openapi_url=None)
     app.state.services = services
     app.state.folder_lock = folder_lock
+    # Scheduled scans (web/scheduler.py): started with the application, stopped before the lock goes.
+    app.state.scheduler = Scheduler(services, services.schedules) if config.scheduler else None
+    if app.state.scheduler is not None:
+        app.router.on_startup.append(app.state.scheduler.start)
+        app.router.on_shutdown.append(app.state.scheduler.stop)
     app.router.on_shutdown.append(folder_lock.release)
     # While no account exists, /setup asks for a one-time code written to the log (first_run.py).
     app.state.setup_code = None

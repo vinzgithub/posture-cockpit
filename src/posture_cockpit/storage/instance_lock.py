@@ -21,6 +21,11 @@ What it guarantees:
 
 Servers of 0.4.0 and earlier do not take this lock: a restoration also checks that no SQLite
 connection is open (storage/backup.py, ``in_use``). Without flock (Windows), the lock does nothing.
+
+The scheduler (0.5.0) has its own file, ``.posture-cockpit-scheduler.lock``, taken *exclusive*
+and without waiting by one process only: of two servers on one data folder (two containers, two
+workers), one schedules, the other serves pages and tries again every minute. Where the lock does
+not hold, the database still keeps every slot from running twice (storage/schedules.py).
 """
 
 from __future__ import annotations
@@ -36,6 +41,7 @@ except ImportError:  # pragma: no cover - Windows
     fcntl = None  # type: ignore[assignment]
 
 LOCK_NAME = ".posture-cockpit.lock"
+SCHEDULER_LOCK_NAME = ".posture-cockpit-scheduler.lock"
 
 
 class Busy(Exception):
@@ -54,10 +60,10 @@ class Held:
             self._fd = None
 
 
-def _take(data_dir: Path, operation: int) -> Held:
+def _take(data_dir: Path, operation: int, name: str = LOCK_NAME) -> Held:
     if fcntl is None:
         return Held(None)
-    fd = os.open(data_dir / LOCK_NAME, os.O_RDWR | os.O_CREAT, 0o600)
+    fd = os.open(data_dir / name, os.O_RDWR | os.O_CREAT, 0o600)
     try:
         fcntl.flock(fd, operation | fcntl.LOCK_NB)
     except BlockingIOError:
@@ -82,3 +88,8 @@ def exclusive(data_dir: Path) -> Iterator[None]:
         yield
     finally:
         held.release()
+
+
+def scheduler(data_dir: Path) -> Held:
+    """The role of the scheduler, for one process at a time. Busy: another process has it."""
+    return _take(data_dir, fcntl.LOCK_EX if fcntl else 0, SCHEDULER_LOCK_NAME)
