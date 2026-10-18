@@ -20,6 +20,7 @@
       {% if user %}
       <nav class="nav" aria-label="{{ t('nav.label') }}">
         <a href="/domains" {% if path.startswith('/domains') %}aria-current="page"{% endif %}>{{ t('nav.domains') }}</a>
+        <a href="/events" {% if path.startswith('/events') %}aria-current="page"{% endif %}>{{ t('nav.events') }}{% if unread_events %} ({{ unread_events }}){% endif %}</a>
         <a href="/settings" {% if path.startswith('/settings') %}aria-current="page"{% endif %}>{{ t('nav.settings') }}</a>
         {% if user.is_admin %}<a href="/admin" {% if path.startswith('/admin') %}aria-current="page"{% endif %}>{{ t('nav.admin') }}</a>{% endif %}
       </nav>
