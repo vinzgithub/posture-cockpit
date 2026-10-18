@@ -631,5 +631,7 @@
   "events.category.measurement": "Mesure",
   "events.category.technical": "Technique",
   "events.category.all": "Toutes",
-  "events.severity.all": "Toutes"
+  "events.severity.all": "Toutes",
+  "events.domain_section": "Événements récents",
+  "events.all_for_domain": "Tous les événements de ce domaine"
 }
