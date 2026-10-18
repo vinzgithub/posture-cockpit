@@ -21,7 +21,7 @@ def record_state(db: Database, domain_id: int, scan_id: int) -> None:
         "WHERE s.domain_id=? ORDER BY st.at DESC, st.id DESC LIMIT 2", (domain_id,))
     if len(rows) != 2:
         return
-    previous, current = Snapshot.from_row(rows[1]), Snapshot.from_row(rows[0])
+    previous, current = Snapshot.from_row(dict(rows[1])), Snapshot.from_row(dict(rows[0]))
     stamp = current.at
     for item in derive(previous, current):
         opened = db.one(
