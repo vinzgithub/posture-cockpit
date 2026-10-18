@@ -77,3 +77,27 @@ def test_event_seen_requires_csrf_and_does_not_resolve(client):
     assert response.status_code == 303
     assert s.db.value("SELECT state FROM events WHERE subject='tls.cert'") == "open"
     assert s.db.value("SELECT events_seen_at FROM users LIMIT 1") is not None
+
+
+def test_score_drop_remains_open_until_original_baseline_is_recovered(client):
+    setup_account(client, demo=True)
+    s = client.app.state.services
+    domain = s.scans.domain("menuiserie-dupont.example")
+    scan_id = s.scans.latest_id(domain["id"])
+    before = s.db.one("SELECT * FROM scan_states WHERE scan_id=? ORDER BY id DESC LIMIT 1",
+                      (scan_id,))
+    baseline = int(before["score"])
+    start = datetime.fromisoformat(before["at"])
+    for minutes, score in ((2, baseline - 12), (3, baseline - 11), (4, baseline)):
+        with s.db.transaction():
+            s.db.execute(
+                "INSERT INTO scan_states(scan_id,at,origin,engine,score,grade,coverage,evaluation,"
+                " metrics,checks) VALUES(?,?,'recheck',?,?,?,?,?,?,?)",
+                (scan_id, (start + timedelta(minutes=minutes)).isoformat(),
+                 before["engine"], score, before["grade"], before["coverage"],
+                 before["evaluation"], before["metrics"], before["checks"]),
+            )
+            record_state(s.db, domain["id"], scan_id)
+        state = s.db.value("SELECT state FROM events WHERE domain_id=? AND kind='score_drop'",
+                           (domain["id"],))
+        assert state == ("resolved" if score == baseline else "open")
