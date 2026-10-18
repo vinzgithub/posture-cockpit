@@ -633,5 +633,10 @@
   "events.category.all": "All",
   "events.severity.all": "All",
   "events.domain_section": "Recent events",
-  "events.all_for_domain": "All events for this domain"
+  "events.all_for_domain": "All events for this domain",
+  "events.period": "Period",
+  "events.period.all": "All time",
+  "events.period.7": "Last 7 days",
+  "events.period.30": "Last 30 days",
+  "events.period.90": "Last 90 days"
 }
