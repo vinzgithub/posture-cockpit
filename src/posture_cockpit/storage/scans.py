@@ -31,10 +31,12 @@ import json
 import math
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
+from typing import Any
 
 from ..core import generation, scoring
 from ..core.engine import ScanResult
 from ..core.model import HTTPS_ROOT_CHECK, Finding
+from ..core.schedule_time import format_time
 from .database import Database, Row, utcnow
 from .schema import METRICS
 
@@ -146,17 +148,23 @@ class Scans:
     def set_dns_host(self, domain_id: int, host_id: str) -> None:
         self.db.execute("UPDATE domains SET dns_host = ? WHERE id = ?", (host_id, domain_id))
 
-    def delete_domain(self, domain_id: int) -> dict[str, int]:
+    def delete_domain(self, domain_id: int) -> dict[str, Any]:
         """The domain and all it holds; returns how many scans, states, scheduled runs and events
-        went with it (for the audit log)."""
+        went with it, and its schedule if it had one (for the audit log)."""
         with self.db.transaction():
-            removed = {name: int(self.db.value(query, (domain_id,)) or 0) for name, query in (
+            removed: dict[str, Any] = {name: int(self.db.value(query, (domain_id,)) or 0) for name, query in (
                 ("scans", "SELECT COUNT(*) FROM scans WHERE domain_id = ?"),
                 ("states", "SELECT COUNT(*) FROM scan_states WHERE scan_id IN "
                            "(SELECT id FROM scans WHERE domain_id = ?)"),
                 ("runs", "SELECT COUNT(*) FROM schedule_runs WHERE domain_id = ?"),
                 ("events", "SELECT COUNT(*) FROM events WHERE domain_id = ?"))}
+            schedule = self.db.one("SELECT frequency, at_minute, weekday, monthday, enabled FROM schedules"
+                                   " WHERE domain_id = ?", (domain_id,))
             self.db.execute("DELETE FROM domains WHERE id = ?", (domain_id,))
+        if schedule is not None:  # the schedule that went with it (Révision 1, point 2)
+            removed["schedule"] = {"frequency": schedule["frequency"], "time": format_time(schedule["at_minute"]),
+                                   "weekday": schedule["weekday"], "monthday": schedule["monthday"],
+                                   "enabled": bool(schedule["enabled"])}
         return removed
 
     # ------------------------------------------------------------------ scans

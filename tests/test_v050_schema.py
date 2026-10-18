@@ -139,4 +139,6 @@ def test_deleting_a_domain_takes_everything_it_holds_and_the_audit_counts_it(cli
     assert {t: s.db.value(f"SELECT COUNT(*) FROM {t}") for t in tables} == dict.fromkeys(tables, 0)  # noqa: S608
     [entry] = s.audit.latest(action_prefix="domain.deleted")
     assert entry["target"] == DEMO
-    assert entry["detail"] == {"perimeter": "", "scans": 2, "states": 3, "runs": 1, "events": 2}
+    assert entry["detail"] == {"perimeter": "", "scans": 2, "states": 3, "runs": 1, "events": 2,
+                               "schedule": {"frequency": "daily", "time": "02:00", "weekday": None,
+                                            "monthday": None, "enabled": True}}
