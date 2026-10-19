@@ -318,3 +318,27 @@ def test_listings_for_the_administration(pc):
     assert [s.domain for s in pc.schedules.upcoming()] == [DOMAIN]
     assert [r["state"] for r in pc.schedules.runs(not_done=True)] == ["failed"]
     assert [r["domain"] for r in pc.schedules.runs(pc.domain_id)] == [DOMAIN]
+
+
+def test_three_consecutive_failures_open_one_event_and_success_resolves_it(pc):
+    """An incident is opened only after three failed slots, then conclusively resolved."""
+    pc.schedules.set(pc.domain_id, DAILY_5, enabled=True, user_id=None,
+                     now=local(2026, 10, 20, 10, 0))
+    for day in (21, 22, 23):
+        at = local(2026, 10, day, 5, 0) + SPREAD
+        claim = pc.claim_due(at)
+        assert pc.schedules.fail(claim, "timeout", at + timedelta(minutes=1))
+        expected = 1 if day == 23 else 0
+        assert pc.db.value(
+            "SELECT COUNT(*) FROM events WHERE domain_id=? AND kind='schedule_failures' AND state='open'",
+            (pc.domain_id,)) == expected
+    at = local(2026, 10, 24, 5, 0) + SPREAD
+    claim = pc.claim_due(at)
+    assert pc.schedules.finish(claim, pc.save, at + timedelta(minutes=1))
+    event = pc.db.one(
+        "SELECT state, severity, resolution, resolved_scan_id FROM events "
+        "WHERE domain_id=? AND kind='schedule_failures'", (pc.domain_id,))
+    assert event["state"] == "resolved"
+    assert event["severity"] == "info"
+    assert event["resolution"] == "scheduled_scan_succeeded"
+    assert event["resolved_scan_id"] is not None

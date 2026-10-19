@@ -28,7 +28,7 @@ from ..storage import Accounts, AuditLog, CorruptScan, InstanceSettings, Perimet
 from ..storage.schedules import Schedules
 from . import deps, first_run
 from .limits import ScanLimiter
-from .routes import account, admin, api, auth, domains, perimeters, report
+from .routes import account, admin, api, auth, domains, events, perimeters, report
 from .scheduler import Scheduler
 from .services import STATIC_DIR, TEMPLATES_DIR, Services
 
@@ -114,7 +114,7 @@ def create_app(config: Config | None = None, registry: Registry | None = None,
                        max_age=config.session_max_age, same_site="lax", https_only=config.cookie_secure)
 
     _add_error_pages(app)
-    for module in (auth, account, admin, perimeters, domains, report, api):
+    for module in (auth, account, admin, perimeters, domains, events, report, api):
         app.include_router(module.router)
 
     @app.get("/healthz")

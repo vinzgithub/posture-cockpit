@@ -211,7 +211,10 @@ def details_page(request: Request, domain: Row, user: Row, status: int = 200, **
                   summary=_summary(request), result=scan.assessment(), registry=s.registry, rechecks=scan.rechecks,
                   domain=domain, history=s.scans.history(domain["id"]), full_coverage=scoring.FULL_COVERAGE,
                   schedule=schedule, schedule_form=form, can_schedule=bool(user["is_admin"]),
-                  schedule_runs=s.schedules.runs(domain["id"], limit=10), **context)
+                  schedule_runs=s.schedules.runs(domain["id"], limit=10),
+                  recent_events=s.db.all("SELECT * FROM events WHERE domain_id=? "
+                                         "ORDER BY (state='open') DESC, updated_at DESC, id DESC LIMIT 5",
+                                         (domain["id"],)), **context)
 
 
 @router.post("/{name}/schedule")

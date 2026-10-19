@@ -19,6 +19,22 @@
 {{ indicators(result, scan.addresses()) }}
 {% include "_findings.html" %}
 
+{% if recent_events %}
+<section class="panel" aria-labelledby="domain-events-title">
+  <h2 id="domain-events-title">{{ t('events.domain_section') }}</h2>
+  <ul>
+    {% for e in recent_events %}
+    <li>{{ date(e.updated_at) }} {{ local_time(e.updated_at) }} —
+      <strong>{{ t('events.severity.' ~ e.severity) }}</strong> :
+      {{ t('events.kind.' ~ e.kind) }}{% if e.subject %} · <code>{{ e.subject }}</code>{% endif %}
+      ({{ t('events.state.' ~ e.state) }})
+    </li>
+    {% endfor %}
+  </ul>
+  <p><a href="/events?domain={{ domain.name | urlencode }}">{{ t('events.all_for_domain') }}</a></p>
+</section>
+{% endif %}
+
 {% if history | length > 1 %}
 <section class="panel" aria-labelledby="history-title">
   <h2 id="history-title">{{ t('details.history') }}</h2>
