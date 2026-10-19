@@ -1,7 +1,8 @@
-# Événements et alertes — Posture Cockpit v0.5.0 (étape 4)
+# Événements et alertes — Posture Cockpit v0.5.0
 
-> Fonctionnalité en développement, branche `v050/etape-4`. Ne pas déployer sur
-> la production v0.4.1. L'étape n'envoie pas d'e-mails ni de notifications externes.
+> Fonctionnalité intégrée à la branche de développement `feat/v0.5.0`, mais non
+> publiée. La production v0.4.1 ne doit pas être remplacée avant la validation
+> complète de l'intégration. Aucun e-mail ni notification externe n'est envoyé.
 
 ## Ce que signifie un événement
 
@@ -53,6 +54,14 @@ Le traitement est déterministe, idempotent et utilise l'unicité de l'événeme
 ouvert par domaine/type/sujet. Les valeurs historiques et scores enregistrés ne
 sont jamais recalculés pour produire une alerte.
 
+## Recette intégrée — 19 octobre 2026
+
+Sur le conteneur de recette intégré **8086** (distinct de la production), deux analyses du domaine fictif `menuiserie-dupont.example` ont conservé un score de **57/100**, sans faux événement. La dégradation contrôlée du seul contrôle `mail.spf` a provoqué une baisse à **48/100** et ouvert un événement de sécurité **`open` / `critical`**. Le rétablissement du contrôle a ramené le score à **57/100** et l'événement à **`resolved` / `info`**.
+
+Le bouton **« Marquer comme consultés »** a supprimé le badge de nouveautés tout en conservant l'incident résolu dans l'historique. Des captures de recette ont confirmé les états successifs. Ce test porte sur des observations **fictives et simulées**, sans panne réelle d'un service Internet.
+
+Les tests d'étape 4 réalisés antérieurement sur le port isolé **8085** ont également couvert la perte de couverture, trois échecs d'analyses programmées et les droits des utilisateurs sur les périmètres internes. Les tests CI de la PR #26 étaient verts sur son **précédent commit** (`81a1b18...`, 9 jobs), et doivent être recontrôlés après toute mise à jour documentaire. Dossier de preuves : `docs/developer/RELEASE_V050.fr.md`.
+
 ## Recette et livraison
 
 Vérifier les suites Python (3.11, 3.12, 3.13), Ruff, mypy, Docker, navigateur,
@@ -60,6 +69,8 @@ migrations et rollback sur la PR. Tester séparément une nouvelle dégradation,
 une correction, les résultats non concluants, les échecs programmés, le bouton
 « Marquer comme consultés » et les droits sur périmètres internes.
 
-La recette Docker utilise son propre projet et un volume SQLite distinct de
-toute production. La PR reste en brouillon jusqu'à recette et validation explicite.
-Aucun merge, tag, release ou déploiement en production sans accord du propriétaire.
+La recette Docker a utilisé un projet et un volume SQLite distincts de la production.
+L'étape 4 a été validée en recette et fusionnée dans `feat/v0.5.0` via la PR #25.
+L'intégration finale de la version reste à valider séparément, selon
+`docs/developer/RELEASE_V050.fr.md`. Aucun merge dans `main`, tag, release ou
+déploiement en production sans accord explicite du propriétaire.

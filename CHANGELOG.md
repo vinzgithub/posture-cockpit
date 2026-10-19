@@ -2,7 +2,35 @@
 
 ## 0.5.0 — unreleased
 
-In development. Scoring rules, checks, statuses and the keys of the API are unchanged.
+In development; not published. Scoring rules, checks, statuses and the keys of the API are unchanged.
+
+**Historical comparisons (step 2)**
+- The history compares compatible immutable measured states, with score deltas and changes of conclusive checks, without recomputing past assessments.
+- Legacy states, different generations of scoring rules and non-conclusive observations do not create misleading comparisons.
+- Historical comparison views are available in French and English.
+
+**Scheduled scans (step 3)**
+- Daily, weekly and monthly schedules use the instance time zone; handle daylight-saving transitions and the end of short months; spread departures to avoid simultaneous runs.
+- Only a recently confirmed administrator can change schedules. Executions are claimed and recorded transactionally, with lease recovery, bounded retries and history in SQLite.
+- The scheduler can be disabled with `POSTURE_COCKPIT_SCHEDULER=off`; it remains **disabled in isolated recipe**. The environment-based application default is enabled, so explicitly configure the intended setting before running an upgraded installation.
+
+**Internal events and alerts (step 4)**
+- Conservative detection and resolution of security check regressions, score drops of 10 or more comparable points, coverage falling below 90%, and three consecutive scheduled scan failures.
+- FR/EN event center with state/severity/category/domain/period filters, per-account unread marker, and in-place acknowledgment that never resolves an incident.
+- Events from internal perimeters and system-wide incidents are hidden from non-administrators; events and scan states are recorded atomically.
+- An isolated Docker recipe validated SPF degradation and recovery, coverage loss and recovery, scheduled-failure detection and resolution, and perimeter visibility; these incidents were **simulated**, not created by real network failures.
+- Readable labels for technical identifiers such as `mail.spf` are deferred to a later version.
+
+**Integrated acceptance tests (19 October 2026)**
+- On a dedicated Docker instance (port 8086, scheduler explicitly disabled), the demonstration domain produced two matching scans (57/100, 19/19 evaluated); historical delta zero, French/English views, API access and revocation, and backup verification were checked.
+- A controlled SPF regression produced an open critical event and a score drop from 57 to 48; restoring the original finding resolved the event and restored 57. Acknowledgment cleared the unread marker without deleting event history. These are **fixture-based simulations**, not observed Internet incidents.
+- The actual scheduler ran in a separate, network-isolated disposable container: one automatic scan saved with `via=schedule`, score 57, execution state `done`, one attempt. It remained disabled on the 8086 integration instance.
+- A verified backup of the **actual v0.4.1 production database**, copied to a separate Docker volume (1 account, 9 domains, 26 scans), migrated from schema 4 to 5. SQLite integrity and foreign keys passed; all 9 domains and 26 scans were retained. The automatically generated schema-4 backup was verified, restored with the official v0.4.1 image, and the original counts and session key permissions were confirmed.
+- CI of integration documentation PR #26 passed on its prior head (9 jobs: Python 3.11/3.12/3.13, browser, Docker, three migration paths and rollback). Recheck CI on the final documentation and release commit before publication. **Production remains on v0.4.1, unpublished release remains gated by maintainer approval.**
+
+**Integration and publication**
+- The 0.5.0 branch is awaiting integrated release validation; `main`, the published 0.4.1 image and production remain unchanged.
+- See `docs/developer/RELEASE_V050.fr.md` for the integration checks and decision gates.
 
 **Database: schema 5** (cannot be opened by 0.4.x: going back means restoring the backup made
 before the update, see docs/user/INSTALLATION.md)
@@ -15,7 +43,7 @@ before the update, see docs/user/INSTALLATION.md)
 - A timeline of measured states (`scan_states`), rows only ever added: one when a scan is saved,
   one after each recheck. Existing scans get one state made of their stored values, never
   recalculated; a scan already rechecked gets a single state dated from its last recheck.
-- The tables of the scheduled scans and of the events are created, still empty.
+- The tables of scheduled scans and events are created; migrations from 0.4.x start them empty, and the new scheduling/event features populate them when used.
 - Two processes starting together on the same data folder apply each migration once.
 
 **Storage**
