@@ -54,6 +54,14 @@ Le traitement est déterministe, idempotent et utilise l'unicité de l'événeme
 ouvert par domaine/type/sujet. Les valeurs historiques et scores enregistrés ne
 sont jamais recalculés pour produire une alerte.
 
+## Recette intégrée — 19 octobre 2026
+
+Sur le conteneur de recette intégré **8086** (distinct de la production), deux analyses du domaine fictif `menuiserie-dupont.example` ont conservé un score de **57/100**, sans faux événement. La dégradation contrôlée du seul contrôle `mail.spf` a provoqué une baisse à **48/100** et ouvert un événement de sécurité **`open` / `critical`**. Le rétablissement du contrôle a ramené le score à **57/100** et l'événement à **`resolved` / `info`**.
+
+Le bouton **« Marquer comme consultés »** a supprimé le badge de nouveautés tout en conservant l'incident résolu dans l'historique. Des captures de recette ont confirmé les états successifs. Ce test porte sur des observations **fictives et simulées**, sans panne réelle d'un service Internet.
+
+Les tests d'étape 4 réalisés antérieurement sur le port isolé **8085** ont également couvert la perte de couverture, trois échecs d'analyses programmées et les droits des utilisateurs sur les périmètres internes. Les tests CI de la PR #26 étaient verts sur son **précédent commit** (`81a1b18...`, 9 jobs), et doivent être recontrôlés après toute mise à jour documentaire. Dossier de preuves : `docs/developer/RELEASE_V050.fr.md`.
+
 ## Recette et livraison
 
 Vérifier les suites Python (3.11, 3.12, 3.13), Ruff, mypy, Docker, navigateur,
