@@ -21,6 +21,13 @@ In development; not published. Scoring rules, checks, statuses and the keys of t
 - An isolated Docker recipe validated SPF degradation and recovery, coverage loss and recovery, scheduled-failure detection and resolution, and perimeter visibility; these incidents were **simulated**, not created by real network failures.
 - Readable labels for technical identifiers such as `mail.spf` are deferred to a later version.
 
+**Integrated acceptance tests (19 October 2026)**
+- On a dedicated Docker instance (port 8086, scheduler explicitly disabled), the demonstration domain produced two matching scans (57/100, 19/19 evaluated); historical delta zero, French/English views, API access and revocation, and backup verification were checked.
+- A controlled SPF regression produced an open critical event and a score drop from 57 to 48; restoring the original finding resolved the event and restored 57. Acknowledgment cleared the unread marker without deleting event history. These are **fixture-based simulations**, not observed Internet incidents.
+- The actual scheduler ran in a separate, network-isolated disposable container: one automatic scan saved with `via=schedule`, score 57, execution state `done`, one attempt. It remained disabled on the 8086 integration instance.
+- A verified backup of the **actual v0.4.1 production database**, copied to a separate Docker volume (1 account, 9 domains, 26 scans), migrated from schema 4 to 5. SQLite integrity and foreign keys passed; all 9 domains and 26 scans were retained. The automatically generated schema-4 backup was verified, restored with the official v0.4.1 image, and the original counts and session key permissions were confirmed.
+- CI of integration documentation PR #26 passed on its prior head (9 jobs: Python 3.11/3.12/3.13, browser, Docker, three migration paths and rollback). Recheck CI on the final documentation and release commit before publication. **Production remains on v0.4.1, unpublished release remains gated by maintainer approval.**
+
 **Integration and publication**
 - The 0.5.0 branch is awaiting integrated release validation; `main`, the published 0.4.1 image and production remain unchanged.
 - See `docs/developer/RELEASE_V050.fr.md` for the integration checks and decision gates.
