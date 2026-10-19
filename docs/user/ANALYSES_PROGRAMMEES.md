@@ -38,6 +38,20 @@ L'ordonnanceur doit laisser de la capacité aux analyses demandées
 manuellement, appliquer ses quotas et conserver les politiques réseau
 applicables aux domaines Internet et internes.
 
+## Validation intégrée de l'ordonnanceur — 19 octobre 2026
+
+La recette intégrée **8086**, construite depuis le commit applicatif `fa033021...`, conserve `POSTURE_COCKPIT_SCHEDULER=off`. Une programmation quotidienne à **05:00** y a été enregistrée mais maintenue inactive : Administration a confirmé « ordonnanceur désactivé », aucune échéance active et aucune exécution en erreur.
+
+Un essai distinct a été réalisé dans le conteneur éphémère `pc-v050-scheduler-execution-test`, volume Docker `pc-v050-scheduler-test-data`, **aucun port publié et réseau `none`**. Sur le seul conteneur de cet essai, l'ordonnanceur était activé. Après une analyse fictive manuelle initiale (score 57), une programmation quotidienne active avec échéance échue a été créée. Après les **120 secondes de temporisation au démarrage** :
+
+- seconde analyse automatiquement enregistrée, **score 57/100, origine `via=schedule`** ;
+- journal `schedule_runs` : créneau `2026-10-19T22:27`, état **`done`**, **1 tentative** ;
+- conteneur arrêté puis supprimé ; volume de données conservé comme preuve.
+
+Le test valide l'exécution réelle par le processus d'ordonnancement avec des **réponses fictives intégrées** et sans connexion Internet. Il ne valide pas les résultats d'un balayage d'un site réel. L'ordonnanceur de 8086 n'a pas été activé.
+
+Pour une future mise à jour de production, configurer explicitement `POSTURE_COCKPIT_SCHEDULER=off` lors du premier démarrage, puis décider séparément de l'activation en fonction des domaines, des quotas et des horaires. La version v0.5.0 n'est pas encore publiée.
+
 ## Recette et intégration
 
 Les tests automatisés portent sur les droits d'administration et le CSRF,
