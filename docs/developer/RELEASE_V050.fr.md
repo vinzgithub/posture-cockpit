@@ -19,19 +19,60 @@ Le score, les règles de notation et les clés API historiques sont conservés. 
 - La dernière PR d'étape (#25) a été fusionnée au commit `fa033021c7800716bbf725c803d5b608bfe89363`.
 - Les workflows `tests` et `release` (test de publication **à blanc** en PR) étaient verts sur le dernier commit de l'étape 4 avant sa fusion.
 - Recette indépendante de l'étape 4 sur `192.168.2.15:8085` : `running / healthy`, API `/healthz` en v0.5.0. Les simulations SPF, couverture, trois échecs consécutifs, résolution et droits non administrateurs ont été validées. Les événements et programmations simulés ont ensuite été nettoyés par restauration d'une sauvegarde vérifiée.
-- La production `192.168.2.15:8080` utilisait encore `ghcr.io/vinzgithub/posture-cockpit:0.4.1`, healthy. **Cela ne constitue pas encore une validation de la version intégrée complète.**
+- La production `192.168.2.15:8080` utilisait encore `ghcr.io/vinzgithub/posture-cockpit:0.4.1`, healthy. **Une recette intégrée distincte sur 8086 a ensuite été réalisée : voir ci-dessous.**
+
+## Résultats complémentaires de recette intégrée — 19 octobre 2026
+
+Les essais ci-dessous ont été exécutés **après la rédaction initiale** de ce dossier, sans modification de la production v0.4.1 sur le port 8080.
+
+| Contrôle | Résultat vérifié |
+|---|---|
+| CI de la PR #26 à l'ancien HEAD `81a1b18` | [Workflow #39304603006](https://github.com/vinzgithub/posture-cockpit/actions/runs/39304603006) : **9 jobs réussis**, Python 3.11/3.12/3.13, Ruff, mypy, navigateur, Docker, migrations depuis 0.3.0/0.4.0/0.4.1, rollback |
+| Recette intégrée | Image locale `posture-cockpit:v050-integration-8086` issue du commit `fa033021c7800716bbf725c803d5b608bfe89363`, conteneur `posture-cockpit-v050-integration-8086`, volume/Compose dédiés, `running / healthy` |
+| Résultats et historique | `menuiserie-dupont.example` : **2 analyses à 57/100 (C)**, couverture de notation 100 % et 19/19 contrôles ; comparaison **delta 0**, sans faux événement |
+| Événements | Régression SPF fictive : score **57 → 48**, incident `open / critical` ; restauration SPF : **48 → 57**, incident `resolved / info` ; « Marquer comme consultés » efface le badge mais conserve l'historique |
+| Affichage et API | Parcours FR/EN vérifié ; API sans clé **401**, avec clé temporaire résultat attendu, après révocation **401** |
+| Sauvegarde v0.5.0 | `backup` + `check-backup` réussis sur 8086, **schéma 5, 1 compte, 1 domaine, 2 analyses**, clé incluse |
+| Ordonnanceur en recette intégrée | `POSTURE_COCKPIT_SCHEDULER=off` confirmé dans Administration ; programmation quotidienne 05:00 **inactive**, aucune échéance active ni exécution en erreur |
+
+### Exécution effective du moteur de programmation, sans accès réseau
+
+Essai isolé **hors 8086** : volume `pc-v050-scheduler-test-data`, conteneur temporaire `pc-v050-scheduler-execution-test` avec `--network none`, **sans port publié**, ordonnanceur **on**. Après création d'une analyse de référence fictive (`id=1`, `via=web`, score 57) et programmation quotidienne active avec échéance passée, puis délai de démarrage normal du moteur (**120 secondes**) :
+
+- nouvelle analyse **`id=2`, `via=schedule`, score 57/100** ;
+- `schedule_runs` : créneau local **`2026-10-19T22:27`**, état **`done`**, **1 tentative** ;
+- conteneur arrêté puis supprimé ; volume de preuve conservé. L'ordonnanceur de 8086 est resté désactivé.
+
+Il s'agit bien d'une **exécution déclenchée par le processus ordonnanceur**, mais les mesures du domaine utilisent les **réponses fictives intégrées**, pas Internet. Les simulations antérieures sur 8085 couvraient également les pertes de couverture, trois échecs programmés et la confidentialité des périmètres internes.
+
+### Migration et retour arrière sur copie de la véritable production
+
+1. **Source 0.4.1** : sauvegarde cohérente produite à chaud sur 8080 par `posture-cockpit backup`, puis vérifiée : `posture-cockpit-20261019T205911Z.tar.gz` ; **schéma 4, 1 compte, 9 domaines, 26 analyses**, clé de session incluse.
+2. **Copie isolée** : archive seule transférée depuis le volume de production monté **en lecture seule** vers `pc-v050-prod-copy-test-data` ; fichier UID 10001 et permissions `0600` ; nouvelle vérification avec l'image officielle v0.4.1.
+3. **État avant migration** : `restore` puis `info` sous v0.4.1 sur ce volume isolé : **schéma 4, 1 compte, 9 domaines, 26 analyses**, clé de session avec permissions `0600`.
+4. **Migration de la copie** : image locale v0.5.0, `--network none`, ordonnanceur et analyses internes désactivés. Sauvegarde automatique avant modification : `posture-cockpit-before-schema5-20261019T210947Z.tar.gz`. Base migrée en **schéma 5**, **9 domaines et 26 analyses conservés**.
+5. **Archive automatique vérifiée avec v0.4.1** : schéma **4**, 1 compte, 9 domaines, 26 analyses. La mention `version 0.5.0` désigne le programme qui a créé l'archive, **pas le schéma**.
+6. **Intégrité SQLite après migration** : `PRAGMA integrity_check = ok`, `PRAGMA foreign_key_check` = **0 erreur**, **9 domaines et 26 analyses**. Le montage de test devait permettre les fichiers auxiliaires du mode SQLite WAL ; la connexion SQLite de contrôle est restée en lecture seule.
+7. **Retour arrière réel sur la copie uniquement** : image v0.4.1, `restore ...before-schema5... --replace`. L'ancienne base migrée a été préservée dans `posture-cockpit-before-restore-20261019T211541Z.tar.gz`.
+8. **Résultat final de rollback** : `posture-cockpit info` sous v0.4.1 → **schéma 4 (up to date), 1 compte, 9 domaines, 26 analyses, clé présente en 0600**.
+
+**Conclusion :** migration 4→5, intégrité, archive pré-migration et rollback 5→4 **validés sur une copie des données réelles** ; aucun démarrage de v0.5.0 sur la base active de production. Les archives contiennent des données et secrets réels : **ne pas les joindre à une PR, à un commit ou aux artefacts CI**.
 
 ## Barrières de validation avant livraison
 
-- [ ] **CI de la branche d'intégration** : Python 3.11, 3.12 et 3.13, lint Ruff, mypy, tests navigateur, Docker, migrations, retour arrière. Ne pas confondre `release` GitHub Actions sur PR avec une image réellement publiée.
-- [ ] **Recette intégrée de bout en bout** à partir du commit exact destiné à la livraison : utiliser un NOUVEAU conteneur, projet Compose, port et volume SQLite, distincts de 8080, 8082, 8083, 8084 et 8085. Ne jamais utiliser le volume `posture-cockpit_posture-cockpit-data` de production.
-- [ ] Configurer `POSTURE_COCKPIT_SCHEDULER=off` et `POSTURE_COCKPIT_INTERNAL_SCANS=off` avant le premier démarrage de cette recette : la configuration applicative v0.5.0 active l'ordonnanceur par défaut si elle est absente.
-- [ ] Rejouer la **migration sur copie cohérente et vérifiée** d'une base v0.4.1 ; vérifier le schéma 5, la conservation des comptes, scans et clés de session, et l'archive de sauvegarde complète générée avant migration.
-- [ ] Vérifier le **retour vers v0.4.1** sur un volume de recette isolé, par restauration de l'archive pré-migration : l'image 0.4.1 ne doit jamais ouvrir directement la base en schéma 5.
-- [ ] Revalider avec la version intégrée les vues de comparaison, les planifications (simulateur, DST, mode scheduler off), événements, historique, permissions des périmètres internes, FR/EN et API de compatibilité.
-- [ ] Vérifier les horodatages des scans et l'absence de données fictives datées dans le futur avant de figer la recette.
-- [ ] Vérifier l'image finale AMD64 et ARM64, l'immuabilité de la version publiée, et la procédure de publication et d'annulation.
-- [ ] Faire relire les notes de livraison et les consignes de migration / retour arrière par le propriétaire.
+- [x] CI du précédent HEAD de PR #26 : **9 jobs réussis** ; cette réussite ne vaut pas encore pour les modifications documentaires présentes.
+- [x] Recette intégrée au commit `fa033021...` sur 8086, avec ordonnanceur et analyses internes explicitement désactivés.
+- [x] Comparaison, FR/EN, API, incidents fictifs SPF ouverts et résolus, marqueur de consultation, sauvegarde.
+- [x] Exécution effective de l'ordonnanceur dans un conteneur isolé, `via=schedule`, état `done`, une tentative.
+- [x] Migration sur copie de production et intégrité SQLite, avec conservation des 9 domaines et 26 analyses.
+- [x] Retour à 0.4.1 sur cette copie, confirmé avec l'image officielle.
+- [x] Construction AMD64/ARM64 et garde-fous de publication à blanc sur l'état de code de la PR #25, **pas encore sur le futur commit final**.
+- [ ] Contrôler **la CI du HEAD mis à jour** de la PR #26 après l'ajout du compte rendu.
+- [ ] Vérifier explicitement les **horodatages des analyses fictives** de recette et l'absence d'états datés dans le futur.
+- [ ] Revérifier multiarchitecture et procédure de publication **sur le commit exact de la future release**.
+- [ ] Faire relire le dossier et les procédures par le propriétaire.
+- [ ] Avant migration de production : **copie de sauvegarde vérifiée hors du volume de production**, espace libre, fenêtre de maintenance, procédure de reprise et décision explicite sur l'ordonnanceur.
+- [ ] Autorisations distinctes pour fusion documentaire dans `feat/v0.5.0`, pour `main`, pour une release et pour tout déploiement de production.
 
 ## Précautions de publication
 
