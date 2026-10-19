@@ -1,7 +1,8 @@
-# Événements et alertes — Posture Cockpit v0.5.0 (étape 4)
+# Événements et alertes — Posture Cockpit v0.5.0
 
-> Fonctionnalité en développement, branche `v050/etape-4`. Ne pas déployer sur
-> la production v0.4.1. L'étape n'envoie pas d'e-mails ni de notifications externes.
+> Fonctionnalité intégrée à la branche de développement `feat/v0.5.0`, mais non
+> publiée. La production v0.4.1 ne doit pas être remplacée avant la validation
+> complète de l'intégration. Aucun e-mail ni notification externe n'est envoyé.
 
 ## Ce que signifie un événement
 
@@ -60,6 +61,8 @@ migrations et rollback sur la PR. Tester séparément une nouvelle dégradation,
 une correction, les résultats non concluants, les échecs programmés, le bouton
 « Marquer comme consultés » et les droits sur périmètres internes.
 
-La recette Docker utilise son propre projet et un volume SQLite distinct de
-toute production. La PR reste en brouillon jusqu'à recette et validation explicite.
-Aucun merge, tag, release ou déploiement en production sans accord du propriétaire.
+La recette Docker a utilisé un projet et un volume SQLite distincts de la production.
+L'étape 4 a été validée en recette et fusionnée dans `feat/v0.5.0` via la PR #25.
+L'intégration finale de la version reste à valider séparément, selon
+`docs/developer/RELEASE_V050.fr.md`. Aucun merge dans `main`, tag, release ou
+déploiement en production sans accord explicite du propriétaire.
