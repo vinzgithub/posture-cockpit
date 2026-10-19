@@ -1,13 +1,15 @@
-# Analyses programmées — Posture Cockpit v0.5.0 (recette)
+# Analyses programmées — Posture Cockpit v0.5.0
 
-> Cette fonction est en cours de recette. Ne pas activer dans l'installation
-> de production v0.4.1. La branche de développement est `v050/etape-3`.
+> Cette fonction est intégrée dans `feat/v0.5.0`, mais la version n'est pas
+> publiée. Ne pas l'activer sur la production v0.4.1 avant validation de
+> l'intégration et de la procédure de migration.
 
 ## Activation et sécurité
 
 L'ordonnanceur est configuré par `POSTURE_COCKPIT_SCHEDULER=on|off`.
-Dans un environnement de recette, définir explicitement
-`POSTURE_COCKPIT_SCHEDULER=off` jusqu'à la validation des simulations.
+Dans le démarrage normal de l'application v0.5.0, la valeur par défaut est `on`.
+Dans un environnement de recette ou lors de la première migration, fixer
+explicitement `POSTURE_COCKPIT_SCHEDULER=off` jusqu'à la validation des simulations.
 Seul un administrateur ayant confirmé récemment son mot de passe peut
 créer, suspendre, modifier ou supprimer une programmation dans la
 page **Détails** d'un domaine. Chaque changement est journalisé.
@@ -36,10 +38,16 @@ L'ordonnanceur doit laisser de la capacité aux analyses demandées
 manuellement, appliquer ses quotas et conserver les politiques réseau
 applicables aux domaines Internet et internes.
 
-## Recette avant fusion
+## Recette et intégration
 
-Vérifier la suite de tests, les cas d'accès non administrateur/CSRF,
+Les tests automatisés portent sur les droits d'administration et le CSRF,
 les conflits entre deux processus, les changements d'heure et les
-redémarrages en cours d'analyse. La recette Docker doit utiliser un
-**projet et un volume distincts**, jamais le volume de production.
-Ne pas fusionner ni déployer sans autorisation du propriétaire.
+redémarrages en cours d'analyse. La recette isolée de l'étape 3 a été validée,
+puis fusionnée dans `feat/v0.5.0` via la PR #24. La recette de l'étape 4
+a ensuite validé l'incident créé après trois échecs et résolu après une
+réussite simulée. Aucune de ces simulations n'a déclenché d'analyse réseau.
+
+Avant toute publication, valider la version intégrée dans un **projet et
+un volume distincts**, jamais sur le volume de production, et suivre
+`docs/developer/RELEASE_V050.fr.md`. Ne pas fusionner dans `main`,
+publier ni déployer sans autorisation du propriétaire.
