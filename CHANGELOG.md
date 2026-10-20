@@ -29,6 +29,7 @@ In development; not published. Scoring rules, checks, statuses and the keys of t
 - CI of integration documentation PR #26 passed on its prior head (9 jobs: Python 3.11/3.12/3.13, browser, Docker, three migration paths and rollback). Recheck CI on the final documentation and release commit before publication. **Production remains on v0.4.1, unpublished release remains gated by maintainer approval.**
 
 **Integration and publication**
+- Starting with v0.5.0, publishing a GitHub Release never automatically publishes GHCR images: a separately approved manual `release` workflow run requires an existing published tag and `PUBLISH_GHCR` confirmation; full tests, image checks and registry guards run again before pushing.
 - The 0.5.0 branch is awaiting integrated release validation; `main`, the published 0.4.1 image and production remain unchanged.
 - See `docs/developer/RELEASE_V050.fr.md` for the integration checks and decision gates.
 

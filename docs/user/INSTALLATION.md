@@ -193,6 +193,8 @@ As the session key is restored, open sessions stay valid; accounts, two-factor a
 
 ## Updating
 
+**Before the first v0.5.0 start**, add `POSTURE_COCKPIT_SCHEDULER=off` (without `#`) to your `.env`: the scheduler is **enabled by default**. Enable it only after checking schedules, domains and quotas. Export a verified backup outside the production volume before migrating.
+
 1. Make a backup (above), and keep a copy away from the server.
 2. Replace `compose.yaml` with the one of the new version, then restart:
 

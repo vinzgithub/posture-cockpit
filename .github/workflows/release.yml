@@ -1,8 +1,9 @@
 # Copyright © 2026 Vincent Fournet
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 #
-# Publishes the image ghcr.io/vinzgithub/posture-cockpit when a GitHub release is published
-# (the explicit act of validation), after the whole test suite and the Docker recette.
+# Publishes images to ghcr.io ONLY by an explicit manual workflow_dispatch after a GitHub
+# Release exists and PUBLISH_GHCR is entered. Publishing a GitHub Release never pushes images.
+# Full tests and the Docker recette precede each GHCR publication.
 # On a pull request that touches the image, the same steps run as a dry run against a registry
 # started in the job (localhost:5000): nothing is logged in to, nothing reaches ghcr.io.
 #
@@ -21,8 +22,16 @@
 # were; re-running the job resumes at step 3.
 name: release
 on:
-  release:
-    types: [published]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Already-published GitHub Release tag (e.g. v0.5.0)"
+        required: true
+        type: string
+      confirmation:
+        description: "Type PUBLISH_GHCR to authorize publishing images to GHCR"
+        required: true
+        type: string
   pull_request:
     paths:
       - Dockerfile
@@ -43,12 +52,12 @@ concurrency:
 
 jobs:
   tests:
-    if: github.event_name == 'release'
+    if: github.event_name == 'workflow_dispatch'
     uses: ./.github/workflows/tests.yml
 
   image:
     needs: tests
-    # On a pull request the tests run in tests.yml; for a release they must have passed here.
+    # On PRs tests.yml runs separately; manual GHCR publishing requires tests here.
     if: ${{ !cancelled() && (needs.tests.result == 'success' || (github.event_name == 'pull_request' && needs.tests.result == 'skipped')) }}
     runs-on: ubuntu-latest
     permissions:
@@ -60,19 +69,47 @@ jobs:
         ports:
           - 5000:5000
     env:
-      PUBLISH: ${{ github.event_name == 'release' }}
-      IMAGE: ${{ github.event_name == 'release' && format('ghcr.io/{0}', github.repository) || 'localhost:5000/posture-cockpit' }}
-      TAG: ${{ github.event.release.tag_name }}
-      PRERELEASE: ${{ github.event.release.prerelease }}
+      PUBLISH: ${{ github.event_name == 'workflow_dispatch' }}
+      IMAGE: ${{ github.event_name == 'workflow_dispatch' && format('ghcr.io/{0}', github.repository) || 'localhost:5000/posture-cockpit' }}
+      TAG: ${{ inputs.release_tag }}
+      CONFIRMATION: ${{ inputs.confirmation }}
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 0  # the tags already released decide whether X.Y and latest move
+          fetch-depth: 0  # published tags determine when X.Y and latest move
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.sha }}
+      - name: Resolve checked-out revision
+        id: source
+        run: echo "revision=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Verify separate GHCR approval and published release
+        id: release_gate
+        if: env.PUBLISH == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [ "$CONFIRMATION" = PUBLISH_GHCR ] || { echo "::error::Enter PUBLISH_GHCR"; exit 1; }
+          [ "$GITHUB_REF" = refs/heads/main ] || { echo "::error::Run from main only"; exit 1; }
+          release_meta=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" --jq '[.tag_name, .draft, .prerelease, .published_at] | @json')
+          export RELEASE_META="$release_meta"
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          import os
+          import sys
+          tag, draft, prerelease, published = json.loads(os.environ["RELEASE_META"])
+          if tag != os.environ["TAG"] or draft or not published:
+              sys.exit("A matching published, non-draft GitHub Release is required")
+          print("prerelease=" + str(prerelease).lower())
+          PY
+          git fetch --no-tags origin main:refs/remotes/origin/main
+          git merge-base --is-ancestor HEAD refs/remotes/origin/main || {
+            echo "::error::Release commit must be an ancestor of main"; exit 1;
+          }
       - name: Versions and tags
         id: release
         run: |
           if [ "$PUBLISH" = true ]; then
-            python3 scripts/release_tags.py --image "$IMAGE" --tag "$TAG" --prerelease "$PRERELEASE" >> "$GITHUB_OUTPUT"
+            python3 scripts/release_tags.py --image "$IMAGE" --tag "$TAG" --prerelease "${{ steps.release_gate.outputs.prerelease }}" >> "$GITHUB_OUTPUT"
           else
             python3 scripts/release_tags.py --image "$IMAGE" >> "$GITHUB_OUTPUT"
           fi
@@ -120,7 +157,7 @@ jobs:
           REGISTRY_USER: ${{ github.actor }}
           REGISTRY_PASSWORD: ${{ env.PUBLISH == 'true' && secrets.GITHUB_TOKEN || '' }}
         run: |
-          python3 scripts/registry_tag.py state "$IMAGE:${{ steps.release.outputs.version }}" --revision "$GITHUB_SHA" \
+          python3 scripts/registry_tag.py state "$IMAGE:${{ steps.release.outputs.version }}" --revision "${{ steps.source.outputs.revision }}" \
             >> "$GITHUB_OUTPUT"
           if grep -q '^state=other$' "$GITHUB_OUTPUT"; then
             echo "::error::$IMAGE:${{ steps.release.outputs.version }} is already published from another commit: make a new version"
@@ -137,14 +174,14 @@ jobs:
           tags: ${{ env.IMAGE }}:${{ steps.release.outputs.version }}
           labels: |
             org.opencontainers.image.version=${{ steps.release.outputs.version }}
-            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.revision=${{ steps.source.outputs.revision }}
           annotations: |
             index:org.opencontainers.image.title=Posture Cockpit
             index:org.opencontainers.image.description=Passive security check of a domain, with a guided plan of fixes
             index:org.opencontainers.image.source=https://github.com/${{ github.repository }}
             index:org.opencontainers.image.licenses=PolyForm-Noncommercial-1.0.0
             index:org.opencontainers.image.version=${{ steps.release.outputs.version }}
-            index:org.opencontainers.image.revision=${{ github.sha }}
+            index:org.opencontainers.image.revision=${{ steps.source.outputs.revision }}
           provenance: mode=max
           sbom: true
           cache-from: type=gha
@@ -172,9 +209,9 @@ jobs:
         if: env.PUBLISH != 'true'
         run: |
           version="$IMAGE:${{ steps.release.outputs.version }}"
-          python3 scripts/registry_tag.py state "$version" --revision "$GITHUB_SHA" | grep -qx 'state=same'
+          python3 scripts/registry_tag.py state "$version" --revision "${{ steps.source.outputs.revision }}" | grep -qx 'state=same'
           python3 scripts/registry_tag.py state "$version" --revision 0000000 | grep -qx 'state=other'
-          python3 scripts/registry_tag.py state "$IMAGE:9.9.9" --revision "$GITHUB_SHA" | grep -qx 'state=absent'
+          python3 scripts/registry_tag.py state "$IMAGE:9.9.9" --revision "${{ steps.source.outputs.revision }}" | grep -qx 'state=absent'
           status=0; python3 scripts/registry_tag.py state localhost:5999/nothing:1 --revision x || status=$?
           [ "$status" = 2 ] || { echo "::error::an unreachable registry must stop the publication"; exit 1; }
           echo "::notice title=Publication guards::resume (same commit), refusal (other commit), absent tag and unreachable registry behave as expected on localhost:5000"

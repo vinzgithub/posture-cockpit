@@ -193,6 +193,8 @@ La clé de session étant restaurée, les sessions ouvertes restent valides ; le
 
 ## Mise à jour
 
+**Avant le premier démarrage en v0.5.0**, ajouter `POSTURE_COCKPIT_SCHEDULER=off` (sans `#`) à votre fichier `.env` : l'ordonnanceur est **activé par défaut**. Ne l'activer qu'après contrôle des horaires, domaines et quotas. La sauvegarde vérifiée doit être exportée hors du volume de production avant migration.
+
 1. Faites une sauvegarde (ci-dessus) et gardez-en une copie hors du serveur.
 2. Remplacez `compose.yaml` par celui de la nouvelle version, puis redémarrez :
 
