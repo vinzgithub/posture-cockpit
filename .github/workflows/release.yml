@@ -102,8 +102,8 @@ jobs:
           print("prerelease=" + str(prerelease).lower())
           PY
           git fetch --no-tags origin main:refs/remotes/origin/main
-          git merge-base --is-ancestor HEAD refs/remotes/origin/main || {
-            echo "::error::Release commit must be an ancestor of main"; exit 1;
+          [ "$(git rev-parse HEAD)" = "$(git rev-parse refs/remotes/origin/main)" ] || {
+            echo "::error::Release tag must point at the current main HEAD (tests must match published source)"; exit 1;
           }
       - name: Versions and tags
         id: release
