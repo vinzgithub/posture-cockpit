@@ -24,27 +24,28 @@
 
 ## ⚡ Installation rapide — Docker
 
-**Posture Cockpit v0.4.1 s'installe sans Git, sans Python et sans compilation locale.** Il suffit de Docker Engine et de Docker Compose 2.24 ou plus récent. L'image officielle GHCR est compatible AMD64 et ARM64.
+**Posture Cockpit v0.5.0 s'installe sans Git, sans Python et sans compilation locale.** Il suffit de Docker Engine et de Docker Compose 2.24 ou plus récent. L'image officielle GHCR est compatible AMD64 et ARM64.
 
 ```bash
 mkdir posture-cockpit && cd posture-cockpit
-curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.4.1/compose.yaml
+curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.5.0/compose.yaml
 docker compose up -d
 ```
 
 Récupérez le code d'initialisation du premier compte avec `docker compose logs posture-cockpit`, puis ouvrez `http://<serveur>:8080/setup` pour créer l'administrateur. **N'exposez pas le service publiquement en HTTP** : utilisez un proxy inverse HTTPS pour les accès distants.
 
-La configuration passe par un [fichier `.env` facultatif](.env.example). Pour les mises à jour, sauvegardes, restaurations et retours arrière, consultez le [guide d'installation](docs/user/INSTALLATION.fr.md). L'image est fixée à la version **0.4.1**, sans mise à jour automatique imprévue.
+La configuration passe par un [fichier `.env` facultatif](.env.example). Pour les mises à jour, sauvegardes, restaurations et retours arrière, consultez le [guide d'installation](docs/user/INSTALLATION.fr.md). L'image est fixée à la version **0.5.0**, sans mise à jour automatique imprévue. **Pour une instance existante en v0.4.1, n'utilisez pas ces commandes de nouvelle installation pour la mise à niveau :** effectuez d'abord une [sauvegarde vérifiée et exportée, puis suivez la procédure de migration](docs/user/INSTALLATION.fr.md#mise-à-jour). Fixez `POSTURE_COCKPIT_SCHEDULER=off` avant le premier démarrage en 0.5.0 ; le retour au schéma 4 nécessite la restauration de la sauvegarde.
 
-### Nouveautés de la v0.4.1
+### Nouveautés de la v0.5.0
 
-- **Image Docker officielle prête à l'emploi** sur GHCR, versionnée pour AMD64 et ARM64.
-- **Premier démarrage protégé :** un code est obligatoire avant la création du premier compte administrateur.
-- **Maintenance plus sûre :** sauvegarde SQLite cohérente à chaud, vérification et restauration protégée, clé de session incluse.
-- **Configuration simplifiée :** fichier `.env` facultatif et protections Docker par défaut (utilisateur non privilégié, système en lecture seule).
-- **Rapports PDF bilingues améliorés**, avec conservation de la compatibilité des bases v0.4.0 (schéma 4).
+- **Comparaisons historiques :** évolution des notes et des contrôles comparables, sans recalculer les évaluations antérieures.
+- **Analyses programmées :** planification quotidienne, hebdomadaire et mensuelle, réservée aux administrateurs, avec prise en compte des fuseaux horaires et historique d'exécution.
+- **Événements et alertes internes :** régressions, baisses de score significatives, pertes de couverture et échecs répétés, avec état ouvert/résolu et repère personnel des nouveautés. Aucun e-mail ou alerte externe n'est envoyé.
+- **SQLite schéma 5 :** états d'analyse immuables, programmations et événements, avec sauvegarde vérifiée avant migration.
+- **Compatibilité :** règles de notation et champs API existants conservés ; images Docker AMD64/ARM64 fixées par version.
 
-Consultez les [notes de version v0.4.1](https://github.com/vinzgithub/posture-cockpit/releases/tag/v0.4.1).
+Voir les [notes de version v0.5.0](https://github.com/vinzgithub/posture-cockpit/releases/tag/v0.5.0).
+
 
 ---
 
@@ -70,6 +71,14 @@ Consultez les [notes de version v0.4.1](https://github.com/vinzgithub/posture-co
 Pour la petite entreprise, l'association, l'artisan ou la collectivité qui a un nom de domaine, une messagerie et un site, mais pas d'équipe sécurité. Et pour la personne qui les aide : l'informaticien de la famille, le prestataire, le consultant.
 
 Les outils en ligne qui « notent » un domaine donnent une liste de défauts en anglais technique, puis s'arrêtent là. Posture Cockpit va jusqu'au bout : il dit **quoi faire, dans quel ordre, où cliquer**, vérifie que c'est fait, et produit un rapport à transmettre.
+
+---
+
+## 📈 Historique, analyses programmées et événements
+
+Posture Cockpit compare les **états mesurés compatibles** dans le temps, sans modifier les anciennes notes. Les administrateurs peuvent programmer les analyses récurrentes ; l'onglet **Événements** signale les régressions, les pertes de couverture et les résolutions, dans le respect des droits d'accès. Ce tableau de bord interne n'envoie pas de notifications par e-mail.
+
+Détails : [Analyses programmées](docs/user/ANALYSES_PROGRAMMEES.md) · [Événements et alertes](docs/user/EVENEMENTS.md).
 
 ---
 
@@ -171,7 +180,7 @@ Docker Compose 2.24 ou plus récent, dans un dossier vide :
 
 ```bash
 mkdir posture-cockpit && cd posture-cockpit
-curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.4.1/compose.yaml
+curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.5.0/compose.yaml
 docker compose up -d
 docker compose logs posture-cockpit   # le code d'initialisation du premier compte
 ```
@@ -237,7 +246,7 @@ ruff check src tests examples && mypy && pytest
 
 - **DKIM** : les sélecteurs ne se listent pas. Posture Cockpit essaie les noms les plus courants ; s'il n'en trouve aucun, c'est une information, pas une faute.
 - **Instructions par hébergeur** : les menus des hébergeurs changent. Si une étape ne correspond plus, signalez-le : ce sont de simples textes dans `locales/`.
-- **Analyses programmées** : pas encore intégrées à l'application ; utilisez l'API depuis Home Assistant ou cron.
+- **Analyses programmées** : intégrées depuis v0.5.0 ; l'ordonnanceur est activé par défaut : fixer `POSTURE_COCKPIT_SCHEDULER=off` lors du premier démarrage après mise à niveau depuis v0.4.1.
 - **Périmètres internes** : l'instance doit joindre elle-même le réseau interne. Un même nom ne peut pas être suivi à la fois depuis Internet et dans un périmètre interne. Une architecture à agents pour auditer plusieurs réseaux est à l'étude ([REMOTE_AGENT.fr.md](docs/developer/REMOTE_AGENT.fr.md)).
 - **Derrière un proxy HTTP obligatoire** : les analyses ne passent pas par un proxy (ce qui rendrait la règle de sortie inopérante).
 
