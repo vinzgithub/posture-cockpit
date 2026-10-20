@@ -171,5 +171,5 @@ def test_package_version_matches_project_metadata_and_healthz(client):
     from posture_cockpit import __version__
 
     project = tomllib.loads((Path(__file__).resolve().parents[1] / "pyproject.toml").read_text())
-    assert __version__ == project["project"]["version"] == "0.4.1"
+    assert __version__ == project["project"]["version"] == "0.5.0"
     assert client.get("/healthz").json()["version"] == __version__

@@ -76,3 +76,18 @@
 {% if result.undetermined %}<p class="coverage-partial">{{ t('v04.undetermined_count', n=addresses.attempted - addresses.conclusive) }}</p>{% endif %}
 {% for reason in result.cap_reasons %}<p class="small cap-reason">{{ t('v04.cap.' ~ reason) }}</p>{% endfor %}
 {%- endmacro %}
+
+{# Scheduled scan overview for users who can see the domain. #}
+{% macro schedule_line(schedule) -%}
+  {%- set d = schedule.definition -%}
+  {%- set at = '%02d:%02d' % (d.at_minute // 60, d.at_minute % 60) -%}
+  {%- if d.frequency == 'daily' -%}
+    {%- set what = t('schedule.describe.daily', time=at) -%}
+  {%- elif d.frequency == 'weekly' -%}
+    {%- set what = t('schedule.describe.weekly', weekday=t('schedule.weekday.' ~ d.weekday), time=at) -%}
+  {%- else -%}
+    {%- set what = t('schedule.describe.monthly', day=d.monthday, time=at) -%}
+  {%- endif -%}
+  {%- if not schedule.enabled -%}{{ t('schedule.paused', what=what) }}
+  {%- else -%}{{ what }}{% if schedule.next_run_at %} · {{ t('schedule.next', date=date(schedule.next_run_at), time=local_time(schedule.next_run_at)) }}{% endif %}{%- endif -%}
+{%- endmacro %}

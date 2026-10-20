@@ -47,6 +47,8 @@ Each domain gives:
 | `certificate_days_left` | Days before the website certificate expires |
 | `perimeter` | Name of the internal perimeter, `null` on the Internet |
 | `scanned_at` | Time of the scan (UTC) |
+| `via` | How the scan was started: `web`, `api` or `schedule`; `null` for a scan made before 0.5.0 |
+| `engine` | Generation of the scoring rules that judged the scan; `null` when unknown. Two scores are comparable only with the same generation |
 
 Since 0.2.0, `score` can be `null`: an automation that compares it with a number should first check `evaluation`. Domains of internal perimeters are only listed for an administrator's key.
 

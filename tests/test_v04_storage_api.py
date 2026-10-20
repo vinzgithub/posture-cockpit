@@ -54,14 +54,14 @@ def test_migration4_preserves_every_legacy_value_and_backup(tmp_path):
     assert all(row[k] is None for k in dict(row) if k not in
                {'id','domain_id','started_at','duration_ms','score','grade','coverage','version','started_by','perimeter'})
     assert [tuple(row) for row in db.all('SELECT * FROM findings')] == findings
-    assert db.schema_version == 4 and not db.all('PRAGMA foreign_key_check')
+    assert db.schema_version == 5 and not db.all('PRAGMA foreign_key_check')
     backups = list((tmp_path / 'backups').glob('old-schema3-*.db'))
     assert len(backups) == 1
     with sqlite3.connect(backups[0]) as copied:
         assert copied.execute('SELECT * FROM scans').fetchall() == before
     db.close()
     db = Database(path)
-    assert db.schema_version == 4 and len(list((tmp_path / 'backups').glob('*.db'))) == 1
+    assert db.schema_version == 5 and len(list((tmp_path / 'backups').glob('*.db'))) == 1
     db.close()
 
 

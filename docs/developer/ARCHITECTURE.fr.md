@@ -37,11 +37,12 @@ Ce document est la carte du code : où se trouve quoi, comment une analyse circu
 | `core/fixture.py` | `FixtureNetwork` : les mêmes questions, répondues par des données enregistrées (tests, démo) |
 | `core/engine.py` | Lance les contrôles en parallèle avec un délai chacun ; normalise les noms de domaine ; vérification préalable |
 | `core/scoring.py` | Couverture, note, lettre (ou « non évalué »), évaluation par domaine, plan de corrections |
+| `core/generation.py` | La génération des règles d'analyse et de notation (`GENERATION`) et les versions exactes qu'elle couvre ; deux analyses ne se comparent qu'au sein d'une même génération |
 | `core/providers.py` | Hébergeurs DNS connus et leur détection |
 | `checks/` | Les extensions intégrées (`mail`, `tls`, `web`, `dns`) et leurs textes dans `checks/locales/` |
 | `checks/records.py` | Lecture des enregistrements SPF, DMARC, DKIM, MTA-STS et TLS-RPT selon leurs RFC (fonctions pures) |
 | `scanner.py` | Choisit le réseau (réel ou démo) avec la règle du périmètre, retire les extensions désactivées, relance un contrôle seul |
-| `storage/` | Une connexion SQLite (`database.py`), le schéma (`schema.py`), un dépôt par sujet (`accounts.py`, `scans.py`, `perimeters.py`, `audit.py`, `settings.py`) |
+| `storage/` | Une connexion SQLite (`database.py`), le schéma (`schema.py`), son ouverture avec une sauvegarde vérifiée avant toute migration (`upgrade.py`), les sauvegardes (`backup.py`), un dépôt par sujet (`accounts.py`, `scans.py`, `perimeters.py`, `audit.py`, `settings.py`) |
 | `web/app.py` | Fabrique l'application : services, en-têtes de sécurité, session, routes, pages d'erreur |
 | `web/deps.py` | Ce que les routes partagent : utilisateur connecté, droits, formulaire vérifié (CSRF), rendu |
 | `web/credentials.py` | Vérifications de mots de passe et de codes, communes à plusieurs pages, et les compteurs d'échecs |
@@ -52,7 +53,7 @@ Ce document est la carte du code : où se trouve quoi, comment une analyse circu
 | `report/` | Le rapport PDF : contexte, gabarit, style et polices |
 | `locales/` | Les textes de l'interface et du rapport (`fr.json`, `en.json`) |
 | `demo/` | Les réponses enregistrées du domaine de démonstration |
-| `cli.py` | `posture-cockpit scan`, `extensions`, outils de secours des comptes |
+| `cli.py` | `posture-cockpit scan`, `extensions`, outils de secours des comptes, `backup`, `check-backup`, `restore`, `info` |
 
 ## 3. Le parcours d'une analyse
 
@@ -62,9 +63,9 @@ Ce document est la carte du code : où se trouve quoi, comment une analyse circu
 4. `scanning.scan_and_save` prend une place auprès du **limiteur d'analyses** (analyses simultanées, analyses par compte et par heure).
 5. `scanner.scan` prend les contrôles des extensions actives et un **réseau neuf** (son cache ne sert qu'à cette analyse) construit avec la **règle du périmètre** : Internet (adresses publiques, ports 80 et 443), ou un périmètre interne (ses réseaux, serveurs DNS, ports et AC).
 6. `engine.scan` lance **tous les contrôles en même temps**. Chacun reçoit un `CheckContext` (domaine, réseau, heure, interne ou non) et renvoie un `Outcome`. Les contrôles faits pour Internet seulement sont « non applicables » dans une analyse interne. Un contrôle qui dépasse son délai, lève une erreur réseau, se heurte à la règle de sortie ou plante devient un `Outcome` d'état `ERROR` (« non évalué », avec la raison) : les autres continuent. Le travail encore en cours est annulé à la fin.
-7. `Scans.save` enregistre l'analyse, ses `Finding` et son évaluation (note, lettre, couverture, périmètre) ; l'analyse est inscrite au journal d'audit.
+7. `Scans.save` enregistre, dans une seule transaction, l'analyse (avec la façon dont elle a été lancée, `via` : web, api, schedule, et la génération de ses règles, `engine`), ses `Finding`, son évaluation (note, lettre, couverture, périmètre, métriques) et son premier état mesuré (`scan_states`) ; l'analyse est inscrite au journal d'audit.
 8. La page du plan (`GET /domains/<nom>`) appelle `views.plan_view`, qui produit des objets déjà rédigés pour le gabarit `plan.html`.
-9. **« Vérifier »** (`POST /domains/<nom>/verify/<contrôle>`) relance ce seul contrôle. Le résultat est enregistré comme une *revérification* de la même analyse : l'analyse d'origine ne change pas (l'ordre du plan reste stable), la note courante tient compte de la revérification.
+9. **« Vérifier »** (`POST /domains/<nom>/verify/<contrôle>`) relance ce seul contrôle. Le résultat est enregistré comme une *revérification* de la même analyse : l'analyse d'origine ne change pas (l'ordre du plan reste stable), la note courante tient compte de la revérification, et un état s'ajoute à la chronologie de l'analyse dans la même transaction.
 
 ## 4. Le modèle de données
 
@@ -78,15 +79,23 @@ Ce document est la carte du code : où se trouve quoi, comment une analyse circu
 
 ## 5. La base de données
 
-Un seul fichier SQLite dans le dossier de données, en mode WAL, lisible par son seul propriétaire. Tables : `users`, `totp`, `recovery_codes`, `api_tokens`, `perimeters`, `domains` (avec `perimeter_id`), `scans` (note, lettre, couverture, périmètre), `findings`, `rechecks`, `audit_log`, `meta`.
+Un seul fichier SQLite dans le dossier de données, en mode WAL, lisible par son seul propriétaire. Tables : `users`, `totp`, `recovery_codes`, `api_tokens`, `perimeters`, `domains` (avec `perimeter_id`), `scans` (note, lettre, couverture, périmètre, métriques, `via`, `engine`), `findings`, `rechecks`, `scan_states`, `schedules`, `schedule_runs`, `events`, `audit_log`, `meta`.
 
 **Migrations** : `storage/schema.py` contient une liste de scripts SQL ou de fonctions Python. La base retient combien elle en a appliqué (`meta.schema_version`) et applique les suivantes au démarrage, chacune dans une transaction, clés étrangères désactivées puis vérifiées (`PRAGMA foreign_key_check`) avant validation, comme SQLite le prescrit pour reconstruire une table. Avant de migrer une base qui contient des données, une copie est écrite dans `backups/`. Pour changer le schéma, **ajoutez une migration à la fin de la liste** ; ne modifiez jamais une migration déjà publiée. Une base dont le schéma dépasse la liste (écrite par une version plus récente) est refusée au démarrage, sans être modifiée (`UnsupportedSchema`). `storage/backup.py` fait et restaure des sauvegardes cohérentes (`posture-cockpit backup`, `restore`).
+
+**Sauvegarde avant migration** (0.5.0) : le serveur et les commandes de comptes ouvrent la base par `storage/upgrade.py`, `open_database()`. Avant de migrer une base qui contient des données, elle vérifie la place libre (deux fois la base), écrit une archive de sauvegarde complète (base et clé de session) dans `backups/posture-cockpit-before-schema<N>-<heure>.tar.gz`, la relit (`backup.check`) et compare son schéma, ses comptes, domaines, analyses et sa clé de session à ceux du dossier de données ; au moindre échec, elle s'arrête avant de migrer, supprime l'archive en échec et laisse la base inchangée. L'archive est inscrite dans `meta.upgrade_backup` et affichée par `posture-cockpit info`. Chaque migration s'exécute en `BEGIN IMMEDIATE` et relit le numéro de schéma dans la transaction : de deux processus qui démarrent ensemble sur un même dossier, l'un migre, l'autre trouve le travail fait.
 
 | Version | Migration |
 |---|---|
 | 1 (0.1.0) | Schéma initial |
 | 2 (0.2.0) | `perimeters`, `domains.perimeter_id`, `audit_log` |
 | 3 (0.2.0) | `scans` reconstruite (note et lettre facultatives, `coverage`, `perimeter`), notes des analyses enregistrées recalculées |
+| 4 (0.4.0) | Métriques de `scans` (score brut, plafond, score final, couverture de diagnostic, contrôles bloqués, adresses, raisons), ajoutées vides : rien n'est recalculé |
+| 5 (0.5.0) | `scans.via`, `scans.engine`, `scan_states`, `schedules`, `schedule_runs`, `events`, `users.events_seen_at` ; un état par analyse existante, fait de ses valeurs enregistrées, rien n'est recalculé ; les images 0.4.x refusent ce schéma |
+
+**Chronologie des états mesurés** (`scan_states`, 0.5.0). Les valeurs enregistrées dans `scans` sont écrasées à chaque revérification ; chaque moment est donc aussi conservé comme un état : un état `scan` à l'enregistrement de l'analyse, un état `recheck` après chaque revérification, dans la transaction du changement. Un état contient sa date, la génération des règles, la note, la lettre, la couverture, l'évaluation, les métriques et l'état de chaque contrôle. Les lignes ne font que s'ajouter (un déclencheur refuse tout `UPDATE` ; aucun code n'en supprime ; elles partent avec leur analyse). Les analyses faites avant la 0.5.0 ont reçu un seul état fait de leurs valeurs enregistrées : `scan` si elles n'ont jamais été revérifiées, sinon `legacy`, daté de la dernière revérification — les valeurs d'avant cette revérification ont été écrasées, aucun état n'est donc inventé pour elles. La génération (`core/generation.py`) change dès que les règles donneraient un autre verdict ou une autre note pour les mêmes observations (`tests/test_v050_generation.py` échoue tant qu'elle n'a pas changé) ; la revérification d'une analyse jugée par d'autres règles n'a pas de génération.
+
+**Transactions.** Une seule connexion sert tout le processus, et son verrou laisse rentrer le fil qui le tient — or toutes les tâches asyncio tournent sur ce fil. `transaction()` retient donc le fil et la tâche qui l'ont ouverte, et toute utilisation de la connexion par un autre pendant qu'elle est ouverte lève `TransactionOwnerError`, lectures comprises ; un autre fil attend le verrou. La règle : **aucun `await` dans `with db.transaction():`** (`tests/test_v050_contract.py` le vérifie dans le code).
 
 ## 6. Textes et langues
 
@@ -151,6 +160,15 @@ et v0.4.0 (exports SQL de `tests/data/`, écrits par `tests/data/make_legacy_dat
 (installation neuve, protections Docker, code d'initialisation, sauvegarde et restauration, refus,
 mises à jour depuis les images v0.3.0 et v0.4.0 et retour arrière) et toute la suite dans l'image.
 Publication : [RELEASE.fr.md](RELEASE.fr.md).
+
+Depuis la 0.5.0 : `tests/test_v050_contract.py` contient les réponses de l'API de la 0.4.1 (écrites
+par le code du tag) que les versions suivantes doivent garder ; `tests/data/database-v0.4.1.sql`
+ajoute la double authentification, un périmètre interne, une analyse provisoire et une analyse
+sans note ; `tests/test_v050_generation.py` les verdicts et notes des règles de chaque génération.
+La CI met aussi à jour l'image officielle de la v0.4.1 (épinglée par son empreinte) et lance
+`scripts/docker-recette.sh rollback` : mise à jour, puis retour à la 0.4.1 par la sauvegarde faite
+avant la migration, contrôlé par les empreintes de `scripts/data-fingerprint.py` (données
+restaurées identiques, liste exacte de ce que le retour perd).
 
 ## 10. Conventions
 

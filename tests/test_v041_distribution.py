@@ -146,19 +146,36 @@ def test_a_release_must_match_the_repository_and_its_pre_release_flag():
     assert release.tag_of("0.4.2rc1") == "v0.4.2-rc.1" and release.tag_of("0.4.1") == "v0.4.1"
 
 
-def test_the_release_workflow_publishes_only_a_published_release_after_the_tests():
+def test_the_release_workflow_requires_separate_ghcr_approval_after_a_published_release():
     workflow = yaml.safe_load((ROOT / ".github/workflows/release.yml").read_text())
     triggers = workflow[True]  # PyYAML reads the key "on" as True
-    assert set(triggers) == {"release", "pull_request"} and triggers["release"]["types"] == ["published"]
+    assert set(triggers) == {"workflow_dispatch", "pull_request"}
+    inputs = triggers["workflow_dispatch"]["inputs"]
+    assert inputs["release_tag"]["required"] is True
+    assert inputs["confirmation"]["required"] is True
     image = workflow["jobs"]["image"]
     assert image["needs"] == "tests" and workflow["jobs"]["tests"]["uses"] == "./.github/workflows/tests.yml"
-    assert image["env"]["PUBLISH"] == "${{ github.event_name == 'release' }}"
-    # a pull request publishes to the registry of the job, never to ghcr.io
+    assert workflow["jobs"]["tests"]["if"] == "github.event_name == 'workflow_dispatch'"
+    assert image["env"]["PUBLISH"] == "${{ github.event_name == 'workflow_dispatch' }}"
+    assert image["env"]["TAG"] == "${{ inputs.release_tag }}"
+    assert image["env"]["CONFIRMATION"] == "${{ inputs.confirmation }}"
+    # Pull requests publish only to the registry of the job, never to GHCR.
     assert "localhost:5000/posture-cockpit" in image["env"]["IMAGE"] and "registry" in image["services"]
     text = (ROOT / ".github/workflows/release.yml").read_text()
     assert "value=latest" not in text and "type=raw" not in text  # tags come from release_tags.py only
     steps = {s.get("id") or s.get("name"): s for s in image["steps"]}
     order = [s.get("id") or s.get("name") for s in image["steps"]]
+    approval = steps["release_gate"]
+    assert approval["if"] == "env.PUBLISH == 'true'"
+    assert order.index("release_gate") < order.index("release") < order.index("registry")
+    assert "PUBLISH_GHCR" in approval["run"]
+    assert "releases/tags/" in approval["run"] and ".published_at" in approval["run"]
+    assert "refs/heads/main" in approval["run"]  # manual dispatch from main only
+    assert 'git rev-parse refs/remotes/origin/main' in approval["run"]  # tested main HEAD equals tag commit
+    assert steps["source"]["run"].find("git rev-parse HEAD") >= 0
+    assert steps["registry"]["run"].find("steps.source.outputs.revision") >= 0
+    assert steps["build"]["with"]["annotations"].find("steps.source.outputs.revision") >= 0
+    assert steps["Sign in to ghcr.io"]["if"] == "env.PUBLISH == 'true'"
     assert order.index("registry") < order.index("build") < order.index("tags")
     build = steps["build"]
     assert build["if"] == "steps.registry.outputs.state == 'absent'"   # resumed or refused otherwise

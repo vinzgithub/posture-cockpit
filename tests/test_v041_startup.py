@@ -15,8 +15,10 @@ from posture_cockpit.storage.schema import MIGRATIONS
 from posture_cockpit.web.app import create_app
 
 
-def test_schema_4_is_the_schema_of_0_4_1():
-    assert len(MIGRATIONS) == 4  # 0.4.1 adds no migration: the 0.4.0 image can still open its databases
+def test_schema_5_is_the_schema_of_0_5_0():
+    # 0.4.1 added no migration; 0.5.0 adds the fifth: the images 0.4.x refuse a database once it is
+    # migrated, going back to them means restoring the backup made before (docs/user/INSTALLATION.md).
+    assert len(MIGRATIONS) == 5
 
 
 def new_db(tmp_path):
@@ -25,13 +27,13 @@ def new_db(tmp_path):
     return tmp_path / "posture_cockpit.db"
 
 
-@pytest.mark.parametrize("found", [5, 99])
+@pytest.mark.parametrize("found", [6, 99])
 def test_a_newer_schema_is_refused_and_left_untouched(tmp_path, found):
     path = new_db(tmp_path)
     with sqlite3.connect(path) as conn:
         conn.execute("UPDATE meta SET value = ? WHERE key = 'schema_version'", (str(found),))
     before = path.read_bytes()
-    with pytest.raises(UnsupportedSchema, match=f"schema {found}; this version of Posture Cockpit handles schema 4"):
+    with pytest.raises(UnsupportedSchema, match=f"schema {found}; this version of Posture Cockpit handles schema 5"):
         Database(path)
     assert path.read_bytes() == before and not (tmp_path / "backups").exists()
 

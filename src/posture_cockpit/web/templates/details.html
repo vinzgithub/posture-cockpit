@@ -1,7 +1,7 @@
 {# Copyright © 2026 Vincent Fournet · SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 -#}
 {# Every check of the latest scan, with the raw values it saw: the page for the technician. #}
 {% extends "base.html" %}
-{% from "_macros.html" import indicators with context %}
+{% from "_macros.html" import indicators, schedule_line with context %}
 {% block title %}{{ t('details.title') }} · {{ scan.domain }}{% endblock %}
 {% block content %}
 <p class="small"><a href="/domains/{{ scan.domain }}">← {{ t('details.back') }}</a></p>
@@ -10,6 +10,7 @@
   <h1>{{ t('details.title') }} <span class="muted">· {{ scan.domain }}</span></h1>
   <p class="lead">{{ t('details.lead', date=date(scan.started_at), time=local_time(scan.started_at), seconds=(scan.duration_ms / 1000) | round(1), version=scan.version) }}</p>
   <p class="small"><a href="/domains/{{ scan.domain }}/history">{{ t("details.history") }}</a></p>
+  {% if schedule %}<p class="small schedule-line"><span class="tag-schedule">{{ t("schedule.badge") }}</span> {{ schedule_line(schedule) }}</p>{% endif %}
   <p class="coverage {{ 'coverage-partial' if result.partial or result.score is none }}">
     {% if result.score is not none %}{{ t('v04.score_only', score=result.score) if result.undetermined else t('details.result', score=result.score, grade=result.grade) }}{% else %}{{ t('score.not_evaluated') }}{% endif %}
   </p>
@@ -17,6 +18,22 @@
 
 {{ indicators(result, scan.addresses()) }}
 {% include "_findings.html" %}
+
+{% if recent_events %}
+<section class="panel" aria-labelledby="domain-events-title">
+  <h2 id="domain-events-title">{{ t('events.domain_section') }}</h2>
+  <ul>
+    {% for e in recent_events %}
+    <li>{{ date(e.updated_at) }} {{ local_time(e.updated_at) }} —
+      <strong>{{ t('events.severity.' ~ e.severity) }}</strong> :
+      {{ t('events.kind.' ~ e.kind) }}{% if e.subject %} · <code>{{ e.subject }}</code>{% endif %}
+      ({{ t('events.state.' ~ e.state) }})
+    </li>
+    {% endfor %}
+  </ul>
+  <p><a href="/events?domain={{ domain.name | urlencode }}">{{ t('events.all_for_domain') }}</a></p>
+</section>
+{% endif %}
 
 {% if history | length > 1 %}
 <section class="panel" aria-labelledby="history-title">
@@ -38,6 +55,54 @@
   </div>
   <p class="small"><a href="/domains/{{ scan.domain }}/history">{{ t("history.all") }}</a></p>
   <p class="small muted">{{ t('details.history_note') }}</p>
+</section>
+{% endif %}
+
+{% if can_schedule %}
+<section class="panel" id="schedule">
+  <h2>{{ t('schedule.title') }}</h2>
+  <p class="muted">{{ t('schedule.help') }}</p>
+  {% if schedule_error %}<p role="alert" class="flash flash-error">{{ schedule_error }}</p>{% endif %}
+  <form method="post" action="/domains/{{ scan.domain }}/schedule" class="form-grid" data-schedule-form>
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label class="field">{{ t('schedule.frequency') }}
+      <select name="frequency">
+        {% for f in ['off', 'daily', 'weekly', 'monthly'] %}
+        <option value="{{ f }}" {% if schedule_form.frequency == f %}selected{% endif %}>{{ t('schedule.frequency.' ~ f) }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="field" data-schedule-field="time">{{ t('schedule.time') }} <input type="time" name="time" value="{{ schedule_form.time }}" required></label>
+    <label class="field" data-schedule-field="weekday">{{ t('schedule.weekday') }}
+      <select name="weekday">
+        {% for n in range(1, 8) %}
+        <option value="{{ n }}" {% if schedule_form.weekday | int == n %}selected{% endif %}>{{ t('schedule.weekday.' ~ n) }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="field" data-schedule-field="monthday">{{ t('schedule.monthday') }}
+      <select name="monthday">
+        {% for n in range(1, 32) %}
+        <option value="{{ n }}" {% if schedule_form.monthday | int == n %}selected{% endif %}>{{ n }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="check"><input type="checkbox" name="enabled" {% if schedule_form.enabled %}checked{% endif %}> {{ t('schedule.enabled') }}</label>
+    <div><button class="btn btn-primary" type="submit">{{ t('schedule.save') }}</button></div>
+  </form>
+  <p class="muted small">{{ t('schedule.rules') }}</p>
+  {% if schedule %}
+  <h3>{{ t('schedule.runs') }}</h3>
+  {% if schedule_runs %}
+  <div class="table-scroll"><table class="table">
+    <thead><tr><th>{{ t('schedule.run.slot') }}</th><th>{{ t('schedule.run.state') }}</th><th>{{ t('schedule.run.when') }}</th></tr></thead>
+    <tbody>{% for run in schedule_runs %}
+      <tr><td>{{ date(run.slot[:10]) }} {{ run.slot[11:] }}</td><td>{{ t('schedule.run.' ~ run.state) }}</td>
+      <td>{{ date(run.claimed_at) }} {{ local_time(run.claimed_at) }}</td></tr>
+    {% endfor %}</tbody>
+  </table></div>
+  {% else %}<p class="muted">{{ t('schedule.no_runs') }}</p>{% endif %}
+  {% endif %}
 </section>
 {% endif %}
 

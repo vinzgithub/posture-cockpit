@@ -1,0 +1,64 @@
+{# Copyright © 2026 Vincent Fournet · SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 -#}
+{% extends "base.html" %}
+{% block title %}{{ t('events.title') }} · Posture Cockpit{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>{{ t('events.title') }}</h1>
+  <p class="lead">{{ t('events.intro') }}</p>
+</div>
+<section class="panel">
+  {# The state selector below is the only state filter; no redundant full-width links. #}
+  <form method="get" action="/events" class="form-grid events-filters" aria-label="{{ t('events.filter') }}">
+    <label class="field">{{ t('events.state.heading') }}
+      <select name="state">{% for value in ('open','resolved','notice','all') %}
+        <option value="{{ value }}" {% if value == event_state %}selected{% endif %}>{{ t('events.state.' ~ value) }}</option>
+      {% endfor %}</select>
+    </label>
+    <label class="field">{{ t('events.severity') }}
+      <select name="severity">{% for value in ('all','critical','warning','info') %}
+        <option value="{{ value }}" {% if value == event_severity %}selected{% endif %}>{{ t('events.severity.' ~ value) }}</option>
+      {% endfor %}</select>
+    </label>
+    <label class="field">{{ t('events.category') }}
+      <select name="category">{% for value in ('all','security','measurement','technical') %}
+        <option value="{{ value }}" {% if value == event_category %}selected{% endif %}>{{ t('events.category.' ~ value) }}</option>
+      {% endfor %}</select>
+    </label>
+    <label class="field">{{ t('events.domain') }}
+      <input type="text" name="domain" value="{{ event_domain }}" maxlength="253">
+    </label>
+    <label class="field">{{ t('events.period') }}
+      <select name="period">{% for value in ('all','7','30','90') %}
+        <option value="{{ value }}" {% if value == event_period %}selected{% endif %}>{{ t('events.period.' ~ value) }}</option>
+      {% endfor %}</select>
+    </label>
+    <div class="events-filter-action"><button type="submit" class="btn btn-primary">{{ t('events.apply') }}</button></div>
+  </form>
+  {% if events %}
+  <div class="table-scroll"><table class="table">
+    <thead><tr>
+      <th>{{ t('events.date') }}</th><th>{{ t('events.domain') }}</th>
+      <th>{{ t('events.type') }}</th><th>{{ t('events.severity') }}</th>
+      <th>{{ t('events.state.heading') }}</th>
+    </tr></thead>
+    <tbody>
+    {% for e in events %}
+    <tr>
+      <td>{{ date(e.updated_at) }} {{ local_time(e.updated_at) }}</td>
+      <td>{% if e.domain_name %}<a href="/domains/{{ e.domain_name }}/details">{{ e.domain_name }}</a>{% else %}{{ t('events.instance') }}{% endif %}</td>
+      <td>{{ t('events.kind.' ~ e.kind) }}{% if e.subject %} · <code>{{ e.subject }}</code>{% endif %}</td>
+      <td>{{ t('events.severity.' ~ e.severity) }}</td>
+      <td>{{ t('events.state.' ~ e.state) }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}<p class="muted">{{ t('events.empty') }}</p>{% endif %}
+  {% if unread_events %}
+  <form action="/events/seen" method="post">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <button class="btn btn-secondary" type="submit">{{ t('events.mark_seen') }}</button>
+  </form>
+  {% endif %}
+</section>
+{% endblock %}
