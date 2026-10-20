@@ -24,27 +24,28 @@
 
 ## ⚡ Quick start — Docker
 
-**Posture Cockpit v0.4.1 installs without Git, Python or a local build.** Docker Engine and Docker Compose 2.24+ are required. The official GHCR image supports AMD64 and ARM64.
+**Posture Cockpit v0.5.0 installs without Git, Python or a local build.** Docker Engine and Docker Compose 2.24+ are required. The official GHCR image supports AMD64 and ARM64.
 
 ```bash
 mkdir posture-cockpit && cd posture-cockpit
-curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.4.1/compose.yaml
+curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.5.0/compose.yaml
 docker compose up -d
 ```
 
 Get the one-time first-account setup code with `docker compose logs posture-cockpit`, then visit `http://<server>:8080/setup` to create the administrator account. **Do not expose the service publicly over plain HTTP**: configure an HTTPS reverse proxy for remote access.
 
-Configuration uses an optional [`.env` file](.env.example). For upgrades, backups, restore and rollback, follow the [installation guide](docs/user/INSTALLATION.md). The image is pinned to **0.4.1**, so an installation will not silently upgrade.
+Configuration uses an optional [`.env` file](.env.example). For upgrades, backups, restore and rollback, follow the [installation guide](docs/user/INSTALLATION.md). The image is pinned to **0.5.0**, so an installation will not silently upgrade. **For existing v0.4.1 installations, do not use these new-install commands as an upgrade:** first [export a verified backup and follow the migration guide](docs/user/INSTALLATION.md#updating). Set `POSTURE_COCKPIT_SCHEDULER=off` before the first upgraded start; schema 5 requires restoration of the schema-4 backup to roll back.
 
-### What's new in v0.4.1
+### What's new in v0.5.0
 
-- **Official ready-to-run Docker image** on GHCR, versioned for AMD64 and ARM64.
-- **Protected first start:** an initialization code is required before creating the first administrator.
-- **Safer maintenance:** consistent live SQLite backup, verification and guarded restoration, including the session key.
-- **Simpler configuration:** optional `.env`, with hardened unprivileged, read-only Docker defaults.
-- **Improved bilingual PDF reports**, with existing v0.4.0 databases remaining compatible (schema 4).
+- **Historical comparisons:** view comparable score and security-check changes without recalculating past assessments.
+- **Scheduled scans:** daily, weekly and monthly schedules, administrator-controlled, with time-zone handling and execution history.
+- **Internal events and alerts:** security regressions, meaningful score drops, coverage losses and repeated scheduled-scan failures, with open/resolved state and a personal unread indicator. No email or external alerts are sent.
+- **SQLite schema 5:** immutable scan states, schedules and events, with a verified pre-migration backup.
+- **Compatibility:** scoring rules and existing API fields are preserved, with version-pinned AMD64/ARM64 Docker images.
 
-See the [v0.4.1 release notes](https://github.com/vinzgithub/posture-cockpit/releases/tag/v0.4.1).
+See the [v0.5.0 release notes](https://github.com/vinzgithub/posture-cockpit/releases/tag/v0.5.0).
+
 
 ---
 
@@ -70,6 +71,14 @@ See the [v0.4.1 release notes](https://github.com/vinzgithub/posture-cockpit/rel
 For the small business, association, craftsman or town hall that has a domain name, a mailbox and a website, but no security team. And for whoever helps them: the family's IT person, the provider, the consultant.
 
 Online tools that "grade" a domain give a list of defects in technical English, and stop there. Posture Cockpit goes all the way: it says **what to do, in which order, where to click**, checks that it is done, and produces a report to hand over.
+
+---
+
+## 📈 History, scheduled scans and events
+
+Posture Cockpit compares **compatible measured states** over time without rewriting old scores. Administrators can schedule recurring scans, and the **Events** page shows regressions, loss of observation coverage and resolutions, limited to each user's access rights. This is an internal dashboard, not an email notification service.
+
+More details: [Scheduled scans](docs/user/ANALYSES_PROGRAMMEES.md) · [Events and alerts](docs/user/EVENEMENTS.md).
 
 ---
 
@@ -171,7 +180,7 @@ Docker Compose 2.24 or later, in an empty folder:
 
 ```bash
 mkdir posture-cockpit && cd posture-cockpit
-curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.4.1/compose.yaml
+curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.5.0/compose.yaml
 docker compose up -d
 docker compose logs posture-cockpit   # the setup code of the first account
 ```
@@ -237,7 +246,7 @@ ruff check src tests examples && mypy && pytest
 
 - **DKIM**: selectors cannot be listed. Posture Cockpit tries the most common names; finding none is information, not a fault.
 - **DNS host steps**: hosts change their menus. If a step no longer matches, please report it: these are plain texts in `locales/`.
-- **Scheduled scans**: not built into the application yet; use the API from Home Assistant or cron.
+- **Scheduled scans**: built into v0.5.0; the scheduler is enabled by default, so explicitly set `POSTURE_COCKPIT_SCHEDULER=off` during the first upgrade from v0.4.1.
 - **Internal perimeters**: the instance must reach the internal network itself. The same name cannot be followed both from the Internet and in an internal perimeter. An agent architecture to audit several networks is being studied ([REMOTE_AGENT.md](docs/developer/REMOTE_AGENT.md)).
 - **Behind a mandatory HTTP proxy**: scans do not go through a proxy (it would make the egress rule useless).
 

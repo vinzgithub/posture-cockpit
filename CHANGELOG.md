@@ -1,8 +1,8 @@
 # Changelog
 
-## 0.5.0 — unreleased
+## 0.5.0 — 2026-10-20
 
-In development; not published. Scoring rules, checks, statuses and the keys of the API are unchanged.
+Published on GitHub and GHCR. Scoring rules, checks, statuses and the keys of the API are unchanged.
 
 **Historical comparisons (step 2)**
 - The history compares compatible immutable measured states, with score deltas and changes of conclusive checks, without recomputing past assessments.
@@ -26,11 +26,11 @@ In development; not published. Scoring rules, checks, statuses and the keys of t
 - A controlled SPF regression produced an open critical event and a score drop from 57 to 48; restoring the original finding resolved the event and restored 57. Acknowledgment cleared the unread marker without deleting event history. These are **fixture-based simulations**, not observed Internet incidents.
 - The actual scheduler ran in a separate, network-isolated disposable container: one automatic scan saved with `via=schedule`, score 57, execution state `done`, one attempt. It remained disabled on the 8086 integration instance.
 - A verified backup of the **actual v0.4.1 production database**, copied to a separate Docker volume (1 account, 9 domains, 26 scans), migrated from schema 4 to 5. SQLite integrity and foreign keys passed; all 9 domains and 26 scans were retained. The automatically generated schema-4 backup was verified, restored with the official v0.4.1 image, and the original counts and session key permissions were confirmed.
-- CI of integration documentation PR #26 passed on its prior head (9 jobs: Python 3.11/3.12/3.13, browser, Docker, three migration paths and rollback). Recheck CI on the final documentation and release commit before publication. **Production remains on v0.4.1, unpublished release remains gated by maintainer approval.**
+- Final release CI passed after PR #27 (Python 3.11/3.12/3.13, browser, Docker, migrations and rollback), and the separately approved GHCR workflow #73 succeeded. **Publishing does not migrate any existing installation.**
 
 **Integration and publication**
 - Starting with v0.5.0, publishing a GitHub Release never automatically publishes GHCR images: a separately approved manual `release` workflow run requires an existing published tag and `PUBLISH_GHCR` confirmation; full tests, image checks and registry guards run again before pushing.
-- The 0.5.0 branch is awaiting integrated release validation; `main`, the published 0.4.1 image and production remain unchanged.
+- PR #27 was merged into `main` at commit `88623bccf9054b3fbbb1c360151efd27f467460f`. The tag `v0.5.0` and GitHub Release were published, followed by an independently authorized GHCR publication of tags `0.5.0`, `0.5` and `latest` (digest `sha256:c8dacc1e82646562a3a386ba850a8dca785df5ceee98bf9910ba74eef67a5651`). Existing installations are not changed by publication.
 - See `docs/developer/RELEASE_V050.fr.md` for the integration checks and decision gates.
 
 **Database: schema 5** (cannot be opened by 0.4.x: going back means restoring the backup made

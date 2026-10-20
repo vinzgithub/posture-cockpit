@@ -1,8 +1,8 @@
 # Événements et alertes — Posture Cockpit v0.5.0
 
-> Fonctionnalité intégrée à la branche de développement `feat/v0.5.0`, mais non
-> publiée. La production v0.4.1 ne doit pas être remplacée avant la validation
-> complète de l'intégration. Aucun e-mail ni notification externe n'est envoyé.
+> Fonctionnalité publiée en `v0.5.0`, sans effet sur les installations
+> encore en v0.4.1. Toute migration de production nécessite une validation
+> distincte. Aucun e-mail ni notification externe n'est envoyé.
 
 ## Ce que signifie un événement
 
@@ -71,6 +71,7 @@ une correction, les résultats non concluants, les échecs programmés, le bouto
 
 La recette Docker a utilisé un projet et un volume SQLite distincts de la production.
 L'étape 4 a été validée en recette et fusionnée dans `feat/v0.5.0` via la PR #25.
-L'intégration finale de la version reste à valider séparément, selon
-`docs/developer/RELEASE_V050.fr.md`. Aucun merge dans `main`, tag, release ou
-déploiement en production sans accord explicite du propriétaire.
+La PR #27, le tag, la GitHub Release et les images GHCR ont été validés.
+Cela ne constitue pas un accord pour déployer sur une instance existante :
+suivre `docs/developer/RELEASE_V050.fr.md` et demander l'autorisation
+spécifique du propriétaire avant toute migration.

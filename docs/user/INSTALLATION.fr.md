@@ -4,15 +4,17 @@
 
 ## Avec Docker (recommandé)
 
+**Nouvelle installation uniquement :** les commandes ci-dessous créent une instance neuve. Pour migrer des données v0.4.1, suivre la [mise à jour](#mise-à-jour), exporter une sauvegarde vérifiée hors du volume Docker et fixer `POSTURE_COCKPIT_SCHEDULER=off` avant le premier démarrage en v0.5.0. Le retour du schéma 5 vers 4 nécessite une restauration de sauvegarde.
+
 Il faut Docker Engine et **Docker Compose 2.24 ou plus récent** (`docker compose version`). Rien à compiler, pas besoin de Git : l'image officielle est publiée sur `ghcr.io/vinzgithub/posture-cockpit`, pour les processeurs amd64 et arm64.
 
 ```bash
 mkdir posture-cockpit && cd posture-cockpit
-curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.4.1/compose.yaml
+curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.5.0/compose.yaml
 docker compose up -d
 ```
 
-Le fichier [`compose.yaml`](../../compose.yaml) désigne une version précise de l'image (`0.4.1`), jamais `latest` : une installation ne change pas de version toute seule. Il garde les protections : utilisateur sans privilèges (uid 10001), système en lecture seule, aucune capacité Linux, `no-new-privileges`, `/tmp` en mémoire. Les données vont dans le volume `posture-cockpit_posture-cockpit-data`, quel que soit le dossier d'installation.
+Le fichier [`compose.yaml`](../../compose.yaml) désigne une version précise de l'image (`0.5.0`), jamais `latest` : une installation ne change pas de version toute seule. Il garde les protections : utilisateur sans privilèges (uid 10001), système en lecture seule, aucune capacité Linux, `no-new-privileges`, `/tmp` en mémoire. Les données vont dans le volume `posture-cockpit_posture-cockpit-data`, quel que soit le dossier d'installation.
 
 ### Premier démarrage : le code d'initialisation
 
@@ -30,7 +32,7 @@ Pour une installation automatisée, `POSTURE_COCKPIT_SETUP_CODE` fixe le code (1
 ### Vérifier
 
 ```bash
-curl http://localhost:8080/healthz                       # {"status":"ok","version":"0.4.1"}
+curl http://localhost:8080/healthz                       # {"status":"ok","version":"0.5.0"}
 docker compose exec posture-cockpit posture-cockpit info  # version, schéma, comptes, analyses
 ```
 
@@ -39,7 +41,7 @@ docker compose exec posture-cockpit posture-cockpit info  # version, schéma, co
 Ne modifiez pas `compose.yaml` : une mise à jour le remplace. Les réglages vont dans un fichier `.env` facultatif, à côté de lui ; le modèle [`.env.example`](../../.env.example) les décrit tous, en commentaire :
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.4.1/.env.example -o .env
+curl -fsSL https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.5.0/.env.example -o .env
 nano .env                 # décommentez les lignes utiles
 docker compose up -d      # applique les changements
 ```

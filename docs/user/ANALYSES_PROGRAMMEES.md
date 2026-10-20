@@ -1,8 +1,8 @@
 # Analyses programmées — Posture Cockpit v0.5.0
 
-> Cette fonction est intégrée dans `feat/v0.5.0`, mais la version n'est pas
-> publiée. Ne pas l'activer sur la production v0.4.1 avant validation de
-> l'intégration et de la procédure de migration.
+> Cette fonction est disponible dans la version publiée `v0.5.0`, mais
+> reste absente d'une installation v0.4.1 non migrée. Toute migration en
+> production nécessite une sauvegarde vérifiée et une validation distincte.
 
 ## Activation et sécurité
 
@@ -50,7 +50,7 @@ Un essai distinct a été réalisé dans le conteneur éphémère `pc-v050-sched
 
 Le test valide l'exécution réelle par le processus d'ordonnancement avec des **réponses fictives intégrées** et sans connexion Internet. Il ne valide pas les résultats d'un balayage d'un site réel. L'ordonnanceur de 8086 n'a pas été activé.
 
-Pour une future mise à jour de production, configurer explicitement `POSTURE_COCKPIT_SCHEDULER=off` lors du premier démarrage, puis décider séparément de l'activation en fonction des domaines, des quotas et des horaires. La version v0.5.0 n'est pas encore publiée.
+Pour une future mise à jour de production, configurer explicitement `POSTURE_COCKPIT_SCHEDULER=off` lors du premier démarrage, puis décider séparément de l'activation en fonction des domaines, des quotas et des horaires. La version v0.5.0 est publiée, sans migration automatique des instances existantes.
 
 ## Recette et intégration
 
@@ -61,7 +61,6 @@ puis fusionnée dans `feat/v0.5.0` via la PR #24. La recette de l'étape 4
 a ensuite validé l'incident créé après trois échecs et résolu après une
 réussite simulée. Aucune de ces simulations n'a déclenché d'analyse réseau.
 
-Avant toute publication, valider la version intégrée dans un **projet et
-un volume distincts**, jamais sur le volume de production, et suivre
-`docs/developer/RELEASE_V050.fr.md`. Ne pas fusionner dans `main`,
-publier ni déployer sans autorisation du propriétaire.
+Avant toute migration en production, valider la sauvegarde et la restauration
+dans un projet et un volume distincts, suivre le dossier de recette
+`docs/developer/RELEASE_V050.fr.md` et obtenir l'autorisation du propriétaire.
