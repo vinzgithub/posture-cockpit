@@ -16,7 +16,7 @@
 
 <br><br>
 
-**Self-hosted · Passive checks · Bilingual (FR / EN) · ANSSI and RFC references · Open source for non-commercial use**
+**Self-hosted · Passive checks · Bilingual (FR / EN) · ANSSI and RFC references · Source available, free for non-commercial use**
 
 </div>
 

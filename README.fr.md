@@ -16,7 +16,7 @@
 
 <br><br>
 
-**Auto-hébergé · Analyse passive · Bilingue (FR / EN) · Références ANSSI et RFC · Open source pour un usage non commercial**
+**Auto-hébergé · Analyse passive · Bilingue (FR / EN) · Références ANSSI et RFC · Code source disponible, gratuit pour un usage non commercial**
 
 </div>
 
