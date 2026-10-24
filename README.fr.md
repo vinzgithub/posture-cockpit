@@ -2,264 +2,161 @@
 
 # 🛡️ Posture Cockpit
 
-### Votre domaine est-il bien protégé ? Et que corriger en premier ?
+### Votre site fonctionne, vos e-mails arrivent… mais votre nom de domaine est-il bien protégé ?
 
-**Messagerie · Certificats · Site web · DNS · Plan de corrections guidé · Rapport PDF · Double authentification · Extensions**
+**Comprendre · Corriger · Vérifier · Suivre dans le temps**
 
-🇬🇧 [Read in English](README.md)
+**Français** · [**English**](README.md)
 
-<br>
+![Version](https://img.shields.io/badge/version-0.5.0-126caa) ![Docker](https://img.shields.io/badge/installation-Docker-2496ED) ![Licence](https://img.shields.io/badge/licence-PolyForm%20Noncommercial-0d355d)
 
-<img src="docs/images/fr/hero.png" alt="Posture Cockpit sur ordinateur et sur téléphone" width="100%">
+<img src="docs/images/fr/hero.png" alt="Posture Cockpit présenté sur ordinateur et sur téléphone" width="100%">
 
-<sub>Les captures montrent un domaine fictif de démonstration (<code>menuiserie-dupont.example</code>). Les adresses viennent des plages réservées à la documentation.</sub>
-
-<br><br>
-
-**Auto-hébergé · Analyse passive · Bilingue (FR / EN) · Références ANSSI et RFC · Code source disponible, gratuit pour un usage non commercial**
+<sub>Les captures présentent le domaine fictif <code>menuiserie-dupont.example</code>. Il s'agit d'une démonstration, pas des résultats d'une entreprise réelle.</sub>
 
 </div>
 
 ---
 
-## ⚡ Installation rapide — Docker
+## Posture Cockpit, c'est quoi ?
 
-**Posture Cockpit v0.5.0 s'installe sans Git, sans Python et sans compilation locale.** Il suffit de Docker Engine et de Docker Compose 2.24 ou plus récent. L'image officielle GHCR est compatible AMD64 et ARM64.
+Quand on possède un site Internet ou une adresse e-mail liée à son nom de domaine, on pense rarement aux réglages de sécurité qui se cachent derrière. Tant que le site s'ouvre et que les messages arrivent, tout semble fonctionner.
 
-```bash
-mkdir posture-cockpit && cd posture-cockpit
-curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.5.0/compose.yaml
-docker compose up -d
-```
+Pourtant, un certificat peut approcher de sa date d'expiration, un site peut manquer de certaines protections, ou un domaine peut être insuffisamment protégé contre l'usurpation d'adresse e-mail.
 
-Récupérez le code d'initialisation du premier compte avec `docker compose logs posture-cockpit`, puis ouvrez `http://<serveur>:8080/setup` pour créer l'administrateur. **N'exposez pas le service publiquement en HTTP** : utilisez un proxy inverse HTTPS pour les accès distants.
+**Posture Cockpit aide à faire le point.** Vous lui indiquez un nom de domaine et il examine les protections qu'il peut observer : **site web, certificats HTTPS, messagerie et DNS**. Il vous présente ensuite un bilan compréhensible, avec les points à surveiller et, lorsque c'est possible, les démarches pour les corriger.
 
-La configuration passe par un [fichier `.env` facultatif](.env.example). Pour les mises à jour, sauvegardes, restaurations et retours arrière, consultez le [guide d'installation](docs/user/INSTALLATION.fr.md). L'image est fixée à la version **0.5.0**, sans mise à jour automatique imprévue. **Pour une instance existante en v0.4.1, n'utilisez pas ces commandes de nouvelle installation pour la mise à niveau :** effectuez d'abord une [sauvegarde vérifiée et exportée, puis suivez la procédure de migration](docs/user/INSTALLATION.fr.md#mise-à-jour). Fixez `POSTURE_COCKPIT_SCHEDULER=off` avant le premier démarrage en 0.5.0 ; le retour au schéma 4 nécessite la restauration de la sauvegarde.
+L'idée est simple : **ne pas seulement vous dire qu'il y a un problème, mais vous aider à comprendre ce qu'il signifie et quoi faire ensuite.**
 
-### Nouveautés de la v0.5.0
+C'est un logiciel librement consultable sur GitHub, que vous installez **sur votre propre serveur**. Il ne nécessite ni ChatGPT, ni abonnement à un service d'IA.
 
-- **Comparaisons historiques :** évolution des notes et des contrôles comparables, sans recalculer les évaluations antérieures.
-- **Analyses programmées :** planification quotidienne, hebdomadaire et mensuelle, réservée aux administrateurs, avec prise en compte des fuseaux horaires et historique d'exécution.
-- **Événements et alertes internes :** régressions, baisses de score significatives, pertes de couverture et échecs répétés, avec état ouvert/résolu et repère personnel des nouveautés. Aucun e-mail ou alerte externe n'est envoyé.
-- **SQLite schéma 5 :** états d'analyse immuables, programmations et événements, avec sauvegarde vérifiée avant migration.
-- **Compatibilité :** règles de notation et champs API existants conservés ; images Docker AMD64/ARM64 fixées par version.
+## À qui ça peut servir ?
 
-Voir les [notes de version v0.5.0](https://github.com/vinzgithub/posture-cockpit/releases/tag/v0.5.0).
+À une personne qui gère son propre domaine, à un **artisan, une association, une petite entreprise ou une collectivité** qui possède un site ou des adresses e-mail, mais aussi à l'informaticien ou au prestataire qui les accompagne.
 
+Vous n'avez pas besoin de maîtriser SPF, DMARC ou TLS pour lire le bilan. Et si vous connaissez déjà ces technologies, les résultats détaillés et les références techniques restent accessibles.
 
----
+## Un exemple, pour comprendre
 
-## 🚀 En bref
+Imaginons une menuiserie qui utilise le domaine `menuiserie-dupont.example` pour son site et ses e-mails.
 
-<table>
-<tr>
-<td width="33%" valign="top"><b>🧭 Un plan, pas une liste d'alertes</b><br>Les corrections sont classées par effet sur la note, avec le temps qu'elles prennent et qui doit les faire.</td>
-<td width="33%" valign="top"><b>🪜 Pas à pas, chez votre hébergeur</b><br>OVHcloud, Gandi, IONOS, Cloudflare : l'hébergeur DNS est détecté et les instructions suivent ses menus. L'enregistrement est prêt à copier.</td>
-<td width="33%" valign="top"><b>✅ « Vérifier » en un clic</b><br>Une fois la correction faite, le contrôle est relancé aussitôt et la note se met à jour.</td>
-</tr>
-<tr>
-<td valign="top"><b>✉️ Le message au prestataire, déjà écrit</b><br>Ce qui ne se règle pas soi-même part en un message prêt à envoyer à l'agence web ou à l'informaticien.</td>
-<td valign="top"><b>📄 Un rapport PDF comme un dossier d'expert</b><br>Le diagnostic en clair, l'ordonnance, le bilan par domaine, et une annexe technique avec les références.</td>
-<td valign="top"><b>🧩 Extensible</b><br>Chaque famille de contrôles est une extension. Un paquet Python suffit pour en ajouter.</td>
-</tr>
-</table>
+Le site est accessible. Les clients peuvent écrire à l'entreprise. Mais comment savoir si quelqu'un risque d'envoyer de faux messages en se faisant passer pour elle, ou si le site utilise les protections HTTPS attendues ?
 
----
+Avec Posture Cockpit :
 
-## ✨ Pour qui ?
+1. **On ajoute le domaine** et on lance l'analyse.
+2. **On découvre le bilan** : ce qui est correct, ce qui mérite d'être amélioré et ce qui n'a pas pu être vérifié.
+3. **On consulte les explications** : pourquoi ce réglage compte-t-il ? Peut-on agir soi-même ou faut-il contacter son prestataire ?
+4. **On effectue la correction**, puis on utilise le bouton de vérification pour voir si elle a réellement été prise en compte.
+5. **On garde un œil sur la suite**, grâce aux historiques et aux analyses programmées.
 
-Pour la petite entreprise, l'association, l'artisan ou la collectivité qui a un nom de domaine, une messagerie et un site, mais pas d'équipe sécurité. Et pour la personne qui les aide : l'informaticien de la famille, le prestataire, le consultant.
+Par exemple, si la configuration DMARC mérite d'être renforcée, Posture Cockpit explique à quoi elle sert et peut proposer une première étape. Il ne change rien à votre place : **vous gardez la main**, et certaines protections doivent être mises en place progressivement pour ne pas perturber les e-mails légitimes.
 
-Les outils en ligne qui « notent » un domaine donnent une liste de défauts en anglais technique, puis s'arrêtent là. Posture Cockpit va jusqu'au bout : il dit **quoi faire, dans quel ordre, où cliquer**, vérifie que c'est fait, et produit un rapport à transmettre.
+## Ce que vous trouverez dans l'application
 
----
+### Un bilan facile à lire
 
-## 📈 Historique, analyses programmées et événements
+Posture Cockpit indique les protections correctement configurées, les points critiques et les vérifications qui n'ont pas pu aboutir. Il affiche aussi une **note accompagnée d'un taux de couverture** : on sait ainsi sur quelle part des contrôles repose le résultat.
 
-Posture Cockpit compare les **états mesurés compatibles** dans le temps, sans modifier les anciennes notes. Les administrateurs peuvent programmer les analyses récurrentes ; l'onglet **Événements** signale les régressions, les pertes de couverture et les résolutions, dans le respect des droits d'accès. Ce tableau de bord interne n'envoie pas de notifications par e-mail.
+**Une note de 90/100 ne veut pas dire que votre entreprise est sécurisée à 90 %.** Elle résume seulement les points effectivement examinés par l'outil. Posture Cockpit ne remplace pas un audit complet ni un test d'intrusion.
 
-Détails : [Analyses programmées](docs/user/ANALYSES_PROGRAMMEES.md) · [Événements et alertes](docs/user/EVENEMENTS.md).
+### Des corrections expliquées, pas seulement signalées
 
----
+<img src="docs/images/fr/plan-dns.png" alt="Exemple de correction DNS expliquée étape par étape">
 
-## 🧭 Le plan guidé
+Lorsqu'un réglage DNS doit être modifié, l'outil peut vous guider chez **OVHcloud, Gandi, IONOS ou Cloudflare** et préparer les valeurs à copier. Si le problème relève plutôt de votre hébergeur ou de votre agence web, il peut fournir un **message à leur transmettre**.
 
-<table>
-<tr>
-<td width="55%" valign="top">
+Les conseils restent à vérifier avant application, en particulier pour la messagerie : une modification DNS mal choisie peut interrompre des envois légitimes.
 
-<img src="docs/images/fr/plan-dns.png" alt="Une correction DNS pas à pas">
+### Un rapport PDF que l'on peut partager
 
-</td>
-<td width="45%" valign="top">
+| Le bilan | Les explications |
+|:--:|:--:|
+| <img src="docs/images/fr/report-1.png" alt="Synthèse d'un rapport PDF de Posture Cockpit" width="100%"> | <img src="docs/images/fr/report-2.png" alt="Détails d'un rapport PDF de Posture Cockpit" width="100%"> |
 
-### Chaque correction, expliquée
+Le rapport commence par l'essentiel : le diagnostic et les corrections proposées. Les détails techniques et les références (notamment **ANSSI** et **RFC**) sont disponibles pour les personnes qui souhaitent aller plus loin.
 
-- **Pourquoi c'est important**, en une phrase sans jargon ;
-- **le constat** : ce qui a été relevé ;
-- **les étapes chez votre hébergeur DNS**, détecté à partir des serveurs de noms (vous pouvez en choisir un autre) ;
-- **l'enregistrement à ajouter**, avec un bouton « Copier » pour le nom et pour la valeur ;
-- une **précaution** quand il y en a une (par exemple : DMARC commence en observation, sans rien bloquer) ;
-- le bouton **« J'ai fait la modification — vérifier »**.
+### Un suivi qui ne s'arrête pas au premier diagnostic
 
-Les corrections à déléguer (certificat, en-têtes du site, versions de TLS) donnent un **message prêt à envoyer**, à copier ou à ouvrir dans votre messagerie.
+Depuis la **v0.5.0**, Posture Cockpit conserve les résultats successifs, compare les observations compatibles et peut lancer des analyses **quotidiennes, hebdomadaires ou mensuelles**.
 
-</td>
-</tr>
-</table>
+Il possède également un centre **Événements** pour retrouver certaines dégradations de sécurité, pertes de couverture et erreurs répétées d'analyses programmées.
 
----
+**Attention :** les alertes restent dans l'application. Cette version n'envoie pas automatiquement d'e-mails, de SMS ou de notifications externes.
 
-## 📄 Le rapport PDF
+[En savoir plus sur les analyses programmées](docs/user/ANALYSES_PROGRAMMEES.md) · [Comprendre les événements](docs/user/EVENEMENTS.md)
 
-<table>
-<tr>
-<td width="50%"><img src="docs/images/fr/report-1.png" alt="Rapport PDF, page 1"></td>
-<td width="50%"><img src="docs/images/fr/report-2.png" alt="Rapport PDF, page 2"></td>
-</tr>
-</table>
+## Qu'est-ce que Posture Cockpit vérifie exactement ?
 
-Page 1 pour la personne qui décide : la note, le diagnostic en français courant et **l'ordonnance** (qui fait quoi, en combien de temps, avant quelle date). Page 2 : le bilan par domaine et les améliorations sans urgence. En annexe, pour l'informaticien : chaque contrôle, ce qui a été relevé et ses **références (ANSSI, RFC)**. Le nom imprimé au bas du dossier se règle dans l'administration.
-
----
-
-## 🔎 Ce qui est contrôlé
-
-| Domaine | Contrôles |
+| Partie examinée | En termes simples |
 |---|---|
-| **Messagerie** | SPF (syntaxe RFC 7208, inclusions, limite de 10 requêtes DNS), DMARC (politique, syntaxe RFC 7489, sous-domaines, politique héritée du domaine parent), DKIM (sélecteurs courants, clés lisibles, longueur), MTA-STS (politique lue en HTTPS valide, champs, serveurs MX couverts), rapports TLS (TLS-RPT), serveurs MX joignables |
-| **Certificats et TLS** | Validité et échéance du certificat (domaine et www), versions de TLS acceptées (1.0 et 1.1 obsolètes, 1.3 recommandé), longueur de clé |
-| **Site web** | Redirection vers HTTPS, HSTS, Content-Security-Policy (qui restreint vraiment les scripts), protection contre l'intégration (valeur de frame-ancestors et X-Frame-Options), nosniff, Referrer-Policy, versions de logiciels affichées, security.txt (RFC 9116) |
-| **DNS** | Serveurs de noms et DNSSEC de la zone, enregistrements CAA (y compris hérités, et compatibles avec l'autorité du certificat actuel) |
+| **Messagerie** | Qui est autorisé à envoyer des e-mails au nom de votre domaine ? Quelles protections contre l'usurpation sont publiées ? L'outil vérifie notamment SPF, DKIM, DMARC, MTA-STS et TLS-RPT, dans les limites de ce qui est observable. |
+| **Site web** | Le site redirige-t-il correctement vers HTTPS ? Certaines protections du navigateur sont-elles présentes, comme HSTS et CSP ? |
+| **Certificats HTTPS** | Le certificat est-il valide ? Va-t-il bientôt expirer ? Les protocoles TLS et les clés répondent-ils aux exigences contrôlées ? |
+| **DNS** | Les serveurs de noms, DNSSEC et les règles CAA sont-ils configurés comme attendu ? |
 
-La note va de 0 à 100. Chaque contrôle a un poids selon son importance ; un point à améliorer compte pour moitié, un point critique pour zéro. Elle est toujours donnée avec sa **couverture** : la part des contrôles applicables qui ont pu être réalisés. Un contrôle qui n'a pas pu être fait (serveur muet, délai dépassé) n'est ni une réussite ni un échec : il fait baisser la couverture. **Sous 50 % de couverture, le domaine est « Non évalué »** ; sous 90 %, la lettre ne peut pas dépasser B. Le détail : [docs/user/SCORING.fr.md](docs/user/SCORING.fr.md).
+Au total, **20 contrôles sont intégrés dans la v0.5.0**. Certains sont sans objet pour un domaine donné ; d'autres peuvent ne pas aboutir à cause d'une erreur ou d'un serveur qui ne répond pas. Posture Cockpit fait la différence entre **« non applicable »** et **« impossible à vérifier »** : il ne considère jamais un contrôle non réalisé comme réussi.
 
-<img src="docs/images/fr/details.png" alt="Détail technique des contrôles">
+[Comprendre le calcul de la note et de la couverture](docs/user/SCORING.fr.md)
 
----
+## Essayer Posture Cockpit avant d'analyser son domaine
 
-## 🕊️ Une analyse passive
+Une **démonstration avec un domaine fictif** est proposée lors de l'initialisation du premier compte. Elle permet de parcourir l'interface, les explications et le rapport sans utiliser un vrai domaine d'entreprise.
 
-Posture Cockpit ne fait que ce que fait n'importe quel visiteur : des requêtes DNS publiques, une poignée de main TLS, la lecture de la page d'accueil (et de quelques fichiers publics comme `security.txt`). **Pas de scan de ports, pas de test d'intrusion, rien n'est modifié.** Ses requêtes HTTP se présentent avec un User-Agent qui renvoie vers ce dépôt.
+Il faut toutefois installer Posture Cockpit pour accéder à cette démonstration : **ce n'est pas un service de démonstration hébergé en ligne**.
 
-Si le serveur DNS utilisé ne répond pas correctement (certains résolveurs filtrants renvoient des réponses vides), l'analyse est refusée plutôt que de signaler à tort des enregistrements « manquants ».
+## Installation : par où commencer ?
 
-Chaque connexion passe par une **règle de sortie** : sur Internet, seules les adresses publiques sont contactées, sur les ports 80 et 443, après une seule résolution DNS par analyse et une vérification de l'adresse réellement contactée (IPv4 et IPv6), redirections comprises. Posture Cockpit ne peut donc pas servir à sonder le réseau local ou les services de métadonnées du serveur qui l'héberge.
+Posture Cockpit fonctionne sur un serveur ou un ordinateur disposant de **Docker Engine** et de **Docker Compose 2.24 ou plus récent**. Des images prêtes à l'emploi sont publiées pour **AMD64 et ARM64** : pas besoin d'installer Python, de compiler du code ou de cloner le dépôt pour utiliser Docker.
 
----
-
-## 🏢 Réseaux internes
-
-Posture Cockpit sait aussi auditer des sites de votre réseau privé (intranet, applications internes en HTTPS), dans un **périmètre interne** :
-
-- désactivé par défaut, il faut le permettre au démarrage (`POSTURE_COCKPIT_INTERNAL_SCANS=true`), puis un administrateur décrit chaque périmètre : réseaux autorisés, serveurs DNS internes, ports, autorité de certification interne ;
-- l'analyse ne joint que ces réseaux ; la vérification des certificats reste active, l'AC interne s'ajoute aux autorités reconnues ;
-- seuls les administrateurs voient ces domaines ; chaque analyse est inscrite au journal d'audit et le rapport PDF est marqué « Diffusion restreinte ».
-
-Mise en place : [docs/user/INSTALLATION.fr.md](docs/user/INSTALLATION.fr.md#audits-de-réseaux-internes).
-
----
-
-## 🔐 Sécurité de l'application
-
-- **Double authentification** : code TOTP (RFC 6238) après le mot de passe, codes de secours à usage unique, les autres navigateurs déconnectés à chaque changement ;
-- **comptes multiples** : l'administrateur crée les comptes, chacun choisit son mot de passe à la première connexion ; les pages d'administration redemandent le mot de passe toutes les 10 minutes ;
-- mots de passe en **scrypt**, clés d'API et codes de secours stockés hachés, **jeton CSRF** sur chaque formulaire, essais limités par adresse et par compte ;
-- **journal d'audit** : connexions, changements de comptes et de réglages, analyses et périmètre utilisé ;
-- **analyses limitées** en simultané et par compte, avec des délais et un nombre de requêtes bornés ;
-- **politique de sécurité du contenu stricte** : aucun script ni style en ligne, rien n'est chargé depuis l'extérieur (polices comprises) ;
-- image Docker sans privilèges, système de fichiers en lecture seule.
-
-Voir [SECURITY.md](SECURITY.md).
-
----
-
-## 🐳 Installation
-
-Docker Compose 2.24 ou plus récent, dans un dossier vide :
+Pour une **nouvelle installation**, ouvrez un terminal sur votre serveur :
 
 ```bash
 mkdir posture-cockpit && cd posture-cockpit
 curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.5.0/compose.yaml
 docker compose up -d
-docker compose logs posture-cockpit   # le code d'initialisation du premier compte
 ```
 
-Ouvrez `http://<serveur>:8080/setup`, saisissez le code, créez le compte administrateur, et cochez **« Analyser le domaine de démonstration »** pour découvrir l'outil. L'image est préconstruite (amd64 et arm64), versionnée, sans privilèges et en lecture seule ; les réglages (port, fuseau, proxy inverse) vont dans un fichier `.env` facultatif. Réglages, sauvegarde, restauration, mise à jour et retour arrière : [docs/user/INSTALLATION.fr.md](docs/user/INSTALLATION.fr.md).
-
-### En ligne de commande
+Affichez ensuite le code nécessaire à la création du premier compte :
 
 ```bash
-posture-cockpit scan mon-domaine.fr          # le résultat dans le terminal (rien n'est enregistré)
-posture-cockpit scan mon-domaine.fr --json
-posture-cockpit extensions                   # les extensions chargées et leurs contrôles
-posture-cockpit disable-totp <identifiant>   # téléphone perdu et plus de codes de secours
-posture-cockpit backup --output sauvegarde.tar.gz   # sauvegarde cohérente (base et clé de session)
+docker compose logs posture-cockpit
 ```
 
----
+Ouvrez `http://<adresse-du-serveur>:8080/setup`, saisissez ce code et créez le compte administrateur. Vous pourrez alors découvrir la démonstration ou ajouter votre premier domaine.
 
-## 🏠 Home Assistant et supervision
+**Important :** ne publiez pas cette interface directement sur Internet en HTTP. Pour un accès distant, utilisez un **proxy inverse HTTPS** correctement configuré.
 
-Une clé d'API (Réglages → Clés d'API) donne accès à :
+Vous utilisez déjà une ancienne version ? **Ne suivez pas la procédure de nouvelle installation pour la mettre à jour.** Sauvegardez votre instance et suivez le guide prévu : la migration vers la v0.5.0 comporte des précautions concernant la base de données et l'ordonnanceur.
 
-- `GET /api/v1/domains` : la note (ou `null` si le domaine n'est pas évalué), la lettre, la couverture, le nombre de points critiques et les jours restants avant l'échéance du certificat, pour chaque domaine ;
-- `POST /api/v1/domains/<domaine>/scan` : relance l'analyse, par exemple chaque mois depuis une automatisation.
+📖 [Guide complet : installation, configuration, sauvegarde et mise à jour](docs/user/INSTALLATION.fr.md) · [Version publiée v0.5.0](https://github.com/vinzgithub/posture-cockpit/releases/tag/v0.5.0)
 
-Exemples de capteurs et d'automatisation : [docs/user/HOME_ASSISTANT.fr.md](docs/user/HOME_ASSISTANT.fr.md).
+## Ce que Posture Cockpit fait… et ne fait pas
 
----
+**Il observe, il n'attaque pas.** Il effectue des requêtes DNS, des connexions web et TLS et consulte certaines ressources publiques. Il ne lance pas de test d'intrusion, ne parcourt pas tous les ports et ne modifie pas les configurations des domaines analysés.
 
-## 🧩 Extensions
+Pour les domaines Internet, ses connexions web sortantes sont limitées aux **adresses publiques** et aux **ports 80 et 443**, avec des contrôles destinés à empêcher qu'une adresse ou une redirection conduise vers un réseau privé. Les audits de réseaux internes sont une fonction distincte, **désactivée par défaut** et réservée à une configuration administrateur explicite.
 
-Les contrôles intégrés (messagerie, TLS, site web, DNS) sont eux-mêmes des extensions, écrites exactement comme celles que vous pouvez ajouter :
+L'accès au logiciel dispose notamment de comptes utilisateurs, d'une **authentification à deux facteurs TOTP**, de protections contre les tentatives répétées et d'un journal d'audit. Les données sont conservées sur votre propre instance ; les vérifications produisent naturellement des requêtes vers les services examinés.
 
-```python
-extension = Extension("example", name="Exemple", version="1.0.0", messages=...)
+**Un point de vigilance pour la messagerie :** un domaine sans serveur MX peut tout de même envoyer des e-mails par un prestataire externe. Avant de publier une règle SPF restrictive telle que `v=spf1 -all`, vérifiez que ce domaine ne sert réellement à aucun envoi.
 
-@extension.check("permissions_policy", category="web", weight=1)
-async def permissions_policy(ctx: CheckContext) -> Outcome:
-    page = await ctx.net.http_get(f"https://{ctx.domain}/")
-    if page.header("permissions-policy"):
-        return ok("example.permissions_policy.ok")
-    return warn("example.permissions_policy.missing", Remedy(10, Effort.DELEGATE, message="..."))
-```
+[Documentation de sécurité](SECURITY.md) · [Audits des réseaux internes](docs/user/INSTALLATION.fr.md#audits-des-réseaux-internes)
 
-Un paquet Python qui déclare un point d'entrée `posture_cockpit.extensions` est chargé au démarrage ; l'administrateur peut l'activer ou le désactiver. Un exemple complet, testé, est dans [examples/posture-cockpit-example](examples/posture-cockpit-example). Le guide : [docs/developer/EXTENSIONS.fr.md](docs/developer/EXTENSIONS.fr.md).
+## Pour ceux qui veulent aller plus loin
 
----
+Posture Cockpit propose une **API** qui permet d'utiliser certains résultats dans d'autres outils, par exemple [Home Assistant](docs/user/HOME_ASSISTANT.md). Des contrôles supplémentaires peuvent être créés au moyen d'[extensions Python](docs/developer/EXTENSIONS.md).
 
-## 🏗️ Pour les développeurs
+La [documentation de l'architecture](docs/developer/ARCHITECTURE.md) s'adresse aux développeurs. Si vous rencontrez un problème ou avez une idée d'amélioration, vous pouvez [ouvrir une issue sur GitHub](https://github.com/vinzgithub/posture-cockpit/issues).
 
-Le code est découpé en couches qui ne se connaissent que dans un sens : le **moteur** (`core`) ne sait rien du web, les **contrôles** ne parlent au réseau qu'à travers quatre questions passives, le **stockage** n'a qu'une connexion SQLite et un dépôt par sujet, et chaque zone de l'**interface** a son module de routes. Tout est typé, vérifié par `ruff` et `mypy`, et couvert par plus de 400 tests qui ne joignent aucune autre machine (les tests réseau tournent contre des serveurs DNS, web et TLS démarrés en local).
+## Licence et auteur
 
-Le plan détaillé : [docs/developer/ARCHITECTURE.fr.md](docs/developer/ARCHITECTURE.fr.md).
+Le code est publié sous **[PolyForm Noncommercial 1.0.0](LICENSE)**. La licence autorise les usages qu'elle définit comme non commerciaux ; pour les autres cas, consultez les [conditions de licence commerciale](COMMERCIAL-LICENSE.md).
 
-```bash
-pip install -e ".[dev]"
-ruff check src tests examples && mypy && pytest
-```
-
----
-
-## ⚠️ Limites connues
-
-- **DKIM** : les sélecteurs ne se listent pas. Posture Cockpit essaie les noms les plus courants ; s'il n'en trouve aucun, c'est une information, pas une faute.
-- **Instructions par hébergeur** : les menus des hébergeurs changent. Si une étape ne correspond plus, signalez-le : ce sont de simples textes dans `locales/`.
-- **Analyses programmées** : intégrées depuis v0.5.0 ; l'ordonnanceur est activé par défaut : fixer `POSTURE_COCKPIT_SCHEDULER=off` lors du premier démarrage après mise à niveau depuis v0.4.1.
-- **Périmètres internes** : l'instance doit joindre elle-même le réseau interne. Un même nom ne peut pas être suivi à la fois depuis Internet et dans un périmètre interne. Une architecture à agents pour auditer plusieurs réseaux est à l'étude ([REMOTE_AGENT.fr.md](docs/developer/REMOTE_AGENT.fr.md)).
-- **Derrière un proxy HTTP obligatoire** : les analyses ne passent pas par un proxy (ce qui rendrait la règle de sortie inopérante).
-
----
-
-## 📜 Licence
-
-Posture Cockpit est publié sous la **[PolyForm Noncommercial License 1.0.0](LICENSE)** : libre pour un usage personnel, associatif, éducatif ou de recherche. Tout usage commercial (vente, hébergement payant, audits ou prestations facturés à partir de l'outil…) demande une licence écrite séparée : voir [COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md).
+**Conception, orientation du projet et validation : Vincent Fournet.** Développement réalisé avec l'assistance d'outils d'intelligence artificielle, sous sa direction.
 
 Copyright © 2026 Vincent Fournet.
 
-**Conception, pilotage et validation : Vincent Fournet.**
+---
 
-À l'origine du projet et de ses idées, il définit les besoins, les fonctionnalités et les orientations de conception. Il réalise également les tests en conditions réelles, identifie les anomalies et valide les corrections et les évolutions. Il participe aussi à la revue et à la vérification de certaines parties du code, notamment sur les aspects techniques et de sécurité relevant de son expertise.
-
-**Développement :** réalisé avec l'assistance d'outils d'intelligence artificielle, sous son pilotage.
+<div align="center"><sub>Posture Cockpit v0.5.0 — Comprendre ce qui protège votre domaine, et savoir quoi faire quand quelque chose manque.</sub></div>
