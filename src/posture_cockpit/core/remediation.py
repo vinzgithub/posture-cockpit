@@ -129,12 +129,10 @@ def _known_expectation(finding: Finding) -> tuple[bool, Status | None]:
 
 
 def expected_status(finding: Finding) -> Status | None:
-    """Declared non-OK expectations take precedence; built-in stages cannot jump to OK."""
+    """Current built-in actions prevail; explicit extension expectations survive storage."""
     remedy = finding.outcome.remedy
     if remedy is None:
         return None
-    if remedy.expect is not Status.OK:
-        return remedy.expect
     known, status = _known_expectation(finding)
     return status if known else remedy.expect
 
@@ -145,8 +143,6 @@ def with_expectation(finding: Finding, *, historical: bool = False) -> Finding:
         return finding
     known, status = _known_expectation(finding)
     expected = status if known else None if historical else remedy.expect
-    if remedy.expect is not Status.OK:
-        expected = remedy.expect
     return replace(finding, outcome=replace(finding.outcome, remedy=replace(remedy, expect=expected)))
 
 

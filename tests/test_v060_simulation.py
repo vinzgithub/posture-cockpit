@@ -173,14 +173,13 @@ def test_unknown_historic_action_has_no_numeric_effect():
     assert scoring.plan([f]).priorities[0].gain is None
 
 
-def test_explicit_expectation_roundtrip_and_default_omission():
+def test_explicit_expectation_roundtrip_including_default():
     for expectation in (Status.OK, Status.WARN, Status.INFO, None):
         f = Finding("extension.a", "dns", 1,
                     Outcome(Status.FAIL, "extension.problem", remedy=Remedy(1, Effort.EASY, expect=expectation)))
         payload = f.outcome_json()
-        assert ("expect" in payload["remedy"]) == (expectation is not Status.OK)
-        if expectation is not Status.OK:
-            assert Finding.from_stored(f.check_id, f.category, f.weight, f.status, payload) == f
+        assert "expect" in payload["remedy"]
+        assert Finding.from_stored(f.check_id, f.category, f.weight, f.status, payload) == f
     with pytest.raises(ValueError):
         Remedy(1, Effort.EASY, expect="ok")
 
