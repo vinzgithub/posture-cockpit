@@ -66,6 +66,7 @@ POSTURE_COCKPIT_PORT=$2
 POSTURE_COCKPIT_BIND=127.0.0.1
 POSTURE_COCKPIT_IMAGE=$3
 POSTURE_COCKPIT_SESSION_COOKIE=${1//-/_}
+POSTURE_COCKPIT_SCHEDULER=off
 TZ=Europe/Paris
 EOF
   PROJECTS+=("$1")
@@ -236,6 +237,13 @@ install_recette() {  # install_recette IMAGE VERSION
   ok "a host folder it cannot write is refused with the chown to run"
 }
 
+# A real HTTP scan of the fictitious domain; the scanner uses its built-in fixture.
+schema5_scan() {
+  local name=$1 status
+  status=$(post "$name" "/domains/menuiserie-dupont.example/scan" "csrf=$(csrf "$name" /domains/menuiserie-dupont.example)")
+  [ "$status" = 303 ] || fail "schema-5 demonstration scan answered $status"
+}
+
 upgrade_recette() {  # upgrade_recette OLD_IMAGE IMAGE
   local old=$1 image=$2 name=pc-recette-upgrade version key old_schema schema archive
   version=$(version_of_image "$image")
@@ -247,6 +255,11 @@ upgrade_recette() {  # upgrade_recette OLD_IMAGE IMAGE
   create_admin "$name" "$(setup_code_of "$name")" demo  # 0.4.1 and later ask for the setup code
   log_in "$name"
   key=$(key_hash "$name")
+  if [ "$old_schema" = "$schema" ]; then
+    in_container "$name" posture-cockpit backup --output - > "$WORK/before-schema5.tar.gz"
+    expect_output "complete and readable" in_container "$name" posture-cockpit check-backup - < "$WORK/before-schema5.tar.gz"
+    ok "manual backup verified outside the data volume; rollback will not restore it"
+  fi
 
   say "Update to $image (same volume, schema $schema)"
   compose "$name" stop >/dev/null 2>&1
@@ -267,6 +280,23 @@ upgrade_recette() {  # upgrade_recette OLD_IMAGE IMAGE
     ok "verified backup made before the migration: $archive (schema $old_schema), shown by info"
   fi
 
+  if [ "$old_schema" = "$schema" ]; then
+    schema5_scan "$name"
+    # This is the candidate's real persisted JSON, not a synthetic omitted-key fixture.
+    in_container "$name" python - <<'PY_EXPECT'
+import json
+from posture_cockpit.config import Config
+from posture_cockpit.storage import Database
+db = Database(Config.from_env().db_path)
+rows = db.all("SELECT outcome FROM findings WHERE scan_id=(SELECT MAX(id) FROM scans)")
+remedies = [json.loads(row["outcome"])["remedy"] for row in rows if "remedy" in json.loads(row["outcome"])]
+assert remedies and all("expect" in remedy for remedy in remedies)
+assert db.value("SELECT COUNT(*) FROM scans") == 2
+db.close()
+PY_EXPECT
+    ok "candidate wrote explicit expectations during a real demonstration scan"
+  fi
+
   say "Rollback to $old"
   compose "$name" stop >/dev/null 2>&1
   set_image "$name" "$old"
@@ -274,6 +304,30 @@ upgrade_recette() {  # upgrade_recette OLD_IMAGE IMAGE
     start "$name"
     log_in "$name"
     ok "$old runs again on the same data (schema $schema unchanged by $version)"
+    schema5_scan "$name"
+    expect_output "schema $schema (up to date), 1 account(s), 1 domain(s), 3 scan(s)" in_container "$name" posture-cockpit info
+    compose "$name" stop >/dev/null 2>&1
+    set_image "$name" "$image"
+    start "$name"
+    expect_version "$name" "$version"
+    log_in "$name"
+    expect_output "schema $schema (up to date), 1 account(s), 1 domain(s), 3 scan(s)" in_container "$name" posture-cockpit info
+    [ "$(key_hash "$name")" = "$key" ] || fail "the session key changed during schema-5 roundtrip"
+    in_container "$name" python - <<'PY_INTEGRITY'
+from posture_cockpit.config import Config
+from posture_cockpit.storage import Database, Scans
+db = Database(Config.from_env().db_path)
+assert db.value("PRAGMA integrity_check") == "ok"
+for row in db.all("SELECT id FROM scans"):
+    scan = Scans(db).get(row["id"])
+    scan.assessment()
+    from posture_cockpit.core.scoring import plan
+    plan(scan.current())
+assert db.value("SELECT COUNT(*) FROM scans") == 3
+print("schema-5 roundtrip: integrity_check=ok; all three scans readable; no restore")
+db.close()
+PY_INTEGRITY
+    ok "candidate reads its data and the old image's new scan; integrity_check=ok"
   elif refuses_newer_schema "$old"; then
     if compose "$name" run --rm --no-deps -T posture-cockpit > "$WORK/out.txt" 2>&1; then fail "$old started on schema $schema"; fi
     grep -q "uses schema $schema; this version of Posture Cockpit handles schema $old_schema" "$WORK/out.txt" \
