@@ -92,7 +92,7 @@
     {{ assessment(simulation.worst, t('mc.worst') if simulation.conditional else t('mc.projected_assessment')) }}
     {% if simulation.conditional %}{{ assessment(simulation.best, t('mc.best')) }}{% endif %}
   </div>
-  {% if simulation.now.score is not none and simulation.worst.score is not none and simulation.best.score is not none %}<p>{{ t('mc.conditional_delta', low=('%+d' | format(simulation.worst.score - simulation.now.score)), high=('%+d' | format(simulation.best.score - simulation.now.score))) }}</p>{% endif %}
+  {% if simulation.now.score is not none and simulation.worst.score is not none and simulation.best.score is not none %}<p>{% if not simulation.conditional and simulation.worst.score == simulation.best.score %}{{ t('mc.exact_delta', n=('%+d' | format(simulation.worst.score - simulation.now.score))) }}{% else %}{{ t('mc.conditional_delta', low=('%+d' | format(simulation.worst.score - simulation.now.score)), high=('%+d' | format(simulation.best.score - simulation.now.score))) }}{% endif %}</p>{% endif %}
   {% if simulation.unmeasured %}<p>{{ t('mc.future_measurements') }}</p><ul>{% for check_id in simulation.unmeasured %}<li>{{ t(check_id ~ '.title') }}</li>{% endfor %}</ul>{% endif %}
   {% for assumption in simulation.assumptions if assumption.kind == 'registry_fallback' %}<p class="small">{{ t('mc.fallback', check=assumption.check_id) }}</p>{% endfor %}
   <p class="small muted">{{ t('mc.not_prediction') }}</p>

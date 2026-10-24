@@ -613,7 +613,7 @@
   "events.severity": "Severity",
   "events.state.heading": "State",
   "events.instance": "Instance",
-  "events.empty": "No events in this category.",
+  "events.empty": "No events match the selected filters.",
   "events.mark_seen": "Mark as seen",
   "events.state.open": "Open",
   "events.state.resolved": "Resolved",
@@ -787,5 +787,6 @@
   "projection.conditional": "Conditional scenarios if checks become measurable; these bounds do not guarantee the next score.",
   "projection.lower": "The calculated scenario is below the current score; it is not a guaranteed target.",
   "projection.partial": "This projection must be confirmed by a new scan: current coverage is only {coverage}%.",
-  "projection.excluded": "Estimated gains exclude actions with an unknown effect, which remain in their observed state. The full-plan effect remains unknown."
+  "projection.excluded": "Estimated gains exclude actions with an unknown effect, which remain in their observed state. The full-plan effect remains unknown.",
+  "mc.exact_delta": "{n} points"
 }

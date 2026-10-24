@@ -99,6 +99,7 @@ class PlanView:
     detected_host: str                       # name of the detected host, "" if unknown
     nameservers: list[str]
     completed: list[TaskView] = field(default_factory=list)
+    completed_priorities: int = 0
     target_max_score: int | None = None
     provisional: bool = False
     unknown: tuple[str, ...] = ()
@@ -134,7 +135,7 @@ class PlanView:
 
     @property
     def done_count(self) -> int:
-        return len(self.completed)
+        return self.completed_priorities
 
 
 def _nameservers(findings: list[Finding]) -> list[str]:
@@ -237,6 +238,7 @@ def plan_view(catalog: Catalog, lang: str, scan: Scan, domain_row: Row,
         target_max_score=plan.target_max.score if plan.target_max is not None else None, unknown=plan.unknown,
         grade_label=catalog.text(lang, scoring.grade_label(now.grade)) if now.grade else "",
         priorities=priorities, improvements=improvements, completed=completed,
+        completed_priorities=sum(t.check_id in {i.finding.check_id for i in original.priorities} for t in completed),
         counts={status.value: counts.get(status, 0) for status in Status},
         categories=[(cat, catalog.text(lang, f"category.{cat}"), a) for cat, a in scoring.by_category(current).items()],
         gaps=gaps(catalog, lang, scan.domain, current),
