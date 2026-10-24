@@ -253,8 +253,7 @@ class Finding:
                 "message": o.remedy.message,
                 "how": o.remedy.how,
             }
-            if o.remedy.expect is not Status.OK:
-                data["remedy"]["expect"] = o.remedy.expect.value if o.remedy.expect is not None else None
+            data["remedy"]["expect"] = o.remedy.expect.value if o.remedy.expect is not None else None
         # Version 0.4 only: written when present, so findings without them keep their 0.3 shape.
         if o.signals:
             data["signals"] = sorted(o.signals)
