@@ -159,3 +159,7 @@ Then, on a real domain: `pip install -e .` in the extension folder, and `posture
   Then, in the `.env` of the installation: `POSTURE_COCKPIT_IMAGE=<your image>`, and `docker compose up -d`.
 
 `posture-cockpit extensions` lists what is loaded; so does the **Administration** page, with a switch per extension and the exact error of an extension that could not be loaded.
+
+## v0.6.1 remediation contract
+
+`Remedy.expect` describes the expected first-step status, never an observation. Every new write includes this key: `"ok"` (default), `"warn"`, `"info"`, or `null` (unknown effect). The current adapter table prevails for recognized built-in actions; stored expectations prevail only for unknown types, including extensions. A historical extension without the key remains unknown: its old OK intent cannot be recovered. Old JSON is never rewritten. v0.5.0 ignores the key and may omit it on its own new writes; upgrading again conservatively treats those payloads as historical.

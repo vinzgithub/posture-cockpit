@@ -60,3 +60,9 @@ def test_only_obsolete_https_cannot_be_projected_as_warn():
 def test_tls_missing_proof_is_not_ok(accepted):
     f = run(H.site({H.V4A: {'versions': {'TLSv1': True}}}))['tls.protocols']
     assert expected_status(replace(f, outcome=replace(f.outcome, evidence={'accepted': accepted}))) is None
+
+
+def test_mixed_modern_and_obsolete_only_addresses_still_have_unknown_effect():
+    f = run(H.site({H.V4A: {}, H.V4B: H.OBSOLETE}))['tls.protocols']
+    assert f.status is Status.FAIL
+    assert expected_status(f) is None

@@ -36,3 +36,38 @@ def test_completed_improvement_is_not_a_completed_priority(client):
     assert len(view.completed) == 2
     assert view.done_count == 1
     assert not view.priorities
+
+
+@pytest.mark.parametrize('delta', [-3, 0, 7])
+def test_exact_deltas_keep_the_sign_without_a_duplicate_range(client, monkeypatch, delta):
+    from posture_cockpit.core import scoring
+    s, _, sid, _ = seed(client, changed(healthy(), dns={f'_dmarc.{DOMAIN} TXT': []}))
+    simulate = scoring.simulate
+
+    def chosen(*args, **kwargs):
+        result = simulate(*args, **kwargs)
+        if args[1]:
+            projected = replace(result.worst, score=result.now.score + delta)
+            return replace(result, worst=projected, best=projected)
+        return result
+
+    monkeypatch.setattr(scoring, 'simulate', chosen)
+    text = client.get(URL + '/simulate', params=selection(s, sid, ['mail.dmarc'])).text
+    assert f'{delta:+d} points' in text
+    assert f'{delta:+d} à {delta:+d}' not in text
+
+
+def test_f12_recent_then_expired_heartbeat_is_read_only(client):
+    import json
+    from datetime import timedelta
+
+    from posture_cockpit.web.portfolio import scheduler_state
+    from worlds import NOW
+
+    s, _, _, _ = seed(client)
+    s.config.scheduler = False
+    s.db.set_meta('scheduler_heartbeat', json.dumps({'at': NOW.isoformat()}))
+    frozen = list(s.db._conn.iterdump())
+    assert scheduler_state(s, None, NOW) == 'elsewhere'
+    assert scheduler_state(s, None, NOW + timedelta(minutes=4)) == 'off'
+    assert list(s.db._conn.iterdump()) == frozen

@@ -326,3 +326,7 @@ docker compose exec posture-cockpit posture-cockpit reset-password <username>
 docker compose exec posture-cockpit posture-cockpit disable-totp <username>   # lost phone and recovery codes
 docker compose exec posture-cockpit posture-cockpit make-admin <username>
 ```
+
+### Returning between schema-5 versions (v0.5.0, v0.6.0 and v0.6.1 candidate)
+
+Before changing images: verify a backup outside the volume, disable scheduling and stop the instance cleanly. Schema 5 is unchanged: a pinned official older image can reuse the current volume without restoring an earlier backup. Data created after the upgrade must remain available. v0.5.0 shows its older projections, including DMARC, while observed scores remain unchanged. Test on an isolated copy; never run two instances concurrently on that volume. Returning to schema 4 still requires a separate restore procedure. This guide does not claim a v0.6.1 tag/image has been published.

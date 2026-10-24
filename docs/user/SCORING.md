@@ -168,3 +168,7 @@ with a verified certificate over modern TLS is retained. Its lifetime is capped 
 year. `max-age=0` removes it; an absent or invalid header does not. An ancestor policy
 applies only with includeSubDomains. `preload` is an indication, not evidence of actual
 browser list membership. Neither history nor attribution changes any verdict or score.
+
+## v0.6.1 clarification: plan gains and target
+
+Calculable gains exclude named actions with an unknown effect, which remain in their observed state. The complete plan target remains unknown if any priority has an unknown effect. The simulator never silently removes a selected action. HTTPS bounds require conclusive future measurements and do not guarantee the next score. Observed scoring remains unchanged (generation 4).

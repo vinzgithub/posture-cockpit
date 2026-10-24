@@ -55,3 +55,24 @@ def test_excluded_actions_are_named_in_web_and_pdf(client, lang):
                  render_html(s.catalog, lang, s.scans.get(sid))]:
         assert warning in page
         assert 'DNSSEC' in page
+
+
+@pytest.mark.parametrize('lang', ['fr', 'en'])
+@pytest.mark.parametrize('unknown', [False, True])
+def test_real_pdf_edge_cases_keep_the_diagnosis_on_page_one(client, lang, unknown):
+    from test_report_layout import _boxes, _layout
+
+    s, _, sid, fs = seed(client, H.site({H.V4A: H.REFUSED}))
+    if unknown:
+        f = next(f for f in fs if f.check_id == 'dns.dnssec')
+        s.scans.save_recheck(sid, replace(f, outcome=Outcome(
+            Status.FAIL, 'dns.dnssec.broken', remedy=Remedy(5, Effort.MEDIUM))))
+    context = report_context(s.catalog, lang, s.scans.get(sid))
+    document = _layout(context)
+    text = ' '.join(getattr(b, 'text', '') for page in document.pages for b in _boxes(page._page_box))
+    assert 'None' not in text
+    first = list(_boxes(document.pages[0]._page_box))
+    assert any(b.element is not None and 'diagnosis' in (b.element.get('class') or '').split() for b in first)
+    first_text = ' '.join(getattr(b, 'text', '') for b in first)
+    assert ('non concluante' if lang == 'fr' else 'inconclusive') in first_text
+    assert document.write_pdf().startswith(b'%PDF-')

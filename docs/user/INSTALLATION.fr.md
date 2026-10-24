@@ -326,3 +326,7 @@ docker compose exec posture-cockpit posture-cockpit reset-password <identifiant>
 docker compose exec posture-cockpit posture-cockpit disable-totp <identifiant>   # téléphone et codes de secours perdus
 docker compose exec posture-cockpit posture-cockpit make-admin <identifiant>
 ```
+
+### Retour entre versions au schéma 5 (v0.5.0, v0.6.0 et candidate v0.6.1)
+
+Avant tout changement d’image : sauvegarde vérifiée hors du volume, ordonnanceur désactivé, arrêt propre de l’instance. Le schéma 5 reste identique : le retour à une image officielle épinglée peut réutiliser le volume courant sans restaurer une ancienne sauvegarde. Les données créées après la mise à niveau doivent être conservées. La v0.5.0 retrouve ses anciennes projections, notamment DMARC, sans changer les notes observées. Tester ce retour sur copie isolée ; ne jamais démarrer simultanément deux instances sur le volume. Le retour au schéma 4 reste une autre procédure exigeant une restauration. Aucun tag/image v0.6.1 n’est annoncé comme publié par ce guide.
