@@ -118,7 +118,7 @@ class DnsChange:
 
 @dataclass(frozen=True)
 class Remedy:
-    """How to bring a check back to OK."""
+    """An action and its conditional first-step outcome; None means unknown."""
 
     minutes: int
     effort: Effort
@@ -127,6 +127,12 @@ class Remedy:
     message: str = ""
     # Translation key of a short explanation of the fix, in plain words.
     how: str = ""
+    expect: Status | None = Status.OK
+
+    def __post_init__(self) -> None:
+        if self.expect is not None and not isinstance(self.expect, Status):
+            raise ValueError("invalid remedy expectation")
+
 
 
 @dataclass(frozen=True)
@@ -247,6 +253,8 @@ class Finding:
                 "message": o.remedy.message,
                 "how": o.remedy.how,
             }
+            if o.remedy.expect is not Status.OK:
+                data["remedy"]["expect"] = o.remedy.expect.value if o.remedy.expect is not None else None
         # Version 0.4 only: written when present, so findings without them keep their 0.3 shape.
         if o.signals:
             data["signals"] = sorted(o.signals)
@@ -262,11 +270,19 @@ class Finding:
             r = data["remedy"]
             remedy = Remedy(minutes=int(r["minutes"]), effort=Effort(r["effort"]),
                             dns=tuple(DnsChange(**change) for change in r.get("dns", [])),
-                            message=r.get("message", ""), how=r.get("how", ""))
+                            message=r.get("message", ""), how=r.get("how", ""),
+                            expect=Status(r["expect"]) if r.get("expect") is not None else
+                            None if "expect" in r else Status.OK)
         outcome = Outcome(Status(status), data["summary"], data.get("params", {}), data.get("evidence", {}), remedy,
                           frozenset(data.get("signals", ())))
         family = data.get("family") or {}
         floor = family.get("floor")
-        return cls(check_id, category, weight, outcome, family.get("name"),
+        finding = cls(check_id, category, weight, outcome, family.get("name"),
                    Role(family["role"]) if family.get("role") else None,
                    float(floor) if floor is not None else None)
+
+        if remedy is not None and "expect" not in data["remedy"]:
+            from .remediation import historical_remedy
+
+            return historical_remedy(finding)
+        return finding

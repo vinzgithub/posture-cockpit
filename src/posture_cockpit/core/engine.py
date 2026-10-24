@@ -32,6 +32,7 @@ from .errors import ConnectionReset, ConnectionTimedOut, Refused, TLSHandshakeEr
 from .extension import Check, CheckContext
 from .model import HTTPS_FAMILY, Finding, Outcome, Role, Status
 from .network import Network, NetworkError
+from .remediation import with_expectation
 
 log = logging.getLogger(__name__)
 
@@ -104,7 +105,8 @@ async def run_check(check: Check, ctx: CheckContext, timeout: float) -> Finding:
 
 def finding(check: Check, outcome: Outcome) -> Finding:
     """The finding of ``check``, with its place in a family of checks as declared (version 0.4)."""
-    return Finding(check.id, check.category, check.weight, outcome, check.family, check.role, check.floor)
+    return with_expectation(Finding(check.id, check.category, check.weight, outcome,
+                                    check.family, check.role, check.floor))
 
 
 async def _not_applicable(check: Check) -> Finding:

@@ -63,17 +63,20 @@ The rules, in order:
 The *plan* lists what to fix: the checks that FAIL first ("priorities"), then
 those that only WARN ("improvements"), each with the points it brings. When
 fixing the HTTPS root would let checks that could not be measured be measured,
-the gain is a range: those checks at their floor for the lower bound, compliant
-for the upper one; the target is then provisional.
+the gain is conditional on conclusive future measurements, using the declared
+verdicts for its bounds. Remediation stages can remain WARN; an unknown effect has no estimate.
 """
 
 from __future__ import annotations
 
 from collections import Counter
-from collections.abc import Collection, Iterable, Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, replace
 from fractions import Fraction
+from functools import cache
+from typing import Protocol
 
+from .extension import Check
 from .model import (
     CAUSE_DEPENDENCY,
     CERTIFICATE_CHECK,
@@ -86,6 +89,7 @@ from .model import (
     Signal,
     Status,
 )
+from .remediation import expected_status
 
 # (lowest score, grade, translation key of its label)
 GRADES = (
@@ -115,15 +119,6 @@ WITHHELD_HTTPS_UNDETERMINED = "https_availability_undetermined"
 
 
 # ------------------------------------------------------------------ helpers
-def _credit(f: Finding, fixed: Collection[str]) -> Fraction:
-    return Fraction(1) if f.check_id in fixed else Fraction(CREDIT[f.status])
-
-
-def _signals(f: Finding, fixed: Collection[str]) -> frozenset[str]:
-    """A fixed check no longer reports what made it a problem."""
-    return frozenset() if f.check_id in fixed else f.outcome.signals
-
-
 def _in_family(f: Finding) -> bool:
     return f.family == HTTPS and f.role is not None
 
@@ -134,32 +129,32 @@ def _root(findings: Iterable[Finding]) -> Finding | None:
                  if f.check_id == HTTPS_ROOT_CHECK and f.family == HTTPS and f.role is Role.ROOT), None)
 
 
-def raw_score(findings: Iterable[Finding], fixed: Collection[str] = ()) -> Fraction | None:
+def raw_score(findings: Iterable[Finding]) -> Fraction | None:
     """Share of the weight earned by the evaluated findings, 0 to 1, unrounded; None when none is evaluated."""
     earned, possible = Fraction(0), 0
     for f in findings:
         if f.status.scored:
             possible += f.weight
-            earned += f.weight * _credit(f, fixed)
+            earned += f.weight * Fraction(CREDIT[f.status])
     return earned / possible if possible else None
 
 
-def cap_reasons(findings: Sequence[Finding], fixed: Collection[str] = ()) -> tuple[str, ...]:
+def cap_reasons(findings: Sequence[Finding]) -> tuple[str, ...]:
     """Why the score is capped, in a fixed order; empty when it is not."""
     found = set()
     if any(_in_family(f) and f.status is Status.BLOCKED for f in findings):
         found.add(CAP_DEPENDENCY)
     # Signals are read on the checks allowed to report them only (Finding refuses them elsewhere).
     if any(f.check_id == CERTIFICATE_CHECK and _in_family(f)
-           and Signal.CERTIFICATE_UNAUTHENTICATED in _signals(f, fixed) for f in findings):
+           and Signal.CERTIFICATE_UNAUTHENTICATED in f.outcome.signals for f in findings):
         found.add(CAP_AUTHENTICATION)
     root = _root(findings)
-    if root is not None and Signal.HTTPS_OBSOLETE_ONLY in _signals(root, fixed):
+    if root is not None and Signal.HTTPS_OBSOLETE_ONLY in root.outcome.signals:
         found.add(CAP_PROTOCOL)
     return tuple(reason for reason in CAP_ORDER if reason in found)
 
 
-def cap_value(findings: Sequence[Finding], fixed: Collection[str] = ()) -> Fraction | None:
+def cap_value(findings: Sequence[Finding]) -> Fraction | None:
     """The score of the reference: same checks outside the family, the root compliant, each
     dependent that is blocked or evaluated at its floor. None without an HTTPS root."""
     root = _root(findings)
@@ -170,7 +165,7 @@ def cap_value(findings: Sequence[Finding], fixed: Collection[str] = ()) -> Fract
         if not _in_family(f):
             if f.status.scored:
                 possible += f.weight
-                earned += f.weight * _credit(f, fixed)
+                earned += f.weight * Fraction(CREDIT[f.status])
         elif f.role is Role.DEPENDENT and (f.status.scored or f.status is Status.BLOCKED):
             if f.floor is None:  # Finding refuses it already: never guess a floor
                 raise ValueError(f"{f.check_id}: a dependent without a floor cannot be part of a cap")
@@ -179,19 +174,19 @@ def cap_value(findings: Sequence[Finding], fixed: Collection[str] = ()) -> Fract
     return earned / possible
 
 
-def final_score(findings: Sequence[Finding], fixed: Collection[str] = ()) -> Fraction | None:
+def final_score(findings: Sequence[Finding]) -> Fraction | None:
     """The raw score, lowered to the cap when a reason applies; unrounded."""
-    raw = raw_score(findings, fixed)
-    if raw is None or not cap_reasons(findings, fixed):
+    raw = raw_score(findings)
+    if raw is None or not cap_reasons(findings):
         return raw
-    cap = cap_value(findings, fixed)
+    cap = cap_value(findings)
     return raw if cap is None else min(raw, cap)
 
 
-def withheld_reason(findings: Sequence[Finding], fixed: Collection[str] = ()) -> str | None:
+def withheld_reason(findings: Sequence[Finding]) -> str | None:
     """Why the grade is withheld, or None."""
     root = _root(findings)
-    if root is not None and Signal.HTTPS_UNDETERMINED in _signals(root, fixed):
+    if root is not None and Signal.HTTPS_UNDETERMINED in root.outcome.signals:
         return WITHHELD_HTTPS_UNDETERMINED
     return None
 
@@ -201,11 +196,11 @@ def _points(value: Fraction) -> int:
     return round(100 * value)
 
 
-def score(findings: Iterable[Finding], fixed: Collection[str] = ()) -> int | None:
+def score(findings: Iterable[Finding]) -> int | None:
     """The score shown, 0 to 100 (caps applied); None when no finding is evaluated.
 
-    ``fixed`` check ids are counted as OK (to project the effect of a plan)."""
-    value = final_score(list(findings), fixed)
+    Projections are assessed from explicitly constructed hypothetical findings."""
+    value = final_score(list(findings))
     return None if value is None else _points(value)
 
 
@@ -314,29 +309,29 @@ class Assessment:
         return int(self.coverage * 100 + 1e-9)
 
 
-def _assess(findings: Sequence[Finding], fixed: Collection[str], caps: bool) -> Assessment:
+def _assess(findings: Sequence[Finding], caps: bool) -> Assessment:
     share = coverage(findings)
     evaluated = sum(1 for f in findings if f.status.scored)
     applicable = sum(1 for f in findings if f.status.applicable)
     blocked = sum(1 for f in findings if f.status is Status.BLOCKED)
     diagnostic = diagnostic_coverage(findings)
-    raw = raw_score(findings, fixed)
+    raw = raw_score(findings)
     if raw is None or share < MIN_COVERAGE:
         return Assessment(None, None, share, evaluated, applicable, diagnostic_coverage=diagnostic, blocked=blocked)
-    reasons = cap_reasons(findings, fixed) if caps else ()
-    cap = cap_value(findings, fixed) if reasons else None
+    reasons = cap_reasons(findings) if caps else ()
+    cap = cap_value(findings) if reasons else None
     final = raw if cap is None else min(raw, cap)
     value = _points(final)
-    withheld = withheld_reason(findings, fixed) if caps else None
+    withheld = withheld_reason(findings) if caps else None
     letter = None if withheld else letter_for(value, share)
     return Assessment(value, letter, share, evaluated, applicable, float(raw),
                       float(cap) if cap is not None else None, float(final), diagnostic, blocked,
                       reasons if cap is not None else (), withheld)
 
 
-def assess(findings: Sequence[Finding], fixed: Collection[str] = ()) -> Assessment:
+def assess(findings: Sequence[Finding]) -> Assessment:
     """Score, grade and coverage of these findings, with the rules of the module documentation."""
-    return _assess(findings, fixed, caps=True)
+    return _assess(findings, caps=True)
 
 
 def by_category(findings: Iterable[Finding]) -> dict[str, Assessment]:
@@ -346,7 +341,7 @@ def by_category(findings: Iterable[Finding]) -> dict[str, Assessment]:
     groups: dict[str, list[Finding]] = {}
     for f in findings:
         groups.setdefault(f.category, []).append(f)
-    return {category: _assess(items, (), caps=False) for category, items in groups.items()
+    return {category: _assess(items, caps=False) for category, items in groups.items()
             if any(f.status.diagnostic for f in items)}
 
 
@@ -362,38 +357,122 @@ def _unmeasured(f: Finding) -> bool:
                  or (f.status is Status.ERROR and f.outcome.evidence.get("cause") == CAUSE_DEPENDENCY)))
 
 
-def _floor_status(f: Finding) -> Status:
-    """The verdict whose credit is the dependent's floor."""
-    return Status.OK if (f.floor or 0) >= 1 else Status.WARN if (f.floor or 0) > 0 else Status.FAIL
+class VerdictRegistry(Protocol):
+    """Read-only input: discovery belongs to the caller, never to simulate()."""
+
+    def get(self, check_id: str) -> Check | None: ...
 
 
-def _projected(findings: Sequence[Finding], fixed: Collection[str], best: bool) -> list[Finding]:
-    """The findings once ``fixed`` are fixed. When the HTTPS root is among them, the dependents
-    it kept from being measured are counted at their floor, or compliant when ``best``."""
-    root = _root(findings)
-    unblocks = root is not None and root.check_id in fixed
-    projected = []
-    for f in findings:
-        if f.check_id in fixed:
-            f = replace(f, outcome=replace(f.outcome, status=Status.OK, signals=frozenset()))
+@dataclass(frozen=True)
+class Assumption:
+    check_id: str
+    kind: str  # remedy, unknown_effect, future_measurement, registry_fallback
+    expected: Status | None = None
+
+
+@dataclass(frozen=True)
+class Simulation:
+    now: Assessment
+    worst: Assessment
+    best: Assessment
+    unmeasured: tuple[str, ...]
+    assumptions: tuple[Assumption, ...]
+
+    @property
+    def conditional(self) -> bool:
+        """Bounds require conclusive future measurements; ERROR is never ruled out."""
+        return bool(self.unmeasured)
+
+    @property
+    def unknown(self) -> tuple[str, ...]:
+        return tuple(a.check_id for a in self.assumptions if a.kind == "unknown_effect")
+
+
+def _hypothesis(finding: Finding, status: Status) -> Finding:
+    # Deliberately do not copy observational proofs, text or signals into a hypothesis.
+    return replace(finding, outcome=Outcome(status, "simulation.hypothesis"))
+
+
+def _assessment(findings: list[Finding], unknown: bool) -> Assessment:
+    result = assess(findings)
+    if not unknown:
+        return result
+    # No point estimate can be inferred from an action with an unknown effect.
+    return replace(result, score=None, grade=None, score_raw=None, score_cap=None, score_final=None,
+                   cap_reasons=(), grade_withheld_reason=None)
+
+
+def simulate(current: Sequence[Finding], selected_check_ids: Sequence[str],
+             registry: VerdictRegistry) -> Simulation:
+    """Pure combined scenario. IDs are validated before any projection is constructed.
+
+    Worst/best describe conclusive measurements of newly unblocked dependents only.
+    An unknown remedy effect withholds both estimates; observations remain untouched.
+    """
+    selected = tuple(selected_check_ids)
+    if (len(selected) > 20 or any(not isinstance(check_id, str) for check_id in selected)
+            or len(selected) != len(set(selected))):
+        raise ValueError("invalid simulation selection")
+    by_id = {f.check_id: f for f in current}
+    if len(by_id) != len(current):
+        raise ValueError("duplicate observation ids")
+    for check_id in selected:
+        f = by_id.get(check_id)
+        if f is None or f.status not in (Status.FAIL, Status.WARN) or f.outcome.remedy is None:
+            raise ValueError("invalid simulation candidate")
+    expected = {check_id: expected_status(by_id[check_id]) for check_id in selected}
+    assumptions = [Assumption(check_id, "remedy" if status is not None else "unknown_effect", status)
+                   for check_id, status in sorted(expected.items())]
+    root = _root(current)
+    unblocks = root is not None and expected.get(root.check_id) is Status.OK
+    low, high, unmeasured = [], [], []
+    for f in current:
+        if f.check_id in expected and expected[f.check_id] is not None:
+            status = expected[f.check_id]
+            assert status is not None
+            low.append(_hypothesis(f, status))
+            high.append(_hypothesis(f, status))
         elif unblocks and _unmeasured(f):
-            status = Status.OK if best else _floor_status(f)
-            f = replace(f, outcome=Outcome(status, f.outcome.summary, f.outcome.params, f.outcome.evidence))
-        projected.append(f)
-    return projected
+            check = registry.get(f.check_id)
+            verdicts = check.verdicts if check is not None else None
+            if not verdicts or any(v not in CREDIT for v in verdicts):
+                worst, best = Status.FAIL, Status.OK
+                assumptions.append(Assumption(f.check_id, "registry_fallback", Status.FAIL))
+            else:
+                worst = min(verdicts, key=lambda v: CREDIT[v])
+                best = max(verdicts, key=lambda v: CREDIT[v])
+            low.append(_hypothesis(f, worst))
+            high.append(_hypothesis(f, best))
+            unmeasured.append(f.check_id)
+            assumptions.append(Assumption(f.check_id, "future_measurement"))
+        else:
+            low.append(f)
+            high.append(f)
+    unknown = any(v is None for v in expected.values())
+    return Simulation(assess(list(current)), _assessment(low, unknown), _assessment(high, unknown),
+                      tuple(unmeasured), tuple(assumptions))
 
 
-def _projected_score(findings: Sequence[Finding], fixed: Collection[str], best: bool) -> int:
-    return score(_projected(findings, fixed, best)) or 0
+@cache
+def _builtin_registry() -> VerdictRegistry:
+    # Legacy plan callers need no extension discovery or installed third-party code.
+    from ..checks import dns, mail, tls, web
+    from .registry import Registry
+
+    return Registry((mail.extension, tls.extension, web.extension, dns.extension))
 
 
 @dataclass(frozen=True)
 class PlanItem:
     finding: Finding
-    gain: int  # points the global score gains once this one is fixed (after the items before it)
+    # Cumulative point change after this step; None when a numeric change cannot be established.
+    gain: int | None
     # Version 0.4: upper bound of the gain when fixing it lets unmeasured checks be measured
     # (they may turn out compliant); None when the gain is exact.
     gain_max: int | None = None
+    # Contributions along the two cumulative scenarios, before display rounding ordering.
+    gain_worst: int | None = None
+    gain_best: int | None = None
 
 
 @dataclass(frozen=True)
@@ -401,7 +480,7 @@ class Plan:
     priorities: list[PlanItem]    # FAIL findings, by effect on the score
     improvements: list[PlanItem]  # WARN findings, by effect on the score
     now: Assessment
-    target: Assessment            # once every priority is fixed (unmeasured checks at their floor)
+    target: Assessment            # after every priority step, conditional on future measurements
     # Version 0.4: the target if the checks measured after the fixes are compliant; None when
     # nothing is left unmeasured. The target is then provisional.
     target_max: Assessment | None = None
@@ -415,26 +494,38 @@ class Plan:
         return self.target_max is not None
 
 
-def _ranked(findings: Sequence[Finding], status: Status, already_fixed: list[str]) -> list[PlanItem]:
-    """Findings of ``status`` that have a remedy, biggest effect first, quickest first when equal."""
+def _delta(before: Assessment, after: Assessment) -> int | None:
+    return None if before.score is None or after.score is None else after.score - before.score
+
+
+def _ranked(findings: Sequence[Finding], status: Status, selected: list[str],
+            registry: VerdictRegistry) -> list[PlanItem]:
+    """Keep the existing per-domain priority order; assess each combined scenario."""
     candidates = [f for f in findings if f.status is status and f.outcome.remedy is not None]
     candidates.sort(key=lambda f: (-f.weight * (1 - CREDIT[status]), f.outcome.remedy.minutes, f.check_id))  # type: ignore[union-attr]
     items = []
+    before = simulate(findings, selected, registry)
     for f in candidates:
-        low_before = _projected_score(findings, already_fixed, best=False)
-        high_before = _projected_score(findings, already_fixed, best=True)
-        already_fixed.append(f.check_id)
-        # Cumulative gains: the points shown always add up to the projected score.
-        gain = _projected_score(findings, already_fixed, best=False) - low_before
-        gain_max = _projected_score(findings, already_fixed, best=True) - high_before
-        items.append(PlanItem(f, gain, gain_max if gain_max != gain else None))
+        selected.append(f.check_id)
+        after = simulate(findings, selected, registry)
+        worst_delta = _delta(before.worst, after.worst)
+        best_delta = _delta(before.best, after.best)
+        # Rounding and caps can give the optimistic curve a smaller incremental
+        # contribution. Preserve both cumulative contributions, sort the displayed pair.
+        if worst_delta is None or best_delta is None:
+            gain = gain_max = None
+        else:
+            gain, gain_max = min(worst_delta, best_delta), max(worst_delta, best_delta)
+        items.append(PlanItem(f, gain, gain_max if gain_max != gain else None, worst_delta, best_delta))
+        before = after
     return items
 
 
-def plan(findings: Sequence[Finding]) -> Plan:
-    fixed: list[str] = []
-    priorities = _ranked(findings, Status.FAIL, fixed)
-    target = assess(_projected(findings, fixed, best=False))
-    best = assess(_projected(findings, fixed, best=True))
-    improvements = _ranked(findings, Status.WARN, fixed)
-    return Plan(priorities, improvements, assess(findings), target, best if best != target else None)
+def plan(findings: Sequence[Finding], registry: VerdictRegistry | None = None) -> Plan:
+    registry = registry if registry is not None else _builtin_registry()
+    selected: list[str] = []
+    priorities = _ranked(findings, Status.FAIL, selected, registry)
+    target = simulate(findings, selected, registry)
+    improvements = _ranked(findings, Status.WARN, selected, registry)
+    return Plan(priorities, improvements, target.now, target.worst,
+                target.best if target.conditional or target.best != target.worst else None)
