@@ -2,7 +2,13 @@
 
 🇬🇧 [English version](SCORING.md)
 
-La note de Posture Cockpit résume une analyse passive. Elle ne remplace pas un audit : elle dit ce qui a pu être vérifié de l'extérieur, et dans quelle mesure. Cette page décrit les règles exactes, appliquées de la même façon sur le plan, la liste des domaines, l'API, le rapport PDF et l'historique.
+La note résume les contrôles applicables réellement mesurés sur un domaine, pas toute la sécurité d’un système d’information.
+Une note de 90/100 ne signifie donc pas que votre SI est sécurisé à 90 %.
+La couverture indique quelle part pondérée des contrôles applicables a pu être évaluée.
+Un contrôle non applicable est écarté ; une erreur ou un contrôle bloqué laisse une mesure manquante et réduit la couverture.
+Une note peut rester provisoire ou ne pas être attribuée lorsque les observations sont insuffisantes.
+Certains défauts critiques plafonnent la note ou retiennent sa lettre, même si les autres contrôles réussissent.
+Les règles ci-dessous sont communes au plan, à la liste des domaines, à l’API, au PDF et à l’historique.
 
 ## 1. Ce que devient chaque contrôle
 

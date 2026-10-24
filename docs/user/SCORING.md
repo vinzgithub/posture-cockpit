@@ -2,7 +2,13 @@
 
 🇫🇷 [Version française](SCORING.fr.md)
 
-Posture Cockpit's score sums up a passive scan. It does not replace an audit: it says what could be checked from the outside, and how much of it. This page gives the exact rules, applied the same way on the plan, the domain list, the API, the PDF report and the history.
+The score summarizes applicable checks actually measured on one domain, not the security of an entire information system.
+A score of 90/100 therefore does not mean that your information system is 90% secure.
+Coverage shows the weighted share of applicable checks that could be evaluated.
+A non-applicable check is excluded; an error or blocked check leaves a missing measurement and lowers coverage.
+A score may remain provisional or be withheld when observations are insufficient.
+Some critical findings cap the score or withhold its letter even when other checks succeed.
+The rules below are shared by the plan, domain list, API, PDF and history.
 
 ## 1. What becomes of each check
 
