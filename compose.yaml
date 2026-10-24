@@ -15,7 +15,7 @@ name: posture-cockpit  # fixes the volume name, posture-cockpit_posture-cockpit-
 
 services:
   posture-cockpit:
-    image: ${POSTURE_COCKPIT_IMAGE:-ghcr.io/vinzgithub/posture-cockpit:0.6.0}
+    image: ${POSTURE_COCKPIT_IMAGE:-ghcr.io/vinzgithub/posture-cockpit:0.6.1}
     container_name: ${POSTURE_COCKPIT_CONTAINER:-posture-cockpit}
     restart: unless-stopped
     ports:

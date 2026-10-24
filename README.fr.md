@@ -92,6 +92,8 @@ Depuis la **v0.6.0**, une vue **Portefeuille** aide à repérer les domaines qui
 
 Avec **« Et si… ? »**, vous pouvez sélectionner plusieurs corrections (y compris les étapes successives de DMARC) et voir ce qui *pourrait* s'améliorer. La simulation **ne modifie ni vos DNS ni vos serveurs** : seule une nouvelle analyse permettra de confirmer le résultat réel.
 
+**Exemple fictif :** [télécharger le rapport PDF Mission Control](docs/examples/posture-cockpit-mission-control-demo.fr.pdf). Rapport généré par la candidate v0.6.1 sur `menuiserie-dupont.example`, sans analyse d’une organisation réelle. Certaines actions ont un effet non déterminable ; les projections restent à confirmer.
+
 ## Qu'est-ce que Posture Cockpit vérifie exactement ?
 
 | Partie examinée | En termes simples |

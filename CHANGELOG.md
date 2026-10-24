@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.1 — en préparation (non publiée)
+
+- Projections du plan/PDF conditionnelles ou explicitement non concluantes ; aucun grade absent ni objectif de dégradation.
+- Attentes des étapes MTA-STS/TLS conservatrices, y compris perte possible du HTTPS moderne.
+- Attentes des extensions préservées après stockage ; table courante prioritaire pour les intégrés reconnus.
+- Gains calculables conservés hors actions inconnues, avec exclusions explicites et cible complète toujours inconnue.
+- Recette image officielle v0.5.0/v0.6.0 ↔ candidate à schéma 5, libellés FR/EN et compteur de priorités corrigés.
+- Rapports de démonstration PDF FR/EN, génération reproductible sans réseau.
+- Notes observées inchangées ; génération 4, schéma 5, API, événements et sécurité réseau conservés.
+- Aucun tag, release, publication GHCR ou déploiement autorisé implicitement.
+
 ## 0.6.0 — 2026-10-24 (publié sur GitHub et GHCR)
 
 **Mission Control** — comprendre les changements observés et préparer les corrections sans modifier les services analysés.

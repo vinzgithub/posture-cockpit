@@ -159,3 +159,7 @@ Puis, sur un vrai domaine : `pip install -e .` dans le dossier de l'extension, e
   Puis, dans le `.env` de l'installation : `POSTURE_COCKPIT_IMAGE=<votre image>`, et `docker compose up -d`.
 
 `posture-cockpit extensions` liste ce qui est chargé ; la page **Administration** aussi, avec un interrupteur par extension et l'erreur exacte d'une extension qui n'a pas pu être chargée.
+
+## Contrat de remédiation v0.6.1
+
+`Remedy.expect` indique le statut attendu après l’étape proposée, pas un résultat observé. Toute nouvelle écriture sérialise cette clé, y compris `"ok"` (défaut), `"warn"`, `"info"` ou `null` (effet inconnu). Pour les types intégrés reconnus par l’adaptateur, la table courante prévaut sur la valeur stockée ; la valeur stockée ne fait foi que pour les types inconnus, notamment les extensions. Une extension historique sans clé reste inconnue ; son ancienne intention OK ne peut pas être reconstruite. Aucun ancien JSON n’est réécrit. La v0.5.0 ignore cette clé et peut l’omettre lors de ses propres nouvelles écritures ; la remontée conserve alors l’interprétation historique prudente.

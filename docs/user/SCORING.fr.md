@@ -168,3 +168,7 @@ un an au maximum. `max-age=0` efface le signal ; l’absence ou un en-tête inva
 l’efface pas. Une politique parente ne s’étend qu’avec includeSubDomains. `preload` ne
 prouve pas une présence dans la liste des navigateurs. L’historique et l’attribution
 n’ont aucun effet sur les statuts ni sur la note.
+
+## Précision v0.6.1 : gains et cible du plan
+
+Les gains des actions calculables sont estimés hors actions à effet non déterminable, maintenues dans leur état observé et nommées à côté des gains. La cible du plan complet reste inconnue si une priorité a un effet inconnu. Le simulateur ne retire jamais silencieusement une action sélectionnée. Une fourchette HTTPS suppose des mesures futures concluantes ; elle ne garantit pas la prochaine note. La notation des observations reste inchangée (génération 4).
