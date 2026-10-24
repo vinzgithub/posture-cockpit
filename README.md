@@ -8,7 +8,7 @@
 
 **English** · [**Français**](README.fr.md)
 
-![Version](https://img.shields.io/badge/version-0.6.0-126caa) ![Docker](https://img.shields.io/badge/install-Docker-2496ED) ![License](https://img.shields.io/badge/license-PolyForm%20Noncommercial-0d355d)
+![Version](https://img.shields.io/badge/version-0.6.1-126caa) ![Docker](https://img.shields.io/badge/install-Docker-2496ED) ![License](https://img.shields.io/badge/license-PolyForm%20Noncommercial-0d355d)
 
 <img src="docs/images/en/hero.png" alt="Posture Cockpit displayed on a computer and a phone" width="100%">
 
@@ -103,7 +103,7 @@ The **“What if…?”** simulator lets you select several proposed corrections
 | **HTTPS certificates** | Is the certificate valid? Is it nearing expiry? What about the TLS protocols and key properties that the tool checks? |
 | **DNS** | Are name servers, DNSSEC and CAA records configured as expected? |
 
-There are **20 built-in checks in v0.6.0**. Some don't apply to every domain; others may be inconclusive if a server doesn't respond. Posture Cockpit distinguishes between **“not applicable”** and **“could not be checked”**: an uncompleted check is never treated as a success.
+There are **20 built-in checks in v0.6.1**. Some don't apply to every domain; others may be inconclusive if a server doesn't respond. Posture Cockpit distinguishes between **“not applicable”** and **“could not be checked”**: an uncompleted check is never treated as a success.
 
 [How scores and coverage are calculated](docs/user/SCORING.md)
 
@@ -121,7 +121,7 @@ For a **new installation**, run:
 
 ```bash
 mkdir posture-cockpit && cd posture-cockpit
-curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.6.0/compose.yaml
+curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.6.1/compose.yaml
 docker compose up -d
 ```
 
@@ -135,9 +135,9 @@ Open `http://<server-address>:8080/setup`, enter the code and create the adminis
 
 **Important:** don't expose the application to the public Internet over plain HTTP. Use a properly configured **HTTPS reverse proxy** for remote access.
 
-Already running an older version? **Don't use the new-install steps as an upgrade guide.** Back up your existing installation and follow the documented process. A transition from v0.4.x to v0.5.0 or later needs special care around the database schema and scheduler; v0.6.0 keeps schema 5.
+Already running an older version? **Don't use the new-install steps as an upgrade guide.** Back up your existing installation and follow the documented process. A transition from v0.4.x to v0.5.0 or later needs special care around the database schema and scheduler; v0.6.1 keeps schema 5.
 
-📖 [Full installation, configuration, backup and upgrade guide](docs/user/INSTALLATION.md) · [Published v0.6.0 release](https://github.com/vinzgithub/posture-cockpit/releases/tag/v0.6.0)
+📖 [Full installation, configuration, backup and upgrade guide](docs/user/INSTALLATION.md) · [Published v0.6.1 release](https://github.com/vinzgithub/posture-cockpit/releases/tag/v0.6.1)
 
 ## What Posture Cockpit does — and doesn't do
 
@@ -167,4 +167,4 @@ Copyright © 2026 Vincent Fournet.
 
 ---
 
-<div align="center"><sub>Posture Cockpit v0.6.0 — Understand what protects your domain, and what to do when something is missing.</sub></div>
+<div align="center"><sub>Posture Cockpit v0.6.1 — Understand what protects your domain, and what to do when something is missing.</sub></div>

@@ -1,6 +1,6 @@
-# Posture Cockpit v0.6.1 — dossier de candidate
+# Posture Cockpit v0.6.1 — dossier de livraison
 
-**État : candidate développée et recette validée, non publiée — 24 octobre 2026.** Aucun tag, release, publication GHCR ni déploiement réalisé. Le mainteneur a autorisé le développement après validation technique du cahier des charges révision 3 par Claude. Une autorisation de publication reste distincte.
+**État : version v0.6.1 validée et publiée le 24 octobre 2026 sur GitHub et GHCR.** Cahier des charges révision 3 validé techniquement par Claude ; intégration et publication approuvées par le mainteneur. **Aucun déploiement ni mise à jour d'une instance existante n'a été effectué.**
 
 ## Périmètre livré
 
@@ -14,7 +14,7 @@
 | 6 | #38 | Gain exact, événements vides, compteur de priorités |
 | 7 | #39 | Rapports fictifs FR/EN, guides, preuves et marqueurs de version 0.6.1 |
 
-Les PR sont empilées : chacune cible la branche du lot précédent. Elles doivent être intégrées dans cet ordre sans réécrire l'historique. Les commits distants sont attribués au compte `vinzgithub`, sans co-auteur. Aucun merge implicite n'a été effectué pendant la préparation de ce dossier.
+Les sept PR #33 à #39 ont été préparées en branches empilées, puis intégrées dans cet ordre à `main` avec l'accord explicite du mainteneur, sans réécrire l'historique. Le dernier merge est le commit `641f1dbde97e5e0166101f2c9c4f52b0ee6177fb`, identique au tag `v0.6.1`. Les commits distants sont attribués au compte `vinzgithub`, sans co-auteur.
 
 ## Invariants et décisions
 
@@ -54,14 +54,19 @@ Le code cumulé de #33–#38 et les compléments de #39 sont validés. Les premi
 - ARM64 : build et démarrage émulé « quick » existants, dans le dry run du workflow release. **Limite : pas de F08 complète ARM64**, conformément à la spécification.
 - Aucun test manuel avec lecteur d'écran réel n'est revendiqué. Docker n'est pas disponible dans l'environnement local : seule Actions peut fournir ici la preuve au niveau image.
 
-## Procédure de retour prévue
+## Procédure de retour documentée (sur copie isolée)
 
-Sur copie isolée : sauvegarde vérifiée hors volume, ordonnanceur off, arrêt propre, image officielle v0.5.0 épinglée par digest sur le volume courant (schéma 5), contrôle de `info`, connexion/lecture/écriture et intégrité, arrêt puis remontée candidate. Les projections anciennes DMARC de v0.5.0 peuvent réapparaître, pas une divergence des notes observées. Ne pas confondre ce retour avec le retour schéma 5→4 qui exige une restauration et perd les données post-sauvegarde.
+Sur copie isolée : sauvegarde vérifiée hors volume, ordonnanceur off, arrêt propre, image officielle v0.5.0 épinglée par digest sur le volume courant (schéma 5), contrôle de `info`, connexion/lecture/écriture et intégrité, arrêt puis remontée de l'image v0.6.1. Les projections anciennes DMARC de v0.5.0 peuvent réapparaître, pas une divergence des notes observées. Ne pas confondre ce retour avec le retour schéma 5→4 qui exige une restauration et perd les données post-sauvegarde.
 
 Digest officiel v0.5.0 résolu directement auprès de GHCR : `sha256:c8dacc1e82646562a3a386ba850a8dca785df5ceee98bf9910ba74eef67a5651`. Image v0.6.0 : digest conservé de la publication vérifiée `sha256:70da24128abef742dc4649235d662a37596ed786a322d840c85aa02afc2fe633`. La CI vérifie aussi la version embarquée.
 
-## Publication séparée
+## Intégration et publication effectives
 
-Les marqueurs sources (`pyproject.toml`, `__init__.py`, valeur par défaut Compose) sont préparés en 0.6.1 pour une candidate cohérente. Les commandes publiques des README et guides restent épinglées au tag publié v0.6.0. Pour tester la candidate, fournir une image locale/CI via `POSTURE_COCKPIT_IMAGE` ; ne pas prétendre que `ghcr.io/vinzgithub/posture-cockpit:0.6.1` existe déjà.
+- **Intégration :** PR #33 à #39 fusionnées avec autorisation du mainteneur ; `main` et le tag `v0.6.1` pointent vers `641f1dbde97e5e0166101f2c9c4f52b0ee6177fb`. Le commit rassemble la candidate validée et ses preuves documentaires.
+- **GitHub :** [release v0.6.1](https://github.com/vinzgithub/posture-cockpit/releases/tag/v0.6.1) publiée.
+- **Publication GHCR distincte :** [workflow manuel #40123536677](https://github.com/vinzgithub/posture-cockpit/actions/runs/40123536677) **réussi**, 12 jobs terminés sans échec : tests Python 3.11–3.13, Chromium, Docker et migrations/retour arrière, recette AMD64 et démarrage ARM64 émulé, garde de version et lecture retour des tags.
+- **Image multi-architecture :** `ghcr.io/vinzgithub/posture-cockpit:0.6.1`, digest `sha256:f670500db50aff70b535a82ec0692660888f6b6387fbe25823feeb0a15d6f069`. Les tags `0.6.1`, `0.6` et `latest` ont tous été relus avec ce même digest lors du workflow, après la publication du manifeste AMD64/ARM64.
+- **Documentation :** PR #40 préparée pour synchroniser README FR/EN, guides et liens d'installation sur le tag publié `v0.6.1`, sans modification fonctionnelle du Compose.
+- **Exploitation :** aucune instance existante n'est automatiquement migrée par la publication. Sauvegarde vérifiée et procédure de mise à niveau sont obligatoires avant une éventuelle intervention en production.
 
-La recette est acceptée techniquement au SHA ci-dessus ; les sept PR restent ouvertes pour la décision d’intégration du mainteneur. Présenter le SHA, les PR et les preuves avant fusion et publication. Tag, GitHub Release, publication GHCR et déploiement nécessitent son autorisation explicite. La CI sur PR n'utilise qu'un registre de test local pour son dry run de publication.
+La recette F08 complète a été exécutée sur AMD64. ARM64 a été compilée et démarrée sous émulation, sans revendication de recette F08 complète sur cette architecture. Aucun test manuel avec lecteur d'écran réel n'est revendiqué.

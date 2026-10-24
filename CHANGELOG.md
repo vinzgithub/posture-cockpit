@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.6.1 — en préparation (non publiée)
+## 0.6.1 — 2026-10-24 (publié sur GitHub et GHCR)
 
 - Projections du plan/PDF conditionnelles ou explicitement non concluantes ; aucun grade absent ni objectif de dégradation.
 - Attentes des étapes MTA-STS/TLS conservatrices, y compris perte possible du HTTPS moderne.
@@ -9,7 +9,7 @@
 - Recette image officielle v0.5.0/v0.6.0 ↔ candidate à schéma 5, libellés FR/EN et compteur de priorités corrigés.
 - Rapports de démonstration PDF FR/EN, génération reproductible sans réseau.
 - Notes observées inchangées ; génération 4, schéma 5, API, événements et sécurité réseau conservés.
-- Aucun tag, release, publication GHCR ou déploiement autorisé implicitement.
+**Publication :** PR #33 à #39 fusionnées dans `main` (commit `641f1dbde97e5e0166101f2c9c4f52b0ee6177fb`), puis tag et GitHub Release [v0.6.1](https://github.com/vinzgithub/posture-cockpit/releases/tag/v0.6.1). Le [workflow de publication GHCR #40123536677](https://github.com/vinzgithub/posture-cockpit/actions/runs/40123536677) a terminé ses 12 jobs avec succès, dont la recette AMD64 et le démarrage ARM64 émulé. Les tags `0.6.1`, `0.6` et `latest` ont été relus dans le registre et pointent vers le digest unique `sha256:f670500db50aff70b535a82ec0692660888f6b6387fbe25823feeb0a15d6f069`. **La publication n'entraîne aucun déploiement ni mise à jour des instances existantes.** Voir `docs/developer/RELEASE_V061.fr.md`.
 
 ## 0.6.0 — 2026-10-24 (publié sur GitHub et GHCR)
 
