@@ -40,7 +40,7 @@ import asyncio
 import os
 import sqlite3
 import threading
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -120,7 +120,7 @@ class Database:
                 "The database was used by another task while a transaction was open. A transaction "
                 "must end before its task waits (no await inside 'with db.transaction():').")
 
-    def execute(self, sql: str, params: Sequence[Any] = ()) -> sqlite3.Cursor:
+    def execute(self, sql: str, params: Sequence[Any] | Mapping[str, Any] = ()) -> sqlite3.Cursor:
         with self._lock:
             self._check_owner()
             return self._conn.execute(sql, params)
@@ -130,17 +130,17 @@ class Database:
             self._check_owner()
             self._conn.executemany(sql, rows)
 
-    def all(self, sql: str, params: Sequence[Any] = ()) -> list[Row]:
+    def all(self, sql: str, params: Sequence[Any] | Mapping[str, Any] = ()) -> list[Row]:
         with self._lock:
             self._check_owner()
             return self._conn.execute(sql, params).fetchall()
 
-    def one(self, sql: str, params: Sequence[Any] = ()) -> Row | None:
+    def one(self, sql: str, params: Sequence[Any] | Mapping[str, Any] = ()) -> Row | None:
         with self._lock:
             self._check_owner()
             return self._conn.execute(sql, params).fetchone()
 
-    def value(self, sql: str, params: Sequence[Any] = ()) -> Any:
+    def value(self, sql: str, params: Sequence[Any] | Mapping[str, Any] = ()) -> Any:
         row = self.one(sql, params)
         return row[0] if row else None
 

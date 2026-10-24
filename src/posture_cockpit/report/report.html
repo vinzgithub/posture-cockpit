@@ -14,7 +14,7 @@
 
   {% if historical %}<p class="history-stamp">{{ t("history.pdf_notice", scan_version=scan.version, generator_version=generator_version, date=generated.date, time=generated.time, zone=generated.zone) }}</p>{% endif %}
   <!-- Page 1: for the decision-maker -->
-  <section class="sheet">
+  <section class="sheet summary-sheet">
     <header class="masthead">
       <div>
         {% if perimeter %}<p class="restricted">{{ t('report.restricted') }} — {{ t('report.restricted_text') }}</p>{% endif %}
@@ -37,6 +37,8 @@
         <p class="seal-label">{{ grade_label if result.score is not none else t('score.not_evaluated') }}{% if result.partial %}<br><span class="seal-partial">{{ t('score.partial_short') }}</span>{% endif %}</p>
       </div>
     </header>
+
+    <p class="scope-limit">{{ t("report.scope_internal") if perimeter else t("report.scope_internet") }}</p>
 
     <div class="v04-indicators">
       <p>{{ t('v04.diagnostic', percent=((result.diagnostic_coverage or 0) * 100) | int) }} · {{ t('v04.blocked', n=result.blocked) }}</p>
@@ -66,7 +68,7 @@
           <p class="p-meta">{{ t('report.who', who=p.who) }} · {{ t('report.minutes', n=p.minutes) }}</p>
         </div>
         <div class="p-side">
-          {% if result.score is not none %}<span class="p-gain">{{ t('v04.gain', low=('%+d' | format(p.gain)), high=('%+d' | format(p.gain_max))) if p.gain_max is not none else (t('report.points', n=p.gain) if p.gain > 0 else t('report.points_under_one')) }}</span>{% endif %}
+          {% if result.score is not none %}<span class="p-gain">{{ t('simulation.unknown_effect') if p.gain is none else t('v04.gain', low=('%+d' | format(p.gain)), high=('%+d' | format(p.gain_max))) if p.gain_max is not none else (t('report.points', n=p.gain) if p.gain is not none and p.gain > 0 else t('report.points_under_one')) }}</span>{% endif %}
           {% if p.deadline %}<span class="badge badge-urgent">{{ p.deadline }}</span>{% else %}<span class="badge">{{ t('status.fail') }}</span>{% endif %}
         </div>
       </li>
@@ -97,7 +99,7 @@
     <p class="section-label">{{ t('report.improvements') }}</p>
     <ul class="improvements">
       {% for i in improvements %}
-      <li><strong>{{ i.title }}</strong> — {{ i.summary }}{% if result.score is not none %} <span class="gain">({{ t('report.points', n=i.gain) if i.gain > 0 else t('report.points_under_one') }})</span>{% endif %}</li>
+      <li><strong>{{ i.title }}</strong> — {{ i.summary }}{% if result.score is not none %} <span class="gain">({{ t('simulation.unknown_effect') if i.gain is none else t('report.points', n=i.gain) if i.gain is not none and i.gain > 0 else t('report.points_under_one') }})</span>{% endif %}</li>
       {% endfor %}
     </ul>
     {% endif %}

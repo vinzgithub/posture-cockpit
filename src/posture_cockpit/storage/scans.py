@@ -38,6 +38,7 @@ from ..core.engine import ScanResult
 from ..core.model import HTTPS_ROOT_CHECK, Finding
 from ..core.schedule_time import format_time
 from .database import Database, Row, utcnow
+from .portfolio import DomainFilter, DomainPage, domain_page
 from .schema import METRICS
 
 
@@ -148,6 +149,9 @@ class Scans:
     def set_dns_host(self, domain_id: int, host_id: str) -> None:
         self.db.execute("UPDATE domains SET dns_host = ? WHERE id = ?", (host_id, domain_id))
 
+    def domains_page(self, filters: DomainFilter, *, internal: bool, scheduler: str, now: datetime) -> DomainPage:
+        return domain_page(self.db, filters, internal=internal, scheduler=scheduler, now=now)
+
     def delete_domain(self, domain_id: int) -> dict[str, Any]:
         """The domain and all it holds; returns how many scans, states, scheduled runs and events
         went with it, and its schedule if it had one (for the audit log)."""
@@ -209,12 +213,16 @@ class Scans:
         except (ValueError, TypeError, KeyError, AttributeError, OverflowError) as error:
             raise CorruptScan(scan_id) from error
 
-    def _read_scan(self, scan_id: int, row: Row) -> Scan:
-        findings = [_finding(r) for r in self.db.all("SELECT * FROM findings WHERE scan_id = ? ORDER BY rowid",
-                                                     (scan_id,))]
+    def _read_scan(self, scan_id: int, row: Row, *, finding_rows: list[Row] | None = None,
+                   recheck_rows: list[Row] | None = None) -> Scan:
+        if finding_rows is None:
+            finding_rows = self.db.all("SELECT * FROM findings WHERE scan_id = ? ORDER BY rowid", (scan_id,))
+        if recheck_rows is None:
+            recheck_rows = self.db.all("SELECT * FROM rechecks WHERE scan_id = ?", (scan_id,))
+        findings = [_finding(r) for r in finding_rows]
         originals = {f.check_id: f for f in findings}
         rechecks = {}
-        for r in self.db.all("SELECT * FROM rechecks WHERE scan_id = ?", (scan_id,)):
+        for r in recheck_rows:
             original = originals.get(r["check_id"])
             if original is not None:
                 rechecked = _stored_finding(r["check_id"], original.category, original.weight, r["status"],
@@ -223,6 +231,50 @@ class Scans:
         return Scan(row["id"], row["domain_id"], row["domain"], row["started_at"], row["duration_ms"], row["score"],
                     row["grade"], row["coverage"], row["version"], row["perimeter"], findings, rechecks,
                     via=row["via"], engine=row["engine"])
+
+    def get_many(self, scan_ids: list[int]) -> tuple[dict[int, Scan], set[int]]:
+        """Three queries for the authorized page only; corrupt scans stay visible as unreadable."""
+        if len(scan_ids) > 100 or len(scan_ids) != len(set(scan_ids)):
+            raise ValueError("invalid scan batch")
+        if not scan_ids:
+            return {}, set()
+        marks = ",".join("?" * len(scan_ids))
+        rows = self.db.all("SELECT s.*,d.name AS domain FROM scans s JOIN domains d ON d.id=s.domain_id "  # noqa: S608
+                           f"WHERE s.id IN ({marks})", scan_ids)
+        findings: dict[int, list[Row]] = {sid: [] for sid in scan_ids}
+        rechecks: dict[int, list[Row]] = {sid: [] for sid in scan_ids}
+        for row in self.db.all(f"SELECT * FROM findings WHERE scan_id IN ({marks}) ORDER BY scan_id,rowid",  # noqa: S608
+                               scan_ids):
+            findings[row["scan_id"]].append(row)
+        for row in self.db.all(f"SELECT * FROM rechecks WHERE scan_id IN ({marks})", scan_ids):  # noqa: S608
+            rechecks[row["scan_id"]].append(row)
+        result, unreadable = {}, set()
+        for row in rows:
+            sid = int(row["id"])
+            try:
+                result[sid] = self._read_scan(sid, row, finding_rows=findings[sid], recheck_rows=rechecks[sid])
+            except (ValueError, TypeError, KeyError, AttributeError, OverflowError):
+                unreadable.add(sid)
+        return result, unreadable
+
+    def page_states(self, state_ids: list[int]) -> dict[int, list[Row]]:
+        """Bounded histories for current states of an authorized domain page; one query."""
+        if len(state_ids) > 100 or len(state_ids) != len(set(state_ids)):
+            raise ValueError("invalid state batch")
+        if not state_ids:
+            return {}
+        marks = ",".join("?" * len(state_ids))
+        rows = self.db.all(
+            "SELECT * FROM (SELECT st.*,s.domain_id,s.perimeter,ROW_NUMBER() OVER "  # noqa: S608
+            "(PARTITION BY s.domain_id ORDER BY st.at DESC,st.id DESC) AS rn "
+            "FROM scan_states anchor JOIN scans owner ON owner.id=anchor.scan_id "
+            "JOIN scans s ON s.domain_id=owner.domain_id JOIN scan_states st ON st.scan_id=s.id "
+            f"WHERE anchor.id IN ({marks}) AND (st.at<anchor.at OR (st.at=anchor.at AND st.id<=anchor.id))) "
+            "WHERE rn<=30 ORDER BY domain_id,rn", state_ids)
+        result: dict[int, list[Row]] = {}
+        for row in rows:
+            result.setdefault(row["domain_id"], []).append(row)
+        return result
 
     def states(self, scan_id: int) -> list[Row]:
         """The measured states of a scan, oldest first (see the module documentation)."""
@@ -240,6 +292,24 @@ class Scans:
             "WHERE s.domain_id = ? ORDER BY st.at DESC, st.id DESC LIMIT 2",
             (domain_id,),
         )
+
+    def current_state(self, scan_id: int) -> Row | None:
+        """Immutable state of this scan, with explicit identity; no rescore or write."""
+        return self.db.one(
+            "SELECT st.*, s.domain_id, s.perimeter FROM scan_states st JOIN scans s ON s.id=st.scan_id "
+            "WHERE st.scan_id=? ORDER BY st.at DESC, st.id DESC LIMIT 1", (scan_id,))
+
+    def state_history(self, domain_id: int, state_id: int, limit: int = 30) -> list[Row]:
+        """At most 30 status snapshots, newest first, anchored to an authorized domain state."""
+        if not 1 <= limit <= 30:
+            raise ValueError("invalid status history depth")
+        return self.db.all(
+            "SELECT st.*, s.domain_id, s.perimeter FROM scan_states st "
+            "JOIN scans s ON s.id=st.scan_id JOIN scan_states anchor ON anchor.id=? "
+            "JOIN scans owner ON owner.id=anchor.scan_id "
+            "WHERE s.domain_id=? AND owner.domain_id=s.domain_id "
+            "AND (st.at<anchor.at OR (st.at=anchor.at AND st.id<=anchor.id)) "
+            "ORDER BY st.at DESC, st.id DESC LIMIT ?", (state_id, domain_id, limit))
 
     def history(self, domain_id: int, limit: int = 24) -> list[Row]:
         """The last scans of a domain (date, score, grade, coverage, perimeter), newest first."""

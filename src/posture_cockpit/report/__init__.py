@@ -48,7 +48,7 @@ class Prescription:
     summary: str
     who: str
     minutes: int
-    gain: int
+    gain: int | None
     gain_max: int | None
     deadline: str   # "Avant le 21 octobre 2026", or ""
 
