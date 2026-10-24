@@ -4,17 +4,17 @@
 
 ## Avec Docker (recommandé)
 
-**Nouvelle installation uniquement :** ces commandes créent une instance neuve en **v0.6.0**. Si vous avez déjà des données v0.4.1 ou antérieures, suivez la [mise à jour](#mise-à-jour), exportez une sauvegarde vérifiée hors du volume Docker et désactivez l'ordonnanceur avant la migration. La v0.6.0 conserve le schéma SQLite 5 ; revenir au schéma 4 nécessite une restauration.
+**Nouvelle installation uniquement :** ces commandes créent une instance neuve en **v0.6.1**. Si vous avez déjà des données v0.4.1 ou antérieures, suivez la [mise à jour](#mise-à-jour), exportez une sauvegarde vérifiée hors du volume Docker et désactivez l'ordonnanceur avant la migration. La v0.6.1 conserve le schéma SQLite 5 ; revenir au schéma 4 nécessite une restauration.
 
 Il faut Docker Engine et **Docker Compose 2.24 ou plus récent** (`docker compose version`). Rien à compiler, pas besoin de Git : l'image officielle est publiée sur `ghcr.io/vinzgithub/posture-cockpit`, pour les processeurs amd64 et arm64.
 
 ```bash
 mkdir posture-cockpit && cd posture-cockpit
-curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.6.0/compose.yaml
+curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.6.1/compose.yaml
 docker compose up -d
 ```
 
-Le fichier [`compose.yaml`](../../compose.yaml) désigne une version précise de l'image (`0.6.0`), jamais `latest` : une installation ne change pas de version toute seule. Il garde les protections : utilisateur sans privilèges (uid 10001), système en lecture seule, aucune capacité Linux, `no-new-privileges`, `/tmp` en mémoire. Les données vont dans le volume `posture-cockpit_posture-cockpit-data`, quel que soit le dossier d'installation.
+Le fichier [`compose.yaml`](../../compose.yaml) désigne une version précise de l'image (`0.6.1`), jamais `latest` : une installation ne change pas de version toute seule. Il garde les protections : utilisateur sans privilèges (uid 10001), système en lecture seule, aucune capacité Linux, `no-new-privileges`, `/tmp` en mémoire. Les données vont dans le volume `posture-cockpit_posture-cockpit-data`, quel que soit le dossier d'installation.
 
 ### Premier démarrage : le code d'initialisation
 
@@ -32,7 +32,7 @@ Pour une installation automatisée, `POSTURE_COCKPIT_SETUP_CODE` fixe le code (1
 ### Vérifier
 
 ```bash
-curl http://localhost:8080/healthz                       # {"status":"ok","version":"0.6.0"}
+curl http://localhost:8080/healthz                       # {"status":"ok","version":"0.6.1"}
 docker compose exec posture-cockpit posture-cockpit info  # version, schéma, comptes, analyses
 ```
 
@@ -41,7 +41,7 @@ docker compose exec posture-cockpit posture-cockpit info  # version, schéma, co
 Ne modifiez pas `compose.yaml` : une mise à jour le remplace. Les réglages vont dans un fichier `.env` facultatif, à côté de lui ; le modèle [`.env.example`](../../.env.example) les décrit tous, en commentaire :
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.6.0/.env.example -o .env
+curl -fsSL https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.6.1/.env.example -o .env
 nano .env                 # décommentez les lignes utiles
 docker compose up -d      # applique les changements
 ```
@@ -201,7 +201,7 @@ La clé de session étant restaurée, les sessions ouvertes restent valides ; le
 2. Remplacez `compose.yaml` par celui de la nouvelle version, puis redémarrez :
 
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.6.0/compose.yaml   # la version voulue
+curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.6.1/compose.yaml   # la version voulue
 docker compose up -d
 docker compose exec posture-cockpit posture-cockpit info
 ```
@@ -327,6 +327,6 @@ docker compose exec posture-cockpit posture-cockpit disable-totp <identifiant>  
 docker compose exec posture-cockpit posture-cockpit make-admin <identifiant>
 ```
 
-### Retour entre versions au schéma 5 (v0.5.0, v0.6.0 et candidate v0.6.1)
+### Retour entre versions au schéma 5 (v0.5.0, v0.6.0 et v0.6.1)
 
-Avant tout changement d’image : sauvegarde vérifiée hors du volume, ordonnanceur désactivé, arrêt propre de l’instance. Le schéma 5 reste identique : le retour à une image officielle épinglée peut réutiliser le volume courant sans restaurer une ancienne sauvegarde. Les données créées après la mise à niveau doivent être conservées. La v0.5.0 retrouve ses anciennes projections, notamment DMARC, sans changer les notes observées. Tester ce retour sur copie isolée ; ne jamais démarrer simultanément deux instances sur le volume. Le retour au schéma 4 reste une autre procédure exigeant une restauration. Aucun tag/image v0.6.1 n’est annoncé comme publié par ce guide.
+Avant tout changement d’image : sauvegarde vérifiée hors du volume, ordonnanceur désactivé, arrêt propre de l’instance. Le schéma 5 reste identique : le retour à une image officielle épinglée peut réutiliser le volume courant sans restaurer une ancienne sauvegarde. Les données créées après la mise à niveau doivent être conservées. La v0.5.0 retrouve ses anciennes projections, notamment DMARC, sans changer les notes observées. Tester ce retour sur copie isolée ; ne jamais démarrer simultanément deux instances sur le volume. Le retour au schéma 4 reste une autre procédure exigeant une restauration.
