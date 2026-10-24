@@ -56,9 +56,9 @@ def _check_sums(plan: scoring.Plan) -> None:
     """The gains shown add up to the targets: the floor scenario to ``target``, the compliant one to
     ``target_max`` (or ``target`` when nothing is left unmeasured)."""
     now = plan.now.score or 0
-    assert sum(i.gain for i in plan.priorities) == plan.target.score - now  # type: ignore[operator]
+    assert sum(i.gain_worst for i in plan.priorities) == plan.target.score - now  # type: ignore[operator, misc]
     top = plan.target_max.score if plan.target_max else plan.target.score
-    assert sum(i.gain if i.gain_max is None else i.gain_max for i in plan.priorities) == top - now  # type: ignore[operator]
+    assert sum(i.gain_best for i in plan.priorities) == top - now  # type: ignore[operator, misc]
     assert all(i.gain_max is None or i.gain_max > i.gain for i in plan.items)
 
 
@@ -68,8 +68,8 @@ def test_a_bigger_fix_before_the_https_root():
     plan = scoring.plan(_mail(mail__dmarc=Status.FAIL) + family(Status.FAIL, **BLOCKED_ALL))
     steps = [(i.finding.check_id, i.gain, i.gain_max) for i in plan.priorities]
     assert plan.now.score == 59
-    assert steps == [("mail.dmarc", 20, None), ("web.https_redirect", 0, 21)]
-    assert (plan.target.score, plan.target_max.score) == (79, 100)  # type: ignore[union-attr]
+    assert steps == [("mail.dmarc", 20, None), ("web.https_redirect", -13, 21)]
+    assert (plan.target.score, plan.target_max.score) == (66, 100)  # type: ignore[union-attr]
     _check_sums(plan)
 
 
@@ -78,19 +78,19 @@ def test_a_smaller_fix_after_the_https_root():
     plan = scoring.plan(_mail(mail__dkim=Status.FAIL) + family(Status.FAIL, **BLOCKED_ALL))
     steps = [(i.finding.check_id, i.gain, i.gain_max) for i in plan.priorities]
     assert plan.now.score == 73
-    assert steps == [("web.https_redirect", 1, 22), ("mail.dkim", 5, None)]
-    assert (plan.target.score, plan.target_max.score) == (79, 100)  # type: ignore[union-attr]
+    assert steps == [("web.https_redirect", -12, 22), ("mail.dkim", 5, None)]
+    assert (plan.target.score, plan.target_max.score) == (66, 100)  # type: ignore[union-attr]
     _check_sums(plan)
 
 
-def test_the_lower_bound_can_be_negative_only_on_a_provisional_score():
+def test_the_lower_bound_can_be_lower_than_the_observed_score():
     """Undetermined: the score shown (82, no grade) leaves out the dependents; once HTTPS is
-    restored, they count, at their floor in the lower bound: 79. The range is -3 to +18."""
+    restored, they count, at declared worst verdicts in the lower bound: 66. The range is -16 to +18."""
     plan = scoring.plan(_mail() + family(Status.FAIL, (Signal.HTTPS_UNDETERMINED,), **UNMEASURED_ALL))
     root = plan.priorities[0]
     assert (plan.now.score, plan.now.grade) == (82, None)
-    assert (root.finding.check_id, root.gain, root.gain_max) == ("web.https_redirect", -3, 18)
-    assert (plan.target.score, plan.target_max.score) == (79, 100)  # type: ignore[union-attr]
+    assert (root.finding.check_id, root.gain, root.gain_max) == ("web.https_redirect", -16, 18)
+    assert (plan.target.score, plan.target_max.score) == (66, 100)  # type: ignore[union-attr]
     _check_sums(plan)
 
 
@@ -104,7 +104,7 @@ def test_gains_add_up_to_the_targets_over_many_plans(root):
         plan = scoring.plan(_mail(**statuses) + fam)
         _check_sums(plan)
         if any(i.gain < 0 for i in plan.items):
-            assert plan.now.grade is None and plan.now.grade_withheld_reason  # only on a provisional score
+            assert plan.provisional  # newly measurable failures can lower an observed graded score
 
 
 # ------------------------------------------------------------------ 2. trusted and problem

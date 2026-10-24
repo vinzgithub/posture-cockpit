@@ -97,3 +97,15 @@ p { orphans: 3; widows: 3; }
 /* Internal audit: restricted distribution, on the first page and in the footer. */
 .restricted { margin: 0 0 6pt; padding: 3pt 7pt; border: 1pt solid #8A2C1D; color: #8A2C1D; font-family: "IBM Plex Mono"; font-size: 8pt; letter-spacing: .04em; text-transform: uppercase; display: inline-block; }
 .seal-partial { font-size: 8pt; color: #6B655A; }
+
+.scope-limit { margin-top: 8pt; font-size: 9pt; color: #5A554B; }
+
+/* Keep the decision summary on one page, including scope and incomplete measurements. */
+.summary-sheet .section-label { margin-top: 14pt; }
+.summary-sheet .prescriptions li { padding: 8pt 0; }
+.summary-sheet .signature { margin-top: 14pt; }
+.summary-sheet .diagnosis { font-size: 12pt; line-height: 1.45; }
+.summary-sheet .p-body > p { font-size: 9.5pt; }
+
+.masthead > div:first-child { flex: 1; min-width: 0; }
+.masthead .seal { flex: 0 0 100pt; width: 100pt; }

@@ -226,13 +226,15 @@ def test_single_concurrency_slot_is_reserved_for_manual_scans(tmp_path):
 def test_the_hourly_share_of_the_scheduler_defers_until_it_frees(tmp_path):
     pc = Instance(tmp_path, scans_per_hour=1)
     try:
+        # The fixture must not depend on the host's monotonic uptime.
+        pc.s.scan_limiter._clock = lambda: 1000.0
         ids = [pc.domain(f"d{n}.example") for n in range(2)]
         for domain_id in ids:
             pc.schedule(domain_id)
         pc.clock.now = local(2026, 10, 20, 5, 11)
         pc.tick()
         assert [r["state"] for r in pc.runs()] == ["done"]  # one per hour: the other one waits
-        pc.s.scan_limiter._clock = lambda: 10_000.0  # an hour later for the limiter
+        pc.s.scan_limiter._clock = lambda: 4660.0  # the same hour and minute later as the scheduler clock
         pc.clock.now += timedelta(hours=1, minutes=1)
         pc.tick()
         assert [r["state"] for r in pc.runs()] == ["done", "done"]
@@ -413,7 +415,9 @@ def test_heartbeat_and_status(pc):
     assert status(pc.s, pc.scheduler, pc.clock())["state"] == "off"  # this instance: scheduler off
     pc.tick()
     beat = json.loads(pc.s.db.get_meta("scheduler_heartbeat"))
-    assert beat["at"] == iso(pc.clock()) and beat["version"] == "0.5.0"
+    from posture_cockpit import __version__
+
+    assert beat["at"] == iso(pc.clock()) and beat["version"] == __version__
     assert status(pc.s, None, pc.clock() + timedelta(minutes=2))["state"] == "elsewhere"
     assert status(pc.s, None, pc.clock() + timedelta(minutes=4))["state"] == "off"
     pc.scheduler.leader = True

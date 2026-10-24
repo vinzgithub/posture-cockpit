@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "posture-cockpit"
-version = "0.5.0"
+version = "0.6.0"
 description = "Self-hosted passive security check of a domain (mail, TLS, web, DNS) with a guided plan of fixes and a PDF report."
 readme = "README.md"
 requires-python = ">=3.11"

@@ -135,10 +135,12 @@ def _scan(typed: str, as_json: bool, lang: str) -> int:
         print(f"  {SYMBOLS[f.status.value]} {f.check_id:<22} {summary}")
     plan = scoring.plan(result.findings)
     if plan.priorities:
-        projected = f" (score {plan.now.score} → {plan.target.score})" if plan.now.score is not None else ""
+        projected = (f" (score {plan.now.score} → {plan.target.score})"
+                     if plan.now.score is not None and plan.target.score is not None else "")
         print(f"\nPriorities{projected}:")
         for item in plan.priorities:
-            print(f"  +{item.gain:<3} {item.finding.check_id}")
+            effect = f"{item.gain:+d}" if item.gain is not None else "?"
+            print(f"  {effect:<4} {item.finding.check_id}")
     return 0
 
 

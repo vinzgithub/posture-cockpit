@@ -14,7 +14,7 @@
     <p class="chips">
       <span class="chip">{{ t('plan.minutes', n=task.minutes) }}</span>
       <span class="chip chip-{{ task.effort }}">{{ task.effort_label }}</span>
-      {% if plan.score is not none %}<span class="chip chip-gain">{{ t('v04.gain', low=('%+d' | format(task.gain)), high=('%+d' | format(task.gain_max))) if task.gain_max is not none else (t('plan.gain', n=task.gain) if task.gain > 0 else t('plan.gain_under_one')) }}</span>{% endif %}
+      {% if plan.score is not none and not task.done %}<span class="chip chip-gain">{{ t('simulation.unknown_effect') if task.gain is none else t('v04.gain', low=('%+d' | format(task.gain)), high=('%+d' | format(task.gain_max))) if task.gain_max is not none else (t('plan.gain', n=task.gain) if task.gain is not none and task.gain > 0 else t('plan.gain_under_one')) }}</span>{% endif %}
     </p>
   </header>
 
@@ -30,7 +30,7 @@
       <p class="eyebrow-ok">{{ t('plan.verified_at', date=date(task.checked_at), time=local_time(task.checked_at)) }}</p>
       <p class="success-text">{{ task.summary }}</p>
     </div>
-    {% if task.gain > 0 %}<strong class="success-gain">+{{ task.gain }}</strong>{% endif %}
+    {% if task.gain is not none and task.gain > 0 %}<strong class="success-gain">+{{ task.gain }}</strong>{% endif %}
   </div>
   {% set next = plan.priorities | rejectattr('done') | first %}
   {% if next %}

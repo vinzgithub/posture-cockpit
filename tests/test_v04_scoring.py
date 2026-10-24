@@ -154,8 +154,8 @@ def test_a_scan_stored_by_0_3_is_never_capped_nor_withheld():
 def test_fixing_the_refused_https_shows_a_range_and_a_provisional_target():
     plan = scoring.plan(_outside(PERFECT_MAIL) + family(Status.FAIL, **BLOCKED_ALL))
     root = next(item for item in plan.priorities if item.finding.check_id == ROOT.id)
-    assert (plan.now.score, root.gain, root.gain_max) == (79, 0, 21)  # floors: 79; all compliant: 100
-    assert plan.provisional and plan.target.score == 79 and plan.target_max is not None
+    assert (plan.now.score, root.gain, root.gain_max) == (79, -13, 21)  # declared worst: 66; all compliant: 100
+    assert plan.provisional and plan.target.score == 66 and plan.target_max is not None
     assert plan.target_max.score == 100
 
 

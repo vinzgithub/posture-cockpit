@@ -106,6 +106,18 @@ class Schedules:
                           "JOIN domains d ON d.id = sc.domain_id WHERE sc.domain_id = ?", (domain_id,))
         return self._schedule(row) if row else None
 
+    def for_domains(self, domain_ids: list[int]) -> dict[int, Schedule]:
+        """Schedule definitions of one authorized page; no refresh or other write."""
+        if len(domain_ids) > 100 or len(domain_ids) != len(set(domain_ids)):
+            raise ValueError("invalid schedule page")
+        if not domain_ids:
+            return {}
+        marks = ",".join("?" * len(domain_ids))
+        rows = self.db.all("SELECT sc.*,d.name AS domain,d.perimeter_id FROM schedules sc "  # noqa: S608
+                           f"JOIN domains d ON d.id=sc.domain_id WHERE sc.domain_id IN ({marks})",
+                           domain_ids)
+        return {row["domain_id"]: self._schedule(row) for row in rows}
+
     def _schedule(self, row: Row) -> Schedule:
         return Schedule(row["domain_id"], row["domain"], row["perimeter_id"], _definition(row), bool(row["enabled"]),
                         row["next_run_at"], row["failures"], row["updated_at"], row["updated_by"])

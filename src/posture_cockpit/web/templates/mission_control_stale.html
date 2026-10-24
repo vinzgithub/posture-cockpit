@@ -1,0 +1,4 @@
+{# Copyright © 2026 Vincent Fournet · SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 -#}
+{% extends "base.html" %}
+{% block title %}{{ t('mc.stale') }} · Posture Cockpit{% endblock %}
+{% block content %}<section class="panel" role="alert"><h1>{{ t('mc.stale') }}</h1><p>{{ t('mc.stale_help') }}</p><a class="btn btn-secondary" href="/domains/{{ domain.name }}/mission-control">{{ t('mc.refresh') }}</a></section>{% endblock %}

@@ -3,7 +3,7 @@
 #
 # Posture Cockpit with Docker Compose (2.24 or later). Installation, in an empty folder:
 #
-#   curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.4.1/compose.yaml
+#   curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.6.0/compose.yaml
 #   docker compose up -d
 #
 # then open http://<server>:8080/setup with the setup code of: docker compose logs posture-cockpit
@@ -15,7 +15,7 @@ name: posture-cockpit  # fixes the volume name, posture-cockpit_posture-cockpit-
 
 services:
   posture-cockpit:
-    image: ${POSTURE_COCKPIT_IMAGE:-ghcr.io/vinzgithub/posture-cockpit:0.5.0}
+    image: ${POSTURE_COCKPIT_IMAGE:-ghcr.io/vinzgithub/posture-cockpit:0.6.0}
     container_name: ${POSTURE_COCKPIT_CONTAINER:-posture-cockpit}
     restart: unless-stopped
     ports:

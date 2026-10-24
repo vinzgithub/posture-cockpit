@@ -11,6 +11,7 @@
   <script src="/static/app.js?v={{ version }}" defer></script>
 </head>
 <body>
+  <a class="skip-link" href="#main">{{ t('nav.skip') }}</a>
   <header class="topbar">
     <div class="topbar-inner">
       <a class="brand" href="/domains">
@@ -19,6 +20,7 @@
       </a>
       {% if user %}
       <nav class="nav" aria-label="{{ t('nav.label') }}">
+        <a href="/dashboard" {% if path == '/dashboard' %}aria-current="page"{% endif %}>{{ t('pf.title') }}</a>
         <a href="/domains" {% if path.startswith('/domains') %}aria-current="page"{% endif %}>{{ t('nav.domains') }}</a>
         <a href="/events" {% if path.startswith('/events') %}aria-current="page"{% endif %}>{{ t('nav.events') }}{% if unread_events %} ({{ unread_events }}){% endif %}</a>
         <a href="/settings" {% if path.startswith('/settings') %}aria-current="page"{% endif %}>{{ t('nav.settings') }}</a>
@@ -35,7 +37,7 @@
     </div>
   </header>
 
-  <main class="page {% block page_class %}{% endblock %}" id="main">
+  <main class="page {% block page_class %}{% endblock %}" id="main" tabindex="-1">
     {% for level, key, params in flashes %}
     <p class="flash flash-{{ level }}" role="status">{{ t(key, **params) }}</p>
     {% endfor %}
