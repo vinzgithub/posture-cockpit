@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.6.0 — en préparation (non publié)
+
+**Mission Control** — comprendre les changements observés et préparer les corrections sans modifier les services analysés.
+
+- Simulation combinée « Et si… ? » de plusieurs remédiations, avec résultats conditionnels et étapes DMARC correctement distinguées.
+- Chronologie des changements basée sur les mesures concluantes ; aucun écart de note inventé lorsqu'une comparaison n'est pas possible.
+- Plan d'action à jour après revérification, avec explication des dépendances HTTPS.
+- Portefeuille multi-domaines filtré par autorisations, trié et paginé ; centre des événements paginé.
+- Meilleure pédagogie de la note dans le PDF et les guides FR/EN.
+- Règles des contrôles observés, schéma SQLite 5 et API existante conservés. Aucun correctif automatique et aucune notification externe.
+
+**Statut :** validation de la phase 5 obtenue en environnement Python isolé selon son rapport ; images Docker multi-architectures, CI distante, accessibilité assistée et décision de publication encore requises. Ne pas utiliser les commandes v0.6.0 avant sa publication.
+
 ## 0.5.0 — 2026-10-20
 
 Published on GitHub and GHCR. Scoring rules, checks, statuses and the keys of the API are unchanged.
