@@ -9,6 +9,7 @@
   {% if scan.perimeter %}<p class="eyebrow"><span class="tag-internal">{{ t('perimeter.internal_audit', name=scan.perimeter) }}</span></p>{% endif %}
   <h1>{{ t('details.title') }} <span class="muted">· {{ scan.domain }}</span></h1>
   <p class="lead">{{ t('details.lead', date=date(scan.started_at), time=local_time(scan.started_at), seconds=(scan.duration_ms / 1000) | round(1), version=scan.version) }}</p>
+  <p><a href="/domains/{{ scan.domain }}/mission-control">{{ t("mc.title") }}</a></p>
   <p class="small"><a href="/domains/{{ scan.domain }}/history">{{ t("details.history") }}</a></p>
   {% if schedule %}<p class="small schedule-line"><span class="tag-schedule">{{ t("schedule.badge") }}</span> {{ schedule_line(schedule) }}</p>{% endif %}
   <p class="coverage {{ 'coverage-partial' if result.partial or result.score is none }}">

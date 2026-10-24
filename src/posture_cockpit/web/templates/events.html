@@ -32,8 +32,11 @@
         <option value="{{ value }}" {% if value == event_period %}selected{% endif %}>{{ t('events.period.' ~ value) }}</option>
       {% endfor %}</select>
     </label>
+    <input type="hidden" name="size" value="{{ size }}">
     <div class="events-filter-action"><button type="submit" class="btn btn-primary">{{ t('events.apply') }}</button></div>
   </form>
+  <p class="muted">{{ t("events.seen_help") }}</p>
+  <p>{{ t("events.total", n=total) }}</p>
   {% if events %}
   <div class="table-scroll"><table class="table">
     <thead><tr>
@@ -43,17 +46,22 @@
     </tr></thead>
     <tbody>
     {% for e in events %}
-    <tr>
+    <tr data-event-id="{{ e.id }}">
       <td>{{ date(e.updated_at) }} {{ local_time(e.updated_at) }}</td>
       <td>{% if e.domain_name %}<a href="/domains/{{ e.domain_name }}/details">{{ e.domain_name }}</a>{% else %}{{ t('events.instance') }}{% endif %}</td>
       <td>{{ t('events.kind.' ~ e.kind) }}{% if e.subject %} · <code>{{ e.subject }}</code>{% endif %}</td>
       <td>{{ t('events.severity.' ~ e.severity) }}</td>
-      <td>{{ t('events.state.' ~ e.state) }}</td>
+      <td>{{ t('events.state.' ~ e.state) }}<br><span class="small">{{ t('events.seen') if user.events_seen_at and e.updated_at <= user.events_seen_at else t('events.unseen') }}</span></td>
     </tr>
     {% endfor %}
     </tbody>
   </table></div>
   {% else %}<p class="muted">{{ t('events.empty') }}</p>{% endif %}
+  <nav class="pf-pagination" aria-label="{{ t('events.pagination') }}">
+    {% if previous_url %}<a class="btn btn-secondary" href="{{ previous_url }}">{{ t('history.previous') }}</a>{% endif %}
+    <span>{{ t('history.page', page=page, pages=pages) }}</span>
+    {% if next_url %}<a class="btn btn-secondary" href="{{ next_url }}">{{ t('history.next') }}</a>{% endif %}
+  </nav>
   {% if unread_events %}
   <form action="/events/seen" method="post">
     <input type="hidden" name="csrf" value="{{ csrf }}">

@@ -13,11 +13,11 @@
       <span class="chip">{{ task.category }}</span>
     </span>
   </span>
-  {% if plan.score is not none %}{# without a score, points would refer to nothing #}
+  {% if plan.score is not none and not task.done %}{# without a score, points would refer to nothing #}
   <span class="task-gain">
     {# A fix whose effect rounds to 0 is "< 1 point", never "+ points" with no number. #}
-    {% if task.gain_max is not none %}<strong>{{ t("v04.gain", low=('%+d' | format(task.gain)), high=('%+d' | format(task.gain_max))) }}</strong>{% elif task.gain > 0 %}<strong>+{{ task.gain }}</strong>{% else %}<strong>{{ t('plan.under_one') }}</strong>{% endif %}
-    {% if task.gain > 1 %}<small>{{ t('plan.gained') if task.done else t('plan.points') }}</small>
+    {% if task.gain is none %}<strong>{{ t("simulation.unknown_effect") }}</strong>{% elif task.gain_max is not none %}<strong>{{ t("v04.gain", low=('%+d' | format(task.gain)), high=('%+d' | format(task.gain_max))) }}</strong>{% elif task.gain is not none and task.gain > 0 %}<strong>+{{ task.gain }}</strong>{% else %}<strong>{{ t('plan.under_one') }}</strong>{% endif %}
+    {% if task.gain is none %}{% elif task.gain > 1 %}<small>{{ t('plan.gained') if task.done else t('plan.points') }}</small>
     {% else %}<small>{{ t('plan.point') }}{% if task.done %} {{ t('plan.gained_one') }}{% endif %}</small>{% endif %}
   </span>
   {% endif %}

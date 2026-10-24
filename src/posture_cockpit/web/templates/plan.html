@@ -31,9 +31,9 @@
         <span class="scorecard-score"><strong>{{ plan.score }}</strong><span>/100</span></span>
       </div>
       {{ grade_pill(plan.grade) }}
-      <span class="scorecard-target">{{ t('plan.target') }}<br><strong>{{ plan.target_score }}{% if plan.target_max_score is not none %}–{{ plan.target_max_score }}{% endif %}{% if plan.target_grade %} · {{ plan.target_grade }}{% endif %}{% if plan.provisional %}<br>{{ t("v04.provisional") }}{% endif %}</strong></span>
+      <span class="scorecard-target">{{ t('plan.target') }}<br><strong>{{ plan.target_score if plan.target_score is not none else t("simulation.unknown_effect") }}{% if plan.target_max_score is not none %}–{{ plan.target_max_score }}{% endif %}{% if plan.target_grade %} · {{ plan.target_grade }}{% endif %}{% if plan.provisional %}<br>{{ t("v04.provisional") }}{% endif %}</strong></span>
     </div>
-    {{ scorebar(plan.score, plan.target_score, t('plan.scorebar_label', score=plan.score, target=plan.target_score)) }}
+    {{ scorebar(plan.score, plan.target_score if plan.target_score is not none else plan.score, t('plan.your_score')) }}
     {% else %}
     <div class="scorecard-top">
       <div>
@@ -59,6 +59,7 @@
 {% if plan.now.blocked %}<section class="panel"><ul class="checks">
 {% for f in plan.scan.current() if f.status.value == 'blocked' %}<li class="status-blocked"><strong>{{ t(f.check_id ~ '.title') }}</strong> — <a href="/domains/{{ plan.domain }}/details#web.https_redirect">{{ t('v04.blocked_by') }}</a></li>{% endfor %}
 </ul></section>{% endif %}
+<p><a class="btn btn-secondary" href="/domains/{{ plan.domain }}/mission-control">{{ t("mc.title") }} — {{ t("mc.open") }}</a></p>
 <div class="plan-grid">
   <aside class="task-list" aria-label="{{ t('plan.tasks') }}">
     {% if plan.priorities %}
@@ -73,6 +74,12 @@
     </details>
     {% endif %}
 
+    {% if plan.completed %}
+    <details class="completed-tasks" {% if selected in plan.completed %}open{% endif %}>
+      <summary class="list-title">{{ t('mc.completed', n=plan.completed | length) }}</summary>
+      {% for task in plan.completed %}{% include "_task_card.html" %}{% endfor %}
+    </details>
+    {% endif %}
     <div class="side-links">
       <a href="/domains/{{ plan.domain }}/history" class="side-link"><span class="side-link-icon ok">↺</span><span><strong>{{ t("details.history") }}</strong><small>{{ t("history.all") }}</small></span></a>
       <a href="/domains/{{ plan.domain }}/details" class="side-link">

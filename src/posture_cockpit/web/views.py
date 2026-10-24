@@ -53,7 +53,7 @@ class TaskView:
     minutes: int
     effort: str         # "easy", "medium" or "delegate"
     effort_label: str
-    gain: int           # points this fix brings to the score
+    gain: int | None    # points this fix brings to the score
     records: list[RecordView] = field(default_factory=list)
     steps: dict[str, list[Step]] = field(default_factory=dict)  # by DNS host id
     message: str = ""
@@ -98,6 +98,7 @@ class PlanView:
     dns_host: str                            # id of the selected host
     detected_host: str                       # name of the detected host, "" if unknown
     nameservers: list[str]
+    completed: list[TaskView] = field(default_factory=list)
     target_max_score: int | None = None
     provisional: bool = False
     headline: str = ""
@@ -107,7 +108,7 @@ class PlanView:
 
     @property
     def tasks(self) -> list[TaskView]:
-        return self.priorities + self.improvements
+        return self.priorities + self.improvements + self.completed
 
     @property
     def score(self) -> int | None:
@@ -119,20 +120,16 @@ class PlanView:
 
     @property
     def target_score(self) -> int | None:
-        """The score once every priority is fixed, never below the current one."""
-        if self.target.score is None or self.now.score is None:
-            return None
-        return self.target.score if self.provisional else max(self.target.score, self.now.score)
+        """Conditional score after the current priority steps; it may be lower or absent."""
+        return self.target.score
 
     @property
     def target_grade(self) -> str | None:
-        if self.target.grade is None or self.now.grade is None:
-            return None
-        return min(self.target.grade, self.now.grade)  # "A" < "B": the better of the two
+        return self.target.grade
 
     @property
     def done_count(self) -> int:
-        return sum(t.done for t in self.priorities)
+        return len(self.completed)
 
 
 def _nameservers(findings: list[Finding]) -> list[str]:
@@ -158,7 +155,7 @@ def dns_host_steps(catalog: Catalog, lang: str, host_id: str, change: DnsChange,
     return steps
 
 
-def task_view(catalog: Catalog, lang: str, scan: Scan, finding: Finding, number: int, gain: int,
+def task_view(catalog: Catalog, lang: str, scan: Scan, finding: Finding, number: int, gain: int | None,
               host_ids: list[str], gain_max: int | None = None) -> TaskView:
     """One item of the plan, in the reader's language."""
     remedy = finding.outcome.remedy
@@ -201,10 +198,12 @@ def gaps(catalog: Catalog, lang: str, domain: str, findings: list[Finding]) -> l
             for f in findings if f.status is Status.ERROR]
 
 
-def plan_view(catalog: Catalog, lang: str, scan: Scan, domain_row: Row) -> PlanView:
+def plan_view(catalog: Catalog, lang: str, scan: Scan, domain_row: Row,
+              registry: scoring.VerdictRegistry | None = None) -> PlanView:
     findings = scan.findings
     current = scan.current()
-    plan = scoring.plan(findings)
+    plan = scoring.plan(current, registry)
+    original = scoring.plan(findings, registry)
     nameservers = _nameservers(findings)
     detected = providers.detect(nameservers)
     host_ids = [h.id for h in providers.DNS_HOSTS] + [providers.OTHER.id]
@@ -219,22 +218,25 @@ def plan_view(catalog: Catalog, lang: str, scan: Scan, domain_row: Row) -> PlanV
 
     priorities = views(plan.priorities, 1)
     improvements = views(plan.improvements, len(priorities) + 1)
+    completed = views([item for item in original.items
+                       if item.finding.check_id in scan.rechecks
+                       and scan.rechecks[item.finding.check_id].finding.status is Status.OK],
+                      len(priorities) + len(improvements) + 1)
+    for task in completed:
+        # Original hypothetical gains are not proof of points actually earned.
+        task.gain = task.gain_max = None
     now = scan.assessment()
     counts = scoring.counts(current)
     view = PlanView(
-        domain=scan.domain, scan=scan, now=now, start=plan.now, target=plan.target, provisional=plan.provisional,
+        domain=scan.domain, scan=scan, now=now, start=original.now, target=plan.target, provisional=plan.provisional,
         target_max_score=plan.target_max.score if plan.target_max is not None else None,
         grade_label=catalog.text(lang, scoring.grade_label(now.grade)) if now.grade else "",
-        priorities=priorities, improvements=improvements,
+        priorities=priorities, improvements=improvements, completed=completed,
         counts={status.value: counts.get(status, 0) for status in Status},
         categories=[(cat, catalog.text(lang, f"category.{cat}"), a) for cat, a in scoring.by_category(current).items()],
         gaps=gaps(catalog, lang, scan.domain, current),
         dns_hosts=hosts, dns_host=selected, detected_host=detected.name if detected else "", nameservers=nameservers,
     )
-    if not now.evaluated_ok:
-        # Without a score, "+11 points" would refer to nothing.
-        for task in view.tasks:
-            task.gain = 0
     _tell_the_story(catalog, lang, view)
     return view
 
@@ -244,7 +246,7 @@ def _tell_the_story(catalog: Catalog, lang: str, view: PlanView) -> None:
     def text(key: str, /, **params: object) -> str:
         return catalog.text(lang, key, params)
 
-    total = len(view.priorities)
+    total = len(view.priorities) + view.done_count
     done = view.done_count
     remaining = total - done
     minutes = sum(t.minutes for t in view.priorities if not t.done)
