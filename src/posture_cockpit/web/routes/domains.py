@@ -107,7 +107,7 @@ async def plan(request: Request, name: str, task: str = "", user: Row = Depends(
     scan = s.scans.latest(domain["id"])
     if scan is None:
         return redirect("/domains")
-    view = plan_view(s.catalog, lang_of(request), scan, domain)
+    view = plan_view(s.catalog, lang_of(request), scan, domain, s.registry)
     # The task shown first: the one asked for, else the first priority not done yet.
     selected = next((x for x in view.tasks if x.check_id == task), None)
     selected = selected or next((x for x in view.priorities if not x.done), None) or next(iter(view.tasks), None)
