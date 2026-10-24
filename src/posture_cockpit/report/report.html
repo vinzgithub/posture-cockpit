@@ -51,7 +51,7 @@
     <div class="v04-notes">
       {% if result.undetermined %}<p class="v04-undetermined">{{ t('v04.undetermined_count', n=scan.nonconclusive()) }}</p>{% endif %}
       {% for reason in result.cap_reasons %}<p>{{ t('v04.cap.' ~ reason) }}</p>{% endfor %}
-      {% if plan.provisional %}<p>{{ t('v04.provisional') }} : {{ plan.target.score }}–{{ plan.target_max.score }}/100</p>{% endif %}
+      {% if plan.provisional and plan.target.score is not none and plan.target_max.score is not none %}<p>{{ t('v04.provisional') }} : {{ plan.target.score }}–{{ plan.target_max.score }}/100</p>{% endif %}
     </div>
     <p class="section-label">{{ t('report.diagnosis') }}</p>
     <p class="diagnosis">{{ diagnosis }}{% if conclusion %} <em>{{ conclusion }}</em>{% endif %}</p>

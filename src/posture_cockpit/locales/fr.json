@@ -339,7 +339,7 @@
   "report.diagnosis.issues": "Sur {total:contrôle évalué|contrôles évalués}, {ok:est conforme|sont conformes}, {fail:demande une correction rapide|demandent une correction rapide} et {warn:peut être amélioré|peuvent être améliorés}.",
   "report.diagnosis.issues_no_warn": "Sur {total:contrôle évalué|contrôles évalués}, {ok:est conforme|sont conformes} et {fail:demande une correction rapide|demandent une correction rapide}.",
   "report.diagnosis.issues_no_fail": "Sur {total:contrôle évalué|contrôles évalués}, {ok:est conforme|sont conformes} et {warn:peut être amélioré|peuvent être améliorés}.",
-  "report.diagnosis.plan": "{n:correction|corrections}, environ {minutes:minute|minutes} au total, suffisent pour atteindre la note {grade}.",
+  "report.diagnosis.plan": "Après {n:correction|corrections} (environ {minutes:minute|minutes}), la note {grade} pourrait être atteinte. Une nouvelle analyse doit confirmer le résultat.",
   "report.diagnosis.plan_partial": "Après {n:correction|corrections} (environ {minutes:minute|minutes} au total), la note {grade} pourrait être atteinte sur les contrôles évalués. Projection à confirmer par une nouvelle analyse : la couverture actuelle n’est que de {coverage} %.",
   "report.diagnosis.clean": "Sur {total:contrôle évalué|contrôles évalués}, {ok:est conforme|sont conformes} et aucun ne demande de correction urgente. {warn:point peut encore être amélioré|points peuvent encore être améliorés}.",
   "report.who.you": "vous-même",
@@ -778,5 +778,13 @@
   "events.pagination": "Pages des événements",
   "events.total": "{n} événement(s) correspondant(s)",
   "report.scope_internet": "Mesuré : les contrôles DNS, mail et web/TLS applicables depuis Internet ; hors couverture : systèmes internes, comptes et applications non testés. Cette note ne représente pas toute la sécurité de votre SI.",
-  "report.scope_internal": "Mesuré : les contrôles applicables aux cibles autorisées de ce périmètre interne ; hors couverture : autres systèmes, comptes et applications non testés. Cette note ne représente pas toute la sécurité de votre SI."
+  "report.scope_internal": "Mesuré : les contrôles applicables aux cibles autorisées de ce périmètre interne ; hors couverture : autres systèmes, comptes et applications non testés. Cette note ne représente pas toute la sécurité de votre SI.",
+  "report.diagnosis.plan_inconclusive": "{n:correction|corrections} à examiner en priorité. Estimation du plan complet non concluante ; une nouvelle analyse est nécessaire.",
+  "report.diagnosis.plan_conditional": "Après {n:correction|corrections}, si les contrôles deviennent mesurables, les scénarios calculés vont de {low} à {high}/100. Une nouvelle analyse peut rester non concluante.",
+  "report.diagnosis.plan_lower": "{n:correction|corrections} à examiner. Le scénario calculé est inférieur au score actuel ; il ne constitue pas un objectif garanti. Une nouvelle analyse est nécessaire.",
+  "projection.estimated": "Projection indicative à confirmer par une nouvelle analyse.",
+  "projection.inconclusive": "Estimation du plan complet non concluante.",
+  "projection.conditional": "Scénarios conditionnels si les contrôles deviennent mesurables ; ces bornes ne garantissent pas la prochaine note.",
+  "projection.lower": "Le scénario calculé est inférieur au score actuel ; il ne constitue pas un objectif garanti.",
+  "projection.partial": "Projection à confirmer par une nouvelle analyse : la couverture actuelle n’est que de {coverage} %."
 }

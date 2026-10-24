@@ -107,9 +107,14 @@ def report_context(catalog: Catalog, lang: str, scan: Scan, author: str = "", tz
         diagnosis = t("report.diagnosis.issues" if numbers["fail"] and numbers["warn"]
                       else "report.diagnosis.issues_no_warn" if numbers["fail"] else "report.diagnosis.issues_no_fail",
                       **numbers)
-        conclusion = t("report.diagnosis.plan_partial" if result.partial else "report.diagnosis.plan",
-                       n=len(prescriptions), minutes=minutes, grade=plan.target.grade,
+        key = ("report.diagnosis.plan_partial" if result.partial else "report.diagnosis.plan")
+        if plan.target_kind != "estimated":
+            key = "report.diagnosis.plan_" + plan.target_kind
+        conclusion = t(key, n=len(prescriptions), minutes=minutes, grade=plan.target.grade,
+                       low=plan.target.score, high=plan.target_max.score if plan.target_max else None,
                        coverage=result.coverage_percent)
+        if result.partial and plan.target_kind != "estimated":
+            conclusion += " " + t("projection.partial", coverage=result.coverage_percent)
     else:
         diagnosis = t("report.diagnosis.clean" if numbers["warn"] else "report.diagnosis.all_ok", **numbers)
         conclusion = ""

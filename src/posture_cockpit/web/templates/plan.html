@@ -45,6 +45,7 @@
     {% endif %}
     {{ indicators(plan.now, plan.scan.addresses()) }}
     <p class="scorecard-note">{{ plan.score_note }}</p>
+    {% if plan.priorities %}<p class="small">{{ t('projection.' ~ plan.target_kind) }}</p>{% endif %}
     {% if plan.gaps %}
     <details class="gaps">
       <summary>{{ t('plan.gaps', n=plan.gaps | length) }}</summary>

@@ -339,7 +339,7 @@
   "report.diagnosis.issues": "Out of {total:check evaluated|checks evaluated}, {ok:is compliant|are compliant}, {fail:needs a quick fix|need a quick fix} and {warn:can be improved|can be improved}.",
   "report.diagnosis.issues_no_warn": "Out of {total:check evaluated|checks evaluated}, {ok:is compliant|are compliant} and {fail:needs a quick fix|need a quick fix}.",
   "report.diagnosis.issues_no_fail": "Out of {total:check evaluated|checks evaluated}, {ok:is compliant|are compliant} and {warn:can be improved|can be improved}.",
-  "report.diagnosis.plan": "{n:fix|fixes}, about {minutes:minute|minutes} in all, are enough to reach grade {grade}.",
+  "report.diagnosis.plan": "After {n:fix|fixes} (about {minutes:minute|minutes}), grade {grade} could be reached. A new scan must confirm the result.",
   "report.diagnosis.plan_partial": "{n:fix|fixes}, about {minutes:minute|minutes} in all, could bring the evaluated checks to grade {grade}. This projection must be confirmed by a new scan: current coverage is only {coverage}%.",
   "report.diagnosis.clean": "Out of {total:check evaluated|checks evaluated}, {ok:is compliant|are compliant} and none needs an urgent fix. {warn:point|points} can still be improved.",
   "report.who.you": "yourself",
@@ -778,5 +778,13 @@
   "events.pagination": "Event pages",
   "events.total": "{n} matching event(s)",
   "report.scope_internet": "Measured: applicable DNS, mail and web/TLS checks from the Internet; not covered: internal systems, accounts and untested applications. This score does not represent the security of your whole information system.",
-  "report.scope_internal": "Measured: applicable checks on authorized targets in this internal perimeter; not covered: other systems, accounts and untested applications. This score does not represent the security of your whole information system."
+  "report.scope_internal": "Measured: applicable checks on authorized targets in this internal perimeter; not covered: other systems, accounts and untested applications. This score does not represent the security of your whole information system.",
+  "report.diagnosis.plan_inconclusive": "{n:fix|fixes} to review first. Full-plan estimate inconclusive; a new scan is needed.",
+  "report.diagnosis.plan_conditional": "After {n:fix|fixes}, if the checks become measurable, calculated scenarios range from {low} to {high}/100. A new scan may still be inconclusive.",
+  "report.diagnosis.plan_lower": "{n:fix|fixes} to review. The calculated scenario is below the current score; it is not a guaranteed target. A new scan is needed.",
+  "projection.estimated": "Indicative projection to confirm with a new scan.",
+  "projection.inconclusive": "Full-plan estimate inconclusive.",
+  "projection.conditional": "Conditional scenarios if checks become measurable; these bounds do not guarantee the next score.",
+  "projection.lower": "The calculated scenario is below the current score; it is not a guaranteed target.",
+  "projection.partial": "This projection must be confirmed by a new scan: current coverage is only {coverage}%."
 }
