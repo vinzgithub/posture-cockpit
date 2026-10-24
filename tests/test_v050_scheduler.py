@@ -415,7 +415,9 @@ def test_heartbeat_and_status(pc):
     assert status(pc.s, pc.scheduler, pc.clock())["state"] == "off"  # this instance: scheduler off
     pc.tick()
     beat = json.loads(pc.s.db.get_meta("scheduler_heartbeat"))
-    assert beat["at"] == iso(pc.clock()) and beat["version"] == "0.5.0"
+    from posture_cockpit import __version__
+
+    assert beat["at"] == iso(pc.clock()) and beat["version"] == __version__
     assert status(pc.s, None, pc.clock() + timedelta(minutes=2))["state"] == "elsewhere"
     assert status(pc.s, None, pc.clock() + timedelta(minutes=4))["state"] == "off"
     pc.scheduler.leader = True
