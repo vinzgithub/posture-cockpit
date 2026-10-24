@@ -61,10 +61,15 @@ def _known_expectation(finding: Finding) -> tuple[bool, Status | None]:
             if evidence.get("mode") == "testing":
                 return True, Status.WARN
             age = evidence.get("max_age")
-            if not isinstance(age, int):
+            if type(age) is not int:
                 return True, None
             return True, Status.WARN if age < 86400 else Status.OK
-        if key in {"mail.mta_sts.testing", "mail.mta_sts.short_max_age"}:
+        if key == "mail.mta_sts.testing":
+            age = finding.outcome.evidence.get("max_age")
+            if type(age) is not int:
+                return True, None
+            return True, Status.WARN if age < 86400 else Status.OK
+        if key == "mail.mta_sts.short_max_age":
             return True, Status.OK
         return True, None
     if finding.check_id == "web.csp" and remedy.message == "web.csp.message":
@@ -87,12 +92,26 @@ def _known_expectation(finding: Finding) -> tuple[bool, Status | None]:
             if not isinstance(records, (list, tuple)) or len(records) != 1 or not isinstance(records[0], str):
                 return True, None
             return True, Status.WARN if parse_spf(records[0]).uses_ptr else Status.OK
+    if finding.check_id == "tls.protocols" and key == "tls.protocols.obsolete":
+        support = finding.outcome.evidence.get("accepted")
+        if not isinstance(support, dict) or not support or any(
+            not isinstance(answers, dict) for answers in support.values()
+        ):
+            return True, None
+        # Disabling the last protocols may remove HTTPS entirely on an address.
+        if any(a.get("TLSv1.2") is False and a.get("TLSv1.3") is False for a in support.values()):
+            return True, None
+        if all(a.get("TLSv1.3") is True for a in support.values()):
+            return True, Status.OK
+        if any(a.get("TLSv1.3") is False for a in support.values()):
+            return True, Status.WARN
+        return True, None
     ordinary = {
         "mail.spf": {"missing", "ptr"},
         "mail.dkim": {"weak_key", "unreadable", "short_key"},
         "mail.tls_rpt": {"missing", "invalid"},
         "tls.certificate": {"expired", "untrusted", "expires_soon", "expires"},
-        "tls.protocols": {"obsolete", "no_tls13"},
+        "tls.protocols": {"no_tls13"},
         "tls.key": {"weak"},
         "web.hsts": {"missing", "invalid", "disabled", "short"},
         "web.framing": {"missing", "permissive", "obsolete"},
