@@ -11,6 +11,7 @@
   <script src="/static/app.js?v={{ version }}" defer></script>
 </head>
 <body>
+  <a class="skip-link" href="#main">{{ t('nav.skip') }}</a>
   <header class="topbar">
     <div class="topbar-inner">
       <a class="brand" href="/domains">
@@ -36,7 +37,7 @@
     </div>
   </header>
 
-  <main class="page {% block page_class %}{% endblock %}" id="main">
+  <main class="page {% block page_class %}{% endblock %}" id="main" tabindex="-1">
     {% for level, key, params in flashes %}
     <p class="flash flash-{{ level }}" role="status">{{ t(key, **params) }}</p>
     {% endfor %}

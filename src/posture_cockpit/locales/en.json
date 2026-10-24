@@ -1,6 +1,7 @@
 {
   "app.tagline": "Passive security check of a domain, with a step-by-step plan of fixes.",
   "nav.label": "Main navigation",
+  "nav.skip": "Skip to main content",
   "nav.domains": "Domains",
   "nav.settings": "Settings",
   "nav.admin": "Administration",

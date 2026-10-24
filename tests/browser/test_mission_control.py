@@ -70,3 +70,26 @@ def test_form_rejects_scan_created_after_page_was_loaded(browser, port):
     expect(page.get_by_role("heading", name="L’état a changé", exact=True)).to_be_visible()
     expect(page.get_by_role("link", name="Rafraîchir la fiche", exact=True)).to_be_visible()
     context.close()
+
+
+@pytest.mark.parametrize(("language", "label", "width"), [
+    ("fr", "Aller au contenu principal", 390),
+    ("en", "Skip to main content", 1280),
+])
+def test_skip_navigation_keyboard_accessible_without_javascript(browser, port, language, label, width):
+    """The first keyboard shortcut is visible when focused and bypasses the navigation."""
+    context = browser.new_context(base_url=f"http://127.0.0.1:{port}", java_script_enabled=False,
+                                  viewport={"width": width, "height": 900})
+    page = context.new_page()
+    page.goto("/login")
+    if page.locator("html").get_attribute("lang") != language:
+        page.locator(f"form.lang-switch button[value={language}]").click()
+    skip = page.get_by_role("link", name=label, exact=True)
+    expect(skip).to_have_attribute("href", "#main")
+    skip.focus()
+    expect(skip).to_be_focused()
+    expect(skip).to_have_css("top", "8px")
+    skip.press("Enter")
+    assert page.evaluate("location.hash") == "#main"
+    expect(page.locator("main#main")).to_be_focused()
+    context.close()

@@ -1,6 +1,7 @@
 {
   "app.tagline": "Contrôle passif de la sécurité d'un domaine, avec un plan de corrections pas à pas.",
   "nav.label": "Navigation principale",
+  "nav.skip": "Aller au contenu principal",
   "nav.domains": "Domaines",
   "nav.settings": "Réglages",
   "nav.admin": "Administration",

@@ -105,6 +105,10 @@ small, .small { font-size: 13px; }
 .muted { color: var(--muted); }
 .right { text-align: right; }
 .mt { margin-top: 20px; }
+.skip-link { position: absolute; z-index: 100; left: 12px; top: -120px;
+  padding: 10px 16px; border-radius: 8px; background: var(--surface);
+  color: var(--ink); border: 2px solid var(--accent); font-weight: 700; }
+.skip-link:focus { top: 8px; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 [hidden] { display: none !important; }
 :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
