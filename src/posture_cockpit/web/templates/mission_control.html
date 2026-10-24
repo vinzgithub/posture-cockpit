@@ -98,6 +98,7 @@
   <p class="small muted">{{ t('mc.not_prediction') }}</p>
 </section>{% endif %}
 
+{% if plan.unknown %}<aside class="flash flash-warn"><p>{{ t('projection.excluded') }}</p><ul>{% for cid in plan.unknown %}<li>{{ t(cid ~ '.title') }}</li>{% endfor %}</ul></aside>{% endif %}
 <section class="panel" aria-labelledby="mc-actions">
   <h2 id="mc-actions">{{ t('mc.active_actions') }}</h2>
   {% if candidates %}<ol>{% for candidate in candidates %}<li><a href="/domains/{{ scan.domain }}?task={{ candidate.task.check_id }}#task">{{ candidate.task.title }}</a> — {{ t('status.' ~ candidate.observed.value) }}</li>{% endfor %}</ol>{% else %}<p>{{ t('mc.no_candidates') }}</p>{% endif %}

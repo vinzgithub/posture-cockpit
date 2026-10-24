@@ -486,6 +486,11 @@ class Plan:
     target_max: Assessment | None = None
 
     @property
+    def unknown(self) -> tuple[str, ...]:
+        """Actions excluded only from estimable gains, never from the complete target."""
+        return tuple(i.finding.check_id for i in self.items if expected_status(i.finding) is None)
+
+    @property
     def target_kind(self) -> str:
         """Presentation only: never change the assessments to make a target reassuring."""
         return target_kind(self.now, self.target, self.provisional)
@@ -511,6 +516,9 @@ def _ranked(findings: Sequence[Finding], status: Status, selected: list[str],
     items = []
     before = simulate(findings, selected, registry)
     for f in candidates:
+        if expected_status(f) is None:
+            items.append(PlanItem(f, None))
+            continue
         selected.append(f.check_id)
         after = simulate(findings, selected, registry)
         worst_delta = _delta(before.worst, after.worst)
@@ -530,7 +538,7 @@ def plan(findings: Sequence[Finding], registry: VerdictRegistry | None = None) -
     registry = registry if registry is not None else _builtin_registry()
     selected: list[str] = []
     priorities = _ranked(findings, Status.FAIL, selected, registry)
-    target = simulate(findings, selected, registry)
+    target = simulate(findings, [item.finding.check_id for item in priorities], registry)
     improvements = _ranked(findings, Status.WARN, selected, registry)
     return Plan(priorities, improvements, target.now, target.worst,
                 target.best if target.conditional or target.best != target.worst else None)

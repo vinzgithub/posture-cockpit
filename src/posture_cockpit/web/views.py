@@ -101,6 +101,7 @@ class PlanView:
     completed: list[TaskView] = field(default_factory=list)
     target_max_score: int | None = None
     provisional: bool = False
+    unknown: tuple[str, ...] = ()
     headline: str = ""
     subline: str = ""
     score_note: str = ""
@@ -233,7 +234,7 @@ def plan_view(catalog: Catalog, lang: str, scan: Scan, domain_row: Row,
     counts = scoring.counts(current)
     view = PlanView(
         domain=scan.domain, scan=scan, now=now, start=original.now, target=plan.target, provisional=plan.provisional,
-        target_max_score=plan.target_max.score if plan.target_max is not None else None,
+        target_max_score=plan.target_max.score if plan.target_max is not None else None, unknown=plan.unknown,
         grade_label=catalog.text(lang, scoring.grade_label(now.grade)) if now.grade else "",
         priorities=priorities, improvements=improvements, completed=completed,
         counts={status.value: counts.get(status, 0) for status in Status},
