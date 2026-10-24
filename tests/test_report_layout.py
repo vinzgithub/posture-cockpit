@@ -159,3 +159,27 @@ def test_a_gain_is_never_cut_across_two_lines(catalog, language):
                 texts[id(box.element)] = "".join(box.element.itertext())
     assert len(lines) >= 10  # the three prescriptions and the seven improvements of the demo
     assert [texts[k] for k, where in lines.items() if len(where) > 1] == []
+
+
+@pytest.mark.parametrize('language', ['fr', 'en'])
+@pytest.mark.parametrize('internal', [False, True])
+@pytest.mark.parametrize('world', [healthy, redirect_elsewhere_https_refused,
+                                   lambda: demo_data(DEMO_DOMAIN)])
+def test_t19_scope_and_entire_summary_stay_on_first_page(catalog, language, internal, world):
+    from dataclasses import replace
+
+    data = world()
+    scan = _scan(data)
+    if world.__name__ == '<lambda>':
+        findings = list(run(data, domain=DEMO_DOMAIN).values())
+        scan = replace(scan, domain=DEMO_DOMAIN, findings=findings)
+    scan = replace(scan, perimeter='Private perimeter' if internal else '')
+    context = report_context(catalog, language, scan)
+    document = _layout(context)
+    assert set(_pages_of(document, 'scope-limit')) == {1}
+    assert set(_pages_of(document, 'signature')) == {1}
+    assert set(_pages_of(document, 'masthead')) == {1}
+    assert not _pages_of(document, 'p-body') or set(_pages_of(document, 'p-body')) == {1}
+    text = ' '.join(box.text for box in _boxes(document.pages[0]._page_box) if hasattr(box, 'text'))
+    expected = catalog.text(language, 'report.scope_internal' if internal else 'report.scope_internet')
+    assert ' '.join(expected.split()) in ' '.join(text.split())

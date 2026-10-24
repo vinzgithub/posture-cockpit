@@ -3,6 +3,7 @@
 """The engine: domain names, check execution, extensions, scoring."""
 
 import asyncio
+from dataclasses import replace
 
 import pytest
 
@@ -154,7 +155,8 @@ def test_score_weights_and_ignores_unchecked():
     findings = [finding("a", Status.OK, 6), finding("b", Status.WARN, 2), finding("c", Status.FAIL, 2),
                 finding("d", Status.INFO, 9), finding("e", Status.NA, 9)]
     assert scoring.score(findings) == 70  # (6 + 1 + 0) / 10: the weights of 0.1.0, unchanged
-    assert scoring.score(findings, fixed={"c"}) == 90
+    projected = [replace(f, outcome=ok("hypothesis")) if f.check_id == "c" else f for f in findings]
+    assert scoring.assess(projected).score == 90
     assert scoring.score([]) is None      # nothing evaluated: no score at all
 
 
@@ -234,7 +236,8 @@ def test_categories_are_assessed_separately():
 
 
 def test_findings_round_trip_through_json():
-    original = Finding("mail.dmarc", "mail", 10, fail("mail.dmarc.missing", Remedy(10, Effort.EASY), {"a": [1]}, n=2))
+    original = Finding("mail.dmarc", "mail", 10,
+                       fail("mail.dmarc.missing", Remedy(10, Effort.EASY, expect=Status.WARN), {"a": [1]}, n=2))
     copy = Finding.from_stored("mail.dmarc", "mail", 10, "fail", original.outcome_json())
     assert copy == original
     stored = Finding("x", "dns", 1, warn("w")).outcome_json()

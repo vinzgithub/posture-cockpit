@@ -114,7 +114,9 @@ def test_a_one_point_fix_is_singular(client, world):
 def _story(start, now, target, priorities):
     view = views.PlanView(
         domain=DOMAIN, scan=SimpleNamespace(findings=[]), now=now, start=start, target=target, grade_label="",
-        priorities=priorities, improvements=[], counts={}, categories=[], gaps=[], dns_hosts=[], dns_host="",
+        priorities=[task for task in priorities if not task.done],
+        completed=[task for task in priorities if task.done],
+        improvements=[], counts={}, categories=[], gaps=[], dns_hosts=[], dns_host="",
         detected_host="", nameservers=[])
     views._tell_the_story(CATALOG, "fr", view)
     return view

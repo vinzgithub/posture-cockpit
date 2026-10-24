@@ -50,7 +50,8 @@ def test_a_resolver_giving_empty_answers_is_not_mistaken_for_missing_records(sig
 def test_plan_of_the_demo_domain(signed_in):
     scan(signed_in, DEMO)
     page = signed_in.get(f"/domains/{DEMO}").text
-    assert "3 corrections pour passer de C à A" in page
+    # MC-3: the proposed DMARC first step remains monitoring, so the target is B.
+    assert "3 corrections pour passer de C à B" in page
     # the priorities, in order, with their gains
     titles = re.findall(r'<span class="task-title">([^<]+)</span>', page)
     assert titles[:3] == ["Renouveler le certificat du site", "Publier une politique DMARC",
@@ -172,6 +173,7 @@ def test_verify_after_a_fix(signed_in, world):
     post(signed_in, f"/domains/{DEMO}/verify/mail.dmarc", f"/domains/{DEMO}")
     page = signed_in.get(f"/domains/{DEMO}").text
     assert "C&#39;est corrigé : +" in page
+    # The current plan now uses the confirmed reject policy, rather than the initial p=none step.
     assert "Plus que 2 corrections avant la note A" in page
     assert re.search(r'class="task-card is-done"[^>]*data-task="mail.dmarc"', page)
 
