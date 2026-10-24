@@ -40,3 +40,18 @@ def test_target_is_not_a_promise_or_none(client, lang, unknown):
         assert context['plan'].target_max.score == 100
         assert '66' in context['conclusion'] and '100' in context['conclusion']
         assert ('mesurables' if lang == 'fr' else 'measurable') in context['conclusion']
+
+
+@pytest.mark.parametrize('lang', ['fr', 'en'])
+def test_excluded_actions_are_named_in_web_and_pdf(client, lang):
+    s, _, sid, fs = seed(client)
+    f = next(f for f in fs if f.check_id == 'dns.dnssec')
+    s.scans.save_recheck(sid, replace(f, outcome=Outcome(
+        Status.FAIL, 'dns.dnssec.broken', remedy=Remedy(5, Effort.MEDIUM))))
+    post(client, '/lang', '/', lang=lang, back='/')
+    warning = s.catalog.text(lang, 'projection.excluded')
+    for page in [client.get(f'/domains/{DOMAIN}').text,
+                 client.get(f'/domains/{DOMAIN}/mission-control').text,
+                 render_html(s.catalog, lang, s.scans.get(sid))]:
+        assert warning in page
+        assert 'DNSSEC' in page

@@ -786,5 +786,6 @@
   "projection.inconclusive": "Full-plan estimate inconclusive.",
   "projection.conditional": "Conditional scenarios if checks become measurable; these bounds do not guarantee the next score.",
   "projection.lower": "The calculated scenario is below the current score; it is not a guaranteed target.",
-  "projection.partial": "This projection must be confirmed by a new scan: current coverage is only {coverage}%."
+  "projection.partial": "This projection must be confirmed by a new scan: current coverage is only {coverage}%.",
+  "projection.excluded": "Estimated gains exclude actions with an unknown effect, which remain in their observed state. The full-plan effect remains unknown."
 }

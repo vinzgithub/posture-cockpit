@@ -786,5 +786,6 @@
   "projection.inconclusive": "Estimation du plan complet non concluante.",
   "projection.conditional": "Scénarios conditionnels si les contrôles deviennent mesurables ; ces bornes ne garantissent pas la prochaine note.",
   "projection.lower": "Le scénario calculé est inférieur au score actuel ; il ne constitue pas un objectif garanti.",
-  "projection.partial": "Projection à confirmer par une nouvelle analyse : la couverture actuelle n’est que de {coverage} %."
+  "projection.partial": "Projection à confirmer par une nouvelle analyse : la couverture actuelle n’est que de {coverage} %.",
+  "projection.excluded": "Gains estimés hors actions à effet non déterminable, maintenues dans leur état observé. L’effet du plan complet reste inconnu."
 }

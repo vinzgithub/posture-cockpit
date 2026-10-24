@@ -54,6 +54,7 @@
       {% if plan.provisional and plan.target.score is not none and plan.target_max.score is not none %}<p>{{ t('v04.provisional') }} : {{ plan.target.score }}–{{ plan.target_max.score }}/100</p>{% endif %}
     </div>
     <p class="section-label">{{ t('report.diagnosis') }}</p>
+    {% if plan.unknown %}<p class="small">{{ t('projection.excluded') }} {% for cid in plan.unknown %}{{ t(cid ~ '.title') }}{% if not loop.last %}, {% endif %}{% endfor %}</p>{% endif %}
     <p class="diagnosis">{{ diagnosis }}{% if conclusion %} <em>{{ conclusion }}</em>{% endif %}</p>
 
     {% if prescriptions %}

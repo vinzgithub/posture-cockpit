@@ -61,6 +61,7 @@
 {% for f in plan.scan.current() if f.status.value == 'blocked' %}<li class="status-blocked"><strong>{{ t(f.check_id ~ '.title') }}</strong> — <a href="/domains/{{ plan.domain }}/details#web.https_redirect">{{ t('v04.blocked_by') }}</a></li>{% endfor %}
 </ul></section>{% endif %}
 <p><a class="btn btn-secondary" href="/domains/{{ plan.domain }}/mission-control">{{ t("mc.title") }} — {{ t("mc.open") }}</a></p>
+{% if plan.unknown %}<aside class="flash flash-warn"><p>{{ t('projection.excluded') }}</p><ul>{% for cid in plan.unknown %}<li>{{ t(cid ~ '.title') }}</li>{% endfor %}</ul></aside>{% endif %}
 <div class="plan-grid">
   <aside class="task-list" aria-label="{{ t('plan.tasks') }}">
     {% if plan.priorities %}
