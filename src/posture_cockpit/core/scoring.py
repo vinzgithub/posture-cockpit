@@ -486,6 +486,11 @@ class Plan:
     target_max: Assessment | None = None
 
     @property
+    def target_kind(self) -> str:
+        """Presentation only: never change the assessments to make a target reassuring."""
+        return target_kind(self.now, self.target, self.provisional)
+
+    @property
     def items(self) -> list[PlanItem]:
         return self.priorities + self.improvements
 
@@ -529,3 +534,14 @@ def plan(findings: Sequence[Finding], registry: VerdictRegistry | None = None) -
     improvements = _ranked(findings, Status.WARN, selected, registry)
     return Plan(priorities, improvements, target.now, target.worst,
                 target.best if target.conditional or target.best != target.worst else None)
+
+
+def target_kind(now: Assessment, target: Assessment, provisional: bool) -> str:
+    """Classification shared by report and web; a letter alone is not a promise."""
+    if target.score is None or target.grade is None:
+        return "inconclusive"
+    if provisional:
+        return "conditional"
+    if now.score is not None and target.score < now.score:
+        return "lower"
+    return "estimated"

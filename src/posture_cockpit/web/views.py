@@ -128,6 +128,10 @@ class PlanView:
         return self.target.grade
 
     @property
+    def target_kind(self) -> str:
+        return scoring.target_kind(self.now, self.target, self.provisional)
+
+    @property
     def done_count(self) -> int:
         return len(self.completed)
 
@@ -263,17 +267,18 @@ def _tell_the_story(catalog: Catalog, lang: str, view: PlanView) -> None:
     elif done == 0:
         # The scan itself may have had no score (too little evaluated) and gained one through
         # rechecks: then there is no starting point to quote, and no projection either.
-        start_grade, end_grade = view.start.grade, view.target_grade
-        target, start = view.target_score, view.start.score
-        if start_grade and end_grade and start_grade != end_grade:
+        start_grade, end_grade = view.now.grade, view.target_grade
+        target, start = view.target_score, view.now.score
+        if view.target_kind == "estimated" and start_grade and end_grade and start_grade != end_grade:
             view.headline = text("plan.headline.start", n=total, start=start_grade, end=end_grade)
-        elif start is not None and target is not None and target > start:
+        elif view.target_kind == "estimated" and start is not None and target is not None and target > start:
             view.headline = text("plan.headline.start_points", n=total, points=target - start)
         else:
             view.headline = text("plan.headline.start_plain", n=total)
         view.subline = text("plan.subline.start", minutes=minutes)
     elif remaining:
-        view.headline = (text("plan.headline.progress", n=remaining, grade=view.target_grade) if view.target_grade
+        view.headline = (text("plan.headline.progress", n=remaining, grade=view.target_grade)
+                         if view.target_grade and view.target_kind == "estimated"
                          else text("plan.headline.progress_plain", n=remaining))
         view.subline = (text("plan.subline.progress", start=view.start.score, score=now.score)
                         if view.start.score is not None else text("plan.subline.progress_plain", score=now.score))
