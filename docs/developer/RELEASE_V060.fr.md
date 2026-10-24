@@ -1,6 +1,8 @@
 # Dossier de livraison — Posture Cockpit v0.6.0 « Mission Control »
 
-> **CANDIDAT NON PUBLIÉ — état au 24 octobre 2026.** Ce document prépare l'intégration, mais ne vaut ni validation finale, ni feu vert pour la fusion, le tag, GHCR ou la production.
+> **PUBLIÉE LE 24 OCTOBRE 2026.** PR #31 fusionnée par squash (`2241e4b`), GitHub Release `v0.6.0` et images GHCR AMD64/ARM64 publiées par le workflow manuel [#78](https://github.com/vinzgithub/posture-cockpit/actions/runs/40090360219). Les trois tags `0.6.0`, `0.6`, `latest` pointent vers le même digest `sha256:70da24128abef742dc4649235d662a37596ed786a322d840c85aa02afc2fe633`. Tests GitHub, navigateur, Docker, migrations et rollback réussis. Aucun déploiement utilisateur n'est implicite. La recette avec lecteur d'écran reste à effectuer manuellement.
+
+**Archives de préparation :** les preuves Work, contrôles intermédiaires et étapes à faire ci-dessous décrivent la situation *avant* la fusion et la publication. Ils sont conservés pour la traçabilité, non comme état actuel.
 
 ## Sources conservées
 
@@ -56,4 +58,4 @@ Aucun LLM, notification externe, correctif automatique, graphe complexe, contrô
 - **Autorisation 4 :** publication manuelle des images GHCR avec `confirmation=PUBLISH_GHCR`, après vérifications amd64/arm64.
 - **Autorisation 5 :** déploiement en production, sauvegarde vérifiée et retour arrière prévus.
 
-**État présent :** préparation de livraison et récupération du code **achevées localement** ; **validation finale Docker/CI/accessibilité et publication non réalisées**.
+**État lors de la passation, avant publication :** préparation et récupération du code achevées localement ; les contrôles Docker/CI et la publication ont depuis été réalisés comme indiqué en tête de ce document. Le contrôle par lecteur d'écran ne l'a pas été.

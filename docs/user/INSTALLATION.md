@@ -4,17 +4,17 @@
 
 ## With Docker (recommended)
 
-**Fresh installations only:** the commands below create a new instance. When migrating existing v0.4.1 data, follow [Updating](#updating), export a verified backup outside the Docker volume and set `POSTURE_COCKPIT_SCHEDULER=off` before the first 0.5.0 start. Schema 5 cannot be downgraded merely by changing the Docker image.
+**Fresh installations only:** these commands create a new **v0.6.0** instance. If you already have data from v0.4.1 or earlier, follow [Updating](#updating), make a verified backup outside the Docker volume and disable the scheduler before upgrading. v0.6.0 retains SQLite schema 5; changing the image alone does not downgrade a database.
 
 You need Docker Engine and **Docker Compose 2.24 or later** (`docker compose version`). Nothing to build, no Git: the official image is published on `ghcr.io/vinzgithub/posture-cockpit`, for amd64 and arm64 processors.
 
 ```bash
 mkdir posture-cockpit && cd posture-cockpit
-curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.5.0/compose.yaml
+curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.6.0/compose.yaml
 docker compose up -d
 ```
 
-The [`compose.yaml`](../../compose.yaml) file names an exact version of the image (`0.5.0`), never `latest`: an installation never changes version on its own. It keeps the protections: unprivileged user (uid 10001), read-only system, no Linux capability, `no-new-privileges`, `/tmp` in memory. The data goes to the volume `posture-cockpit_posture-cockpit-data`, whatever the installation folder.
+The [`compose.yaml`](../../compose.yaml) file names an exact version of the image (`0.6.0`), never `latest`: an installation never changes version on its own. It keeps the protections: unprivileged user (uid 10001), read-only system, no Linux capability, `no-new-privileges`, `/tmp` in memory. The data goes to the volume `posture-cockpit_posture-cockpit-data`, whatever the installation folder.
 
 ### First start: the setup code
 
@@ -32,7 +32,7 @@ For an automated installation, `POSTURE_COCKPIT_SETUP_CODE` sets the code (at le
 ### Check
 
 ```bash
-curl http://localhost:8080/healthz                       # {"status":"ok","version":"0.5.0"}
+curl http://localhost:8080/healthz                       # {"status":"ok","version":"0.6.0"}
 docker compose exec posture-cockpit posture-cockpit info  # version, schema, accounts, scans
 ```
 
@@ -41,7 +41,7 @@ docker compose exec posture-cockpit posture-cockpit info  # version, schema, acc
 Do not edit `compose.yaml`: an update replaces it. Settings go in an optional `.env` file next to it; the [`.env.example`](../../.env.example) template describes them all, commented out:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.5.0/.env.example -o .env
+curl -fsSL https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.6.0/.env.example -o .env
 nano .env                 # uncomment the lines you need
 docker compose up -d      # applies the changes
 ```
@@ -201,7 +201,7 @@ As the session key is restored, open sessions stay valid; accounts, two-factor a
 2. Replace `compose.yaml` with the one of the new version, then restart:
 
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.5.0/compose.yaml   # the version you want
+curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.6.0/compose.yaml   # the version you want
 docker compose up -d
 docker compose exec posture-cockpit posture-cockpit info
 ```

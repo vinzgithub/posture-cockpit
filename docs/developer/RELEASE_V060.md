@@ -1,6 +1,8 @@
 # Posture Cockpit v0.6.0 — Mission Control release handoff
 
-> **UNPUBLISHED RELEASE CANDIDATE** (24 October 2026). This document does not authorize merge, tagging, GHCR publication or a production upgrade.
+> **PUBLISHED ON 24 OCTOBER 2026.** PR #31 merged as `2241e4b`; `v0.6.0` GitHub Release published; AMD64/ARM64 images and moving tags `0.6` and `latest` published by manually approved [workflow #78](https://github.com/vinzgithub/posture-cockpit/actions/runs/40090360219). Verified image digest: `sha256:70da24128abef742dc4649235d662a37596ed786a322d840c85aa02afc2fe633`. GitHub Python, browser, Docker, migrations and rollback checks passed. Publication is not installation. Manual screen-reader testing is still outstanding.
+
+**Historical preparation record:** the following notes describe the *prepublication* state, preserved for traceability. They do not describe the current state of the published release.
 
 The complete phase 1–5 implementation is preserved in `mission-control-phases1-5.patch`, against tag v0.5.0, retaining SQLite schema 5 and the old observation/scoring semantics. The phase 6 overlay updates the three version identifiers to `0.6.0`, adds a draft changelog entry and these bilingual delivery notes. Public README and installation links intentionally remain pinned to the **already published v0.5.0** until a 0.6.0 image becomes available.
 

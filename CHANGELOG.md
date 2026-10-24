@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.6.0 — en préparation (non publié)
+## 0.6.0 — 2026-10-24 (publié sur GitHub et GHCR)
 
 **Mission Control** — comprendre les changements observés et préparer les corrections sans modifier les services analysés.
 
@@ -11,7 +11,7 @@
 - Meilleure pédagogie de la note dans le PDF et les guides FR/EN.
 - Règles des contrôles observés, schéma SQLite 5 et API existante conservés. Aucun correctif automatique et aucune notification externe.
 
-**Statut :** validation de la phase 5 obtenue en environnement Python isolé selon son rapport ; images Docker multi-architectures, CI distante, accessibilité assistée et décision de publication encore requises. Ne pas utiliser les commandes v0.6.0 avant sa publication.
+**Publication :** PR #31 fusionnée dans `main` (`2241e4bae0d3ef5e4da634f4ad2301bf51a9f748`), puis tag et GitHub Release `v0.6.0`. La publication GHCR a réussi après nouvelle CI et recette multi-architecture, via le workflow manuel `release` #78 (`40090360219`). Les tags `0.6.0`, `0.6` et `latest` pointent tous vers `sha256:70da24128abef742dc4649235d662a37596ed786a322d840c85aa02afc2fe633`. Les tests automatisés couvrent notamment Python 3.11–3.13, Chromium, Docker, migrations et retour arrière. Une inspection manuelle au lecteur d'écran n'est pas revendiquée. La publication n'installe ni ne met à jour une instance existante.
 
 ## 0.5.0 — 2026-10-20
 
