@@ -79,9 +79,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        from: ["v0.3.0", "v0.4.0", "v0.4.1"]
+        from: ["v0.3.0", "v0.4.0", "v0.4.1", "v0.5.0", "v0.6.0"]
     env:
       OFFICIAL_0_4_1: ghcr.io/vinzgithub/posture-cockpit@sha256:c5081ebcf79fe79c30fdec4dde52d01611df6fd219ffcc4b3c6d4c80c258e9ae
+      OFFICIAL_0_5_0: ghcr.io/vinzgithub/posture-cockpit@sha256:c8dacc1e82646562a3a386ba850a8dca785df5ceee98bf9910ba74eef67a5651
+      OFFICIAL_0_6_0: ghcr.io/vinzgithub/posture-cockpit@sha256:70da24128abef742dc4649235d662a37596ed786a322d840c85aa02afc2fe633
     steps:
       - uses: actions/checkout@v7
         with:
@@ -94,7 +96,7 @@ jobs:
           load: true
           tags: posture-cockpit:ci
       - name: Image of ${{ matrix.from }}, built from its tag
-        if: matrix.from != 'v0.4.1'
+        if: matrix.from == 'v0.3.0' || matrix.from == 'v0.4.0'
         run: |
           git worktree add "$RUNNER_TEMP/old" "${{ matrix.from }}"
           docker buildx build --load -t "posture-cockpit:${{ matrix.from }}" "$RUNNER_TEMP/old"
@@ -106,6 +108,19 @@ jobs:
           docker tag "$OFFICIAL_0_4_1" posture-cockpit:v0.4.1
           docker run --rm --entrypoint python posture-cockpit:v0.4.1 -c 'import posture_cockpit; print(posture_cockpit.__version__)' \
             | grep -qx 0.4.1
+      - name: Official schema-5 image, by its digest
+        if: matrix.from == 'v0.5.0' || matrix.from == 'v0.6.0'
+        env:
+          OLD_TAG: ${{ matrix.from }}
+        run: |
+          case "$OLD_TAG" in
+            v0.5.0) old="$OFFICIAL_0_5_0" ;;
+            v0.6.0) old="$OFFICIAL_0_6_0" ;;
+          esac
+          docker pull "$old"
+          docker tag "$old" "posture-cockpit:$OLD_TAG"
+          found=$(docker run --rm --entrypoint python "$old" -c 'import posture_cockpit; print(posture_cockpit.__version__)')
+          test "$found" = "${OLD_TAG#v}"
       - name: Recette of the update
         run: scripts/docker-recette.sh upgrade "posture-cockpit:${{ matrix.from }}" posture-cockpit:ci
       - name: Recette of an installation laid out like the production (default names)
