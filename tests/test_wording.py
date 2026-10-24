@@ -116,6 +116,7 @@ def _story(start, now, target, priorities):
         domain=DOMAIN, scan=SimpleNamespace(findings=[]), now=now, start=start, target=target, grade_label="",
         priorities=[task for task in priorities if not task.done],
         completed=[task for task in priorities if task.done],
+        completed_priorities=sum(task.done for task in priorities),
         improvements=[], counts={}, categories=[], gaps=[], dns_hosts=[], dns_host="",
         detected_host="", nameservers=[])
     views._tell_the_story(CATALOG, "fr", view)

@@ -613,7 +613,7 @@
   "events.severity": "Gravité",
   "events.state.heading": "État",
   "events.instance": "Instance",
-  "events.empty": "Aucun événement dans cette catégorie.",
+  "events.empty": "Aucun événement pour les filtres sélectionnés.",
   "events.mark_seen": "Marquer comme consultés",
   "events.state.open": "Ouverts",
   "events.state.resolved": "Résolus",
@@ -787,5 +787,6 @@
   "projection.conditional": "Scénarios conditionnels si les contrôles deviennent mesurables ; ces bornes ne garantissent pas la prochaine note.",
   "projection.lower": "Le scénario calculé est inférieur au score actuel ; il ne constitue pas un objectif garanti.",
   "projection.partial": "Projection à confirmer par une nouvelle analyse : la couverture actuelle n’est que de {coverage} %.",
-  "projection.excluded": "Gains estimés hors actions à effet non déterminable, maintenues dans leur état observé. L’effet du plan complet reste inconnu."
+  "projection.excluded": "Gains estimés hors actions à effet non déterminable, maintenues dans leur état observé. L’effet du plan complet reste inconnu.",
+  "mc.exact_delta": "{n} points"
 }
