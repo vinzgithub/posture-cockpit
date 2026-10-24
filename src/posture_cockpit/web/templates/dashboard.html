@@ -1,0 +1,71 @@
+{# Copyright © 2026 Vincent Fournet · SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 -#}
+{% extends "base.html" %}
+{% from "_macros.html" import grade_pill, schedule_line with context %}
+{% block title %}{{ t('pf.title') }} · Posture Cockpit{% endblock %}
+{% block content %}
+<header class="page-head"><p class="eyebrow">{{ t('mc.title') }}</p><h1>{{ t('pf.title') }}</h1><p class="lead">{{ t('pf.intro') }}</p></header>
+
+{% if scheduler_state == 'off' %}<p class="flash flash-info" role="status">{{ t('pf.scheduler_off') }}</p>
+{% elif scheduler_state == 'stalled' %}<p class="flash flash-warn" role="status">{{ t('pf.scheduler_unknown') }}</p>{% endif %}
+
+<section aria-label="{{ t('pf.summary') }}">
+<dl class="pf-facts">
+  <div><dt>{{ t('pf.domains') }}</dt><dd>{{ facts.domains }}</dd></div>
+  <div><dt>{{ t('pf.attention') }}</dt><dd>{{ facts.attention }}</dd></div>
+  <div><dt>{{ t('pf.events') }}</dt><dd>{{ facts.open_events }}</dd></div>
+  <div><dt>{{ t('pf.no_conclusive') }}</dt><dd>{{ facts.no_conclusive }}</dd></div>
+</dl>
+<p class="small muted">{{ t('pf.scope') }} {{ t('pf.attention_help') }}{% if user.is_admin %} {{ t('pf.global_events') }}{% endif %}</p>
+</section>
+
+<section class="panel" aria-labelledby="pf-filter-title">
+<h2 id="pf-filter-title">{{ t('pf.filters') }}</h2>
+<form method="get" action="/dashboard" class="form-grid pf-filters">
+  <label class="field">{{ t('pf.name') }}<input type="search" name="q" value="{{ filters.name }}" maxlength="253"></label>
+  <label class="field">{{ t('pf.evaluation') }}<select name="evaluation">{% for value in evaluations %}<option value="{{ value }}" {% if value == filters.evaluation %}selected{% endif %}>{{ t('pf.all') if value == 'all' else t('mc.evaluation.' ~ value) }}</option>{% endfor %}</select></label>
+  <label class="field">{{ t('pf.severity') }}<select name="severity">{% for value in severities %}<option value="{{ value }}" {% if value == filters.severity %}selected{% endif %}>{{ t('pf.all') if value == 'all' else t('events.severity.' ~ value) }}</option>{% endfor %}</select></label>
+  <label class="field">{{ t('pf.freshness') }}<select name="freshness">{% for value in freshness_choices %}<option value="{{ value }}" {% if value == filters.freshness %}selected{% endif %}>{{ t('pf.all') if value == 'all' else t('pf.freshness.' ~ value) }}</option>{% endfor %}</select></label>
+  <label class="field">{{ t('pf.sort') }}<select name="sort">{% for value in sorts %}<option value="{{ value }}" {% if value == filters.sort %}selected{% endif %}>{{ t('pf.sort.' ~ value) }}</option>{% endfor %}</select></label>
+  <label class="field">{{ t('pf.size') }}<select name="size">{% for value in [25,50,100] %}<option value="{{ value }}" {% if value == filters.size %}selected{% endif %}>{{ value }}</option>{% endfor %}{% if filters.size not in [25,50,100] %}<option value="{{ filters.size }}" selected>{{ filters.size }}</option>{% endif %}</select></label>
+  <p><button type="submit" class="btn btn-primary">{{ t('events.apply') }}</button> <a href="/dashboard">{{ t('pf.reset') }}</a></p>
+</form></section>
+
+<section class="panel" aria-labelledby="pf-list-title">
+  <h2 id="pf-list-title">{{ t('pf.results', n=total) }}</h2>
+  {% if domains %}<div class="table-scroll"><table class="table pf-table">
+  <thead><tr><th>{{ t('pf.name') }}</th><th>{{ t('pf.measurement') }}</th><th>{{ t('pf.transition') }}</th><th>{{ t('pf.events') }}</th><th>{{ t('pf.scheduling') }}</th><th>{{ t('pf.action') }}</th></tr></thead>
+  <tbody>{% for domain in domains %}{% set row = domain.row %}
+    <tr data-domain="{{ row.name }}">
+      <td data-label="{{ t('pf.name') }}"><strong><a href="/domains/{{ row.name }}/mission-control">{{ row.name }}</a></strong>{% if row.perimeter_name %}<p class="small"><span class="tag-internal">{{ t('perimeter.internal_audit', name=row.perimeter_name) }}</span></p>{% endif %}</td>
+      <td data-label="{{ t('pf.measurement') }}">
+        {% if domain.unreadable %}<p>{{ t('error.scan_unreadable') }}</p>
+        {% else %}<p>{% if row.score is not none %}{{ grade_pill(row.grade) }} <strong>{{ row.score }}/100</strong>{% else %}{{ t('score.not_evaluated') }}{% endif %}</p>
+        <p class="small">{{ t('mc.evaluation.' ~ row.evaluation) }}{% if row.coverage is not none %} · {{ t('mc.coverage', n=(row.coverage * 100 + 0.000000001) | int) }}{% endif %}</p>
+        {% if row.diagnostic_coverage is not none %}<p class="small">{{ t('pf.diagnostic', n=(row.diagnostic_coverage * 100 + 0.000000001) | int) }}</p>{% endif %}
+        <p class="small">{{ t('pf.failures', n=row.fail_count) }}</p>{% endif %}
+        {% if row.measured_at %}<p class="small">{{ date(row.measured_at) }} {{ local_time(row.measured_at) }} · {{ t('mc.origin.' ~ row.measurement_origin) }}</p>{% else %}<p class="small">{{ t('pf.no_measurement') }}</p>{% endif %}
+      </td>
+      <td data-label="{{ t('pf.transition') }}">{% if domain.transition %}{% set change = domain.transition %}
+        <p>{{ t(change.change.check_id ~ '.title') }}</p><p class="small">{{ t('status.' ~ change.change.previous) }} → {{ t('status.' ~ change.change.current) }}</p>
+        <p class="small">{{ date(change.at) }} {{ local_time(change.at) }} · {{ t('mc.change.' ~ change.change.kind) }}</p>
+        {% if change.missed %}<p class="small">{{ t('pf.missed', n=change.missed) }}</p>{% endif %}
+        {% else %}<p class="small muted">{{ t('pf.no_transition') }}</p>{% endif %}
+      </td>
+      <td data-label="{{ t('pf.events') }}">{% if domain.events %}{% for severity in ['critical','warning','info'] if domain.events.get(severity,0) %}<p class="small">{{ t('events.severity.' ~ severity) }} : {{ domain.events[severity] }}</p>{% endfor %}<a class="small" href="/events?domain={{ row.name | urlencode }}">{{ t('pf.view_events') }}</a>{% else %}<p class="small">{{ t('pf.no_events') }}</p>{% endif %}</td>
+      <td data-label="{{ t('pf.scheduling') }}"><p class="pf-freshness pf-freshness-{{ row.freshness }}">{{ t('pf.freshness.' ~ row.freshness) }}</p>
+        {% if domain.schedule %}<p class="small">{{ schedule_line(domain.schedule) }}</p>{% endif %}
+        {% if domain.schedule and domain.schedule.failures %}<p class="small">{{ t('pf.run_failures', n=domain.schedule.failures) }}</p>{% endif %}
+        {% if domain.last_run %}<p class="small">{{ t('pf.last_run') }} : {{ t('pf.run.' ~ domain.last_run.state) }} · {{ date(domain.last_run.claimed_at) }} {{ local_time(domain.last_run.claimed_at) }}</p>{% endif %}
+        {% if domain.scan_age_days is not none %}<p class="small">{{ t('pf.scan_age', n=domain.scan_age_days) }} · {{ t('history.via.' ~ row.via) if row.via else t('history.via.unknown') }}</p>{% endif %}
+        {% if row.freshness == 'manual_old' %}<p class="small muted">{{ t('pf.old_info') }}</p>{% endif %}
+      </td>
+      <td data-label="{{ t('pf.action') }}">{% if domain.first_id and not domain.unreadable %}<a href="/domains/{{ row.name }}?task={{ domain.first_id }}#task">{{ domain.first_title }}</a>{% else %}<p class="small">{{ t('pf.no_action') }}</p>{% endif %}<p class="small"><a href="/domains/{{ row.name }}/mission-control">{{ t('pf.open_domain') }}</a></p></td>
+    </tr>{% endfor %}
+  </tbody></table></div>{% else %}<p>{{ t('pf.empty') }}</p>{% endif %}
+  <nav class="pf-pagination" aria-label="{{ t('pf.pagination') }}">
+    {% if previous_url %}<a class="btn btn-secondary" href="{{ previous_url }}">{{ t('history.previous') }}</a>{% endif %}
+    <span>{{ t('history.page', page=filters.page, pages=pages) }}</span>
+    {% if next_url %}<a class="btn btn-secondary" href="{{ next_url }}">{{ t('history.next') }}</a>{% endif %}
+  </nav>
+</section>
+{% endblock %}

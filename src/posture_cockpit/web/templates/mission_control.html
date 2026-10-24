@@ -1,0 +1,113 @@
+{# Copyright © 2026 Vincent Fournet · SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 -#}
+{% extends "base.html" %}
+{% from "_macros.html" import grade_pill with context %}
+{% macro assessment(result, heading) %}
+<div class="mc-assessment">
+  <h3>{{ heading }}</h3>
+  <p class="mc-score">{% if result.score is not none %}<strong>{{ result.score }}/100</strong> {{ grade_pill(result.grade) }}{% else %}<strong>{{ t('mc.inconclusive') }}</strong>{% endif %}</p>
+  <p>{{ t('mc.evaluation.' ~ result.evaluation) }} · {{ t('mc.coverage', n=result.coverage_percent) }}</p>
+  <p class="small">{{ t('mc.diagnostic', n=((result.diagnostic_coverage or 0) * 100) | int) }}</p>
+  {% for reason in result.cap_reasons %}<p class="small">{{ t('v04.cap.' ~ reason) }}</p>{% endfor %}
+  {% if result.grade_withheld_reason %}<p class="small">{{ t('mc.withheld') }}</p>{% endif %}
+</div>
+{% endmacro %}
+{% macro transition(row) %}
+<li class="mc-transition">
+  <p><a href="/domains/{{ scan.domain }}/details#{{ row.change.check_id }}"><strong>{{ t(row.change.check_id ~ '.title') }}</strong></a> · {{ t('mc.change.' ~ row.change.kind) }}</p>
+  <p><time datetime="{{ row.previous.at }}">{{ date(row.previous.at) }} {{ local_time(row.previous.at) }}</time> : <span class="badge badge-{{ row.change.previous }}">{{ t('status.' ~ row.change.previous) }}</span>
+    → <time datetime="{{ row.current.at }}">{{ date(row.current.at) }} {{ local_time(row.current.at) }}</time> : <span class="badge badge-{{ row.change.current }}">{{ t('status.' ~ row.change.current) }}</span></p>
+  {% if row.last.state and row.last.missed %}<p class="small">{{ t('mc.last_conclusive', date=date(row.last.state.at), time=local_time(row.last.state.at), status=t('status.' ~ row.last.state.checks[row.change.check_id]), n=row.last.missed | length) }}</p>
+  <ul class="small">{% for missed in row.last.missed %}<li>{{ date(missed.at) }} {{ local_time(missed.at) }} · {{ t('mc.origin.' ~ missed.origin) }} · {{ t('status.' ~ missed.checks[row.change.check_id]) }}</li>{% endfor %}</ul>{% endif %}
+  <p class="small muted">{{ t('mc.origin.' ~ row.current.origin) }} · <a href="/domains/{{ scan.domain }}/details#{{ row.change.check_id }}">{{ t('mc.current_proof') }}</a></p>
+</li>
+{% endmacro %}
+{% block title %}{{ t('mc.title') }} · {{ scan.domain }}{% endblock %}
+{% block content %}
+<p><a href="/domains/{{ scan.domain }}">← {{ t('mc.back') }}</a></p>
+<header class="page-head">
+  {% if scan.perimeter %}<p class="eyebrow"><span class="tag-internal">{{ t('perimeter.internal_audit', name=scan.perimeter) }}</span></p>{% endif %}
+  <p class="eyebrow">{{ t('mc.title') }}</p>
+  <h1>{{ scan.domain }}</h1>
+  <p class="lead">{{ t('mc.intro') }}</p>
+  <p>{{ t('mc.observed_at', date=date(current_state.at), time=local_time(current_state.at), origin=t('mc.origin.' ~ current_state.origin)) }}</p>
+</header>
+
+<div class="mc-layout">
+<section class="panel" aria-labelledby="mc-observed">
+  <h2 id="mc-observed">{{ t('mc.observed') }}</h2>
+  {{ assessment(plan.now, t('mc.current_assessment')) }}
+  <p class="small muted">{{ t('mc.score_scope') }}</p>
+</section>
+<section class="panel" aria-labelledby="mc-changes">
+  <h2 id="mc-changes">{{ t('mc.changes') }}</h2>
+  {% if comparison.comparable %}<p>{{ t('mc.score_delta', n=('%+d' | format(comparison.score_delta))) }}</p>
+  {% else %}<p class="small">{{ t('mc.no_delta') }} {{ t('mc.reason.' ~ comparison.reason) }}</p>{% endif %}
+  {% if transitions %}<ul class="mc-transitions">{% for row in transitions[:3] %}{{ transition(row) }}{% endfor %}</ul>
+    {% if transitions | length > 3 %}<details><summary>{{ t('mc.see_all', n=transitions | length) }}</summary><ul class="mc-transitions">{% for row in transitions[3:] %}{{ transition(row) }}{% endfor %}</ul></details>{% endif %}
+  {% else %}<p>{{ t('mc.no_changes') }}{% if not changes.available and changes.reason != comparison.reason %} {{ t('mc.reason.' ~ changes.reason) }}{% endif %}</p>{% endif %}
+  <p class="small muted">{{ t('mc.status_history') }}</p>
+  <a href="/domains/{{ scan.domain }}/history">{{ t('details.history') }}</a>
+</section>
+</div>
+
+{% if dependencies %}<section class="panel" aria-labelledby="mc-https">
+  <h2 id="mc-https">{{ t('mc.dependencies') }}</h2><p>{{ t('mc.dependency_help') }}</p>
+  <ul>{% for f in dependencies %}<li><a href="/domains/{{ scan.domain }}/details#{{ f.check_id }}">{{ t(f.check_id ~ '.title') }}</a> — {{ t('status.' ~ f.status.value) }}</li>{% endfor %}</ul>
+</section>{% endif %}
+
+<section class="panel mc-simulator" aria-labelledby="mc-whatif">
+  <p class="eyebrow">{{ t('mc.hypothesis') }}</p>
+  <h2 id="mc-whatif">{{ t('mc.whatif') }}</h2>
+  <p id="mc-simulation-help">{{ t('mc.pure') }}</p>
+  {% if candidates %}
+  <form method="get" action="/domains/{{ scan.domain }}/mission-control/simulate#simulation-result" aria-describedby="mc-simulation-help">
+    <input type="hidden" name="scan_id" value="{{ scan.id }}">
+    <input type="hidden" name="state_id" value="{{ state_id }}">
+    <fieldset><legend>{{ t('mc.select') }}</legend>
+      <div class="mc-options">{% for candidate in candidates %}{% set task = candidate.task %}
+      <article class="mc-option">
+        <label class="mc-choice" for="mc-{{ task.check_id }}"><input id="mc-{{ task.check_id }}" type="checkbox" name="check" value="{{ task.check_id }}" {% if task.check_id in selected %}checked{% endif %}><strong>{{ task.title }}</strong></label>
+        <p class="small">{{ t('mc.before') }} : <span class="badge badge-{{ candidate.observed.value }}">{{ t('status.' ~ candidate.observed.value) }}</span> · {{ t('mc.expected') }} : <strong>{{ t('status.' ~ candidate.expected.value) if candidate.expected is not none else t('simulation.unknown_effect') }}</strong></p>
+        <p class="small">{{ task.effort_label }} · {{ t('plan.minutes', n=task.minutes) }} — {{ t('mc.indicative') }}</p>
+        <details><summary>{{ t('mc.proposed_step') }}</summary>
+          {% if task.how %}<p>{{ task.how }}</p>{% endif %}
+          {% for record in task.records %}<p><code>{{ record.change.action }} {{ record.change.rtype }} {{ record.fqdn }} {{ record.change.value }}</code></p>{% endfor %}
+          {% if task.message %}<pre class="mc-advice">{{ task.message }}</pre>{% endif %}
+          {% if not task.how and not task.records and not task.message %}<p>{{ t('simulation.unknown_effect') }}</p>{% endif %}
+        </details>
+      </article>{% endfor %}</div>
+    </fieldset>
+    <p><button class="btn btn-secondary mc-simulate" type="submit">{{ t('mc.simulate') }}</button> <a href="/domains/{{ scan.domain }}/mission-control">{{ t('mc.reset') }}</a></p>
+  </form>
+  {% else %}<p>{{ t('mc.no_candidates') }}</p>{% endif %}
+</section>
+
+{% if simulation is not none %}<section class="panel" id="simulation-result" aria-labelledby="mc-result" tabindex="-1">
+  <p class="eyebrow">{{ t('mc.hypothesis') }}</p><h2 id="mc-result">{{ t('mc.projection') }}</h2>
+  {% if not selected %}<p>{{ t('mc.empty_selection') }}</p>{% endif %}
+  <ul>{% for candidate in candidates if candidate.task.check_id in selected %}<li>{{ candidate.task.title }} — {{ t('mc.expected') }} : <strong>{{ t('status.' ~ candidate.expected.value) if candidate.expected is not none else t('simulation.unknown_effect') }}</strong></li>{% endfor %}</ul>
+  {% if simulation.conditional %}<p class="flash flash-warn">{{ t('mc.conditional') }}</p>{% endif %}
+  {% if simulation.unknown %}<p role="status">{{ t('mc.inconclusive') }} — {{ t('mc.unknown_help') }}</p>{% endif %}
+  <div class="mc-layout">
+    {{ assessment(simulation.worst, t('mc.worst') if simulation.conditional else t('mc.projected_assessment')) }}
+    {% if simulation.conditional %}{{ assessment(simulation.best, t('mc.best')) }}{% endif %}
+  </div>
+  {% if simulation.now.score is not none and simulation.worst.score is not none and simulation.best.score is not none %}<p>{{ t('mc.conditional_delta', low=('%+d' | format(simulation.worst.score - simulation.now.score)), high=('%+d' | format(simulation.best.score - simulation.now.score))) }}</p>{% endif %}
+  {% if simulation.unmeasured %}<p>{{ t('mc.future_measurements') }}</p><ul>{% for check_id in simulation.unmeasured %}<li>{{ t(check_id ~ '.title') }}</li>{% endfor %}</ul>{% endif %}
+  {% for assumption in simulation.assumptions if assumption.kind == 'registry_fallback' %}<p class="small">{{ t('mc.fallback', check=assumption.check_id) }}</p>{% endfor %}
+  <p class="small muted">{{ t('mc.not_prediction') }}</p>
+</section>{% endif %}
+
+<section class="panel" aria-labelledby="mc-actions">
+  <h2 id="mc-actions">{{ t('mc.active_actions') }}</h2>
+  {% if candidates %}<ol>{% for candidate in candidates %}<li><a href="/domains/{{ scan.domain }}?task={{ candidate.task.check_id }}#task">{{ candidate.task.title }}</a> — {{ t('status.' ~ candidate.observed.value) }}</li>{% endfor %}</ol>{% else %}<p>{{ t('mc.no_candidates') }}</p>{% endif %}
+  <p>{{ t('mc.verify_separate') }}</p>
+  {% if plan.completed %}<details><summary>{{ t('mc.completed', n=plan.completed | length) }}</summary><ul>{% for task in plan.completed %}<li>{{ task.title }} — {{ t('status.ok') }} · {{ date(task.checked_at) }} {{ local_time(task.checked_at) }} · <a href="/domains/{{ scan.domain }}/details#{{ task.check_id }}">{{ t('mc.current_proof') }}</a></li>{% endfor %}</ul></details>{% endif %}
+</section>
+
+<section class="panel" aria-labelledby="mc-events">
+  <h2 id="mc-events">{{ t('events.domain_section') }}</h2><p>{{ t('mc.events_separate') }}</p>
+  {% if recent_events %}<ul>{% for e in recent_events %}<li>{{ t('events.kind.' ~ e.kind) }} · {{ t('events.severity.' ~ e.severity) }} · <strong>{{ t('events.state.' ~ e.state) }}</strong> · {{ date(e.updated_at) }} {{ local_time(e.updated_at) }}</li>{% endfor %}</ul>{% endif %}
+  <a href="/events?domain={{ scan.domain | urlencode }}">{{ t('events.all_for_domain') }}</a>
+</section>
+{% endblock %}
