@@ -143,6 +143,8 @@ Already running an older version? **Don't use the new-install steps as an upgrad
 
 **It observes; it doesn't attack.** It makes DNS queries, web and TLS connections, and reads selected public resources. It does not perform penetration testing, scan every port or change the configuration of the domains it checks.
 
+TLS cipher suites are not enumerated, by design: listing them takes dozens of handshakes per address, which goes beyond a passive check. Use testssl.sh or SSL Labs for that review.
+
 For public Internet domains, outbound web connections are restricted to **public IP addresses** and **ports 80 and 443**, with checks designed to stop DNS or redirect tricks from reaching private networks. Internal-network assessments are a separate feature, **disabled by default** and available only after explicit administrator configuration.
 
 Application access includes user accounts, **TOTP two-factor authentication**, rate limits against repeated login attempts and an audit trail. Results remain on your self-hosted instance; assessments naturally generate network requests to the services being examined.
@@ -161,7 +163,7 @@ You can explore the [architecture documentation](docs/developer/ARCHITECTURE.md)
 
 The source is published under the **[PolyForm Noncommercial 1.0.0 License](LICENSE)**. It allows the purposes described as noncommercial by the license; see the [commercial license terms](COMMERCIAL-LICENSE.md) for other uses.
 
-**Project concept, direction and validation: Vincent Fournet.** Development carried out with the assistance of AI tools, under his direction.
+**Project concept, direction and validation: Vincent Fournet.** Development carried out with the assistance of AI tools (Claude and ChatGPT), under his direction.
 
 Copyright © 2026 Vincent Fournet.
 

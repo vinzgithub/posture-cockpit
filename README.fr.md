@@ -143,6 +143,8 @@ Vous utilisez déjà une ancienne version ? **Ne suivez pas la procédure de nou
 
 **Il observe, il n'attaque pas.** Il effectue des requêtes DNS, des connexions web et TLS et consulte certaines ressources publiques. Il ne lance pas de test d'intrusion, ne parcourt pas tous les ports et ne modifie pas les configurations des domaines analysés.
 
+Les suites de chiffrement TLS ne sont pas énumérées, par choix : les lister demande des dizaines de négociations par adresse, ce qui dépasse une observation passive. Utilisez testssl.sh ou SSL Labs pour cet examen.
+
 Pour les domaines Internet, ses connexions web sortantes sont limitées aux **adresses publiques** et aux **ports 80 et 443**, avec des contrôles destinés à empêcher qu'une adresse ou une redirection conduise vers un réseau privé. Les audits de réseaux internes sont une fonction distincte, **désactivée par défaut** et réservée à une configuration administrateur explicite.
 
 L'accès au logiciel dispose notamment de comptes utilisateurs, d'une **authentification à deux facteurs TOTP**, de protections contre les tentatives répétées et d'un journal d'audit. Les données sont conservées sur votre propre instance ; les vérifications produisent naturellement des requêtes vers les services examinés.
@@ -161,7 +163,7 @@ La [documentation de l'architecture](docs/developer/ARCHITECTURE.md) s'adresse a
 
 Le code est publié sous **[PolyForm Noncommercial 1.0.0](LICENSE)**. La licence autorise les usages qu'elle définit comme non commerciaux ; pour les autres cas, consultez les [conditions de licence commerciale](COMMERCIAL-LICENSE.md).
 
-**Conception, orientation du projet et validation : Vincent Fournet.** Développement réalisé avec l'assistance d'outils d'intelligence artificielle, sous sa direction.
+**Conception, orientation du projet et validation : Vincent Fournet.** Développement réalisé avec l'assistance d'outils d'intelligence artificielle (Claude et ChatGPT), sous sa direction.
 
 Copyright © 2026 Vincent Fournet.
 
