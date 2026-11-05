@@ -19,6 +19,16 @@ _COOKIE_NAME = re.compile(r"[A-Za-z0-9_-]{1,64}")
 # A setup code chosen by the operator (POSTURE_COCKPIT_SETUP_CODE) has at least this many letters or digits.
 MIN_SETUP_CODE = 12
 
+# Version 0.7.0: the SMTP probe of the MX servers (port 25). The values the operator may write.
+SMTP_PROBE_VALUES = ("off", "on")
+# Seconds the engine keeps for itself after the SMTP probe's deadline, to gather and store what the
+# probe observed before it stops the check (specification 0.7.0, F02: min(12 s, CHECK_TIMEOUT - 2 s)).
+SMTP_CHECK_MARGIN = 2.0
+# A host name in EHLO (RFC 5321 §4.1.1.1, §2.3.5): at most 253 characters, labels of letters, digits
+# and hyphens (RFC 1123 §2.1), neither starting nor ending with a hyphen, 63 characters at most.
+_HOST_LABEL = re.compile(r"(?!-)[a-z0-9-]{1,63}(?<!-)")
+MAX_HOST_NAME = 253
+
 
 class StartupError(RuntimeError):
     """A problem the operator has to fix before the instance can start. The message says how."""
@@ -66,11 +76,18 @@ class Config:
     # Scheduled scans (0.5.0): POSTURE_COCKPIT_SCHEDULER, on unless set to off. Off by default for
     # a Config built directly (the tests), so that only the tests of the scheduler start one.
     scheduler: bool = False
+    # SMTP probe of the MX servers (0.7.0): POSTURE_COCKPIT_SMTP_PROBE, off unless set to on. Off by
+    # default because many networks block outgoing port 25: an operator turns it on knowingly.
+    smtp_probe: bool = False
+    # Name sent in EHLO by the SMTP probe: POSTURE_COCKPIT_SMTP_EHLO_NAME, required when the probe is
+    # on. There is no default on purpose (see check_smtp_settings).
+    smtp_ehlo_name: str | None = None
 
     def __post_init__(self) -> None:
         check_cookie_name(self.session_cookie, secure=self.cookie_secure)
         if self.setup_code and len(normalize_setup_code(self.setup_code)) < MIN_SETUP_CODE:
             raise ValueError(f"POSTURE_COCKPIT_SETUP_CODE: at least {MIN_SETUP_CODE} letters or digits")
+        self.smtp_ehlo_name = check_smtp_settings(self.smtp_probe, self.smtp_ehlo_name, self.check_timeout)
 
     @property
     def db_path(self) -> Path:
@@ -95,6 +112,10 @@ class Config:
             session_cookie=_env("SESSION_COOKIE", DEFAULT_SESSION_COOKIE).strip(),
             setup_code=_env("SETUP_CODE", "").strip(),
             scheduler=_env_bool("SCHEDULER", True),
+            smtp_probe=parse_smtp_probe(_env("SMTP_PROBE", "off")),
+            # Blank counts as absent, as for every variable; otherwise the value is kept exactly as
+            # written, control characters included, so that check_smtp_settings can refuse them.
+            smtp_ehlo_name=_env("SMTP_EHLO_NAME", "") or None,
         )
         check_dkim_selectors(_env("DKIM_SELECTORS", ""))
         return config
@@ -122,6 +143,71 @@ def check_dkim_selectors(value: str) -> None:
         dkim_selectors(value)
     except ValueError as e:
         raise ValueError(f"POSTURE_COCKPIT_DKIM_SELECTORS: {e}") from None
+
+
+def parse_smtp_probe(value: str) -> bool:
+    """POSTURE_COCKPIT_SMTP_PROBE: ``off`` or ``on``, in any case; anything else stops the start.
+
+    Only these two words are accepted, unlike the other switches (``true``, ``1``…): turning on
+    connections to port 25 of other people's servers must be a deliberate, unambiguous choice."""
+    word = value.strip().lower()
+    if word not in SMTP_PROBE_VALUES:
+        raise ValueError(f"POSTURE_COCKPIT_SMTP_PROBE: {value!r} is not allowed, write off or on")
+    return word == "on"
+
+
+def check_smtp_settings(probe: bool, ehlo_name: str | None, check_timeout: float) -> str | None:
+    """Checks the SMTP probe settings together; returns the EHLO name as it will be sent, or None.
+
+    - The EHLO name is checked whenever it is given, even with the probe off, so that a wrong
+      value is found before the day the probe is turned on (specification 0.7.0, F02 bis).
+    - With the probe on, the EHLO name is required. There is deliberately no default and no
+      fallback on the host name: in a container it is not a fully qualified name, and it would
+      reveal an internal identifier to every mail server the probe talks to.
+    - With the probe on, CHECK_TIMEOUT must leave the probe some time after the margin the engine
+      keeps for itself, otherwise the probe's deadline would be zero or negative (F02)."""
+    name = validate_ehlo_name(ehlo_name) if ehlo_name is not None else None
+    if not probe:
+        return name
+    if name is None:
+        raise ValueError("POSTURE_COCKPIT_SMTP_EHLO_NAME: required when POSTURE_COCKPIT_SMTP_PROBE=on; "
+                         "write a fully qualified name under your control, e.g. probe.example.org")
+    if check_timeout <= SMTP_CHECK_MARGIN:
+        raise ValueError(f"POSTURE_COCKPIT_CHECK_TIMEOUT: {check_timeout:g} s leaves no time to the SMTP probe; "
+                         f"with POSTURE_COCKPIT_SMTP_PROBE=on it must be above {SMTP_CHECK_MARGIN:g} s")
+    return name
+
+
+def validate_ehlo_name(value: str) -> str:
+    """The EHLO name of the SMTP probe, checked as a fully qualified host name, in lower case.
+
+    Raises ValueError naming the variable and the reason. The name is sent as it is in the SMTP
+    command ``EHLO <name>``: a control character (CR, LF) could add a command of its own, so any
+    such character refuses the value, wherever it is. Only ASCII is accepted: an internationalised
+    name is written in its ``xn--`` form. The check is a syntax check: it does not prove that the
+    name exists in the DNS, nor that it belongs to the operator."""
+    variable = "POSTURE_COCKPIT_SMTP_EHLO_NAME"
+    if any(ord(c) < 32 or ord(c) == 127 for c in value):
+        raise ValueError(f"{variable}: control characters (CR, LF...) are not allowed")
+    if not value.isascii():
+        raise ValueError(f"{variable}: {value!r} is not ASCII; write an internationalised name in its xn-- form")
+    name = value.strip().lower()
+    name = name[:-1] if name.endswith(".") else name  # the root's dot is not sent
+    if not name:
+        raise ValueError(f"{variable}: empty")
+    if len(name) > MAX_HOST_NAME:
+        raise ValueError(f"{variable}: longer than {MAX_HOST_NAME} characters")
+    labels = name.split(".")
+    if len(labels) < 2:
+        raise ValueError(f"{variable}: {value!r} is not a fully qualified name (at least two labels, "
+                         "e.g. probe.example.org)")
+    for label in labels:
+        if not _HOST_LABEL.fullmatch(label):
+            raise ValueError(f"{variable}: {label!r} is not a valid label (letters, digits and hyphens, "
+                             "at most 63, no hyphen at either end)")
+    if labels[-1].isdigit():  # an IPv4 address (192.0.2.1) or a numeric top-level label: not a host name
+        raise ValueError(f"{variable}: {value!r} is an address, not a host name")
+    return name
 
 
 def normalize_setup_code(code: str) -> str:
