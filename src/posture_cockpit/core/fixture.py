@@ -54,6 +54,28 @@ route from here), ``"policy"`` (refused by the scan's rule) or ``"untestable"``
 (this machine cannot offer that old version). A list gives one value per
 attempt, the last one repeated. Every connection is logged in ``connections``
 and counted in ``open_connections`` while it lasts.
+
+Version 0.7: ``smtp_attempt`` refuses exactly what the real network refuses before
+any socket (:func:`~.network.smtp_target` and :class:`~.network.SmtpBudget` are
+shared): an MX the audited domain does not publish in the world's DNS, an address
+that MX does not have, an invalid MX name, an internal perimeter, no EHLO name, the
+16 attempts spent, a certificate reading without a refused certificate or twice for
+one MX. The world's addresses are documentation addresses, which the real rule
+would refuse: the rule is not applied, ``"policy"`` plays it. What one address
+answers is in an ``"smtp"`` section, by MX then address::
+
+    "smtp": {"mx.example.org": {
+        "192.0.2.25": "tls_verified",                     # a reason of core/smtp.py, or "<reason>@<stage>"
+        "2001:db8::25": {"verify": "certificate_refused",  # by purpose; a list gives one per attempt
+                         "read_certificate": {"reason": "tls_unverified", "certificate": {"names": ["x"]}}}
+    }}
+
+A dialogue outcome is a :class:`~.smtp.Reason` value (``"tls_verified"``,
+``"starttls_absent"``, ``"timeout@ehlo"``…), alone or as ``{"reason": ...}`` with
+``tls_version``, ``certificate`` (over the host's), ``verify_code``,
+``verify_message``. A connection outcome is ``"refused"``, ``"timeout"``,
+``"unreachable"``, ``"hang"`` (until the caller gives up) or ``"policy"``. An
+address with nothing recorded is not testable (``"tool"``, ``"not_recorded"``).
 """
 
 from __future__ import annotations
@@ -62,12 +84,14 @@ import asyncio
 import contextlib
 from collections import Counter
 from collections.abc import AsyncIterator, Mapping
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from ipaddress import ip_address
 from typing import Any
 from urllib.parse import urlsplit
 
-from .egress import DestinationBlocked
+from . import smtp
+from .egress import DestinationBlocked, parse_address
 from .errors import (
     ConnectionClosed,
     ConnectionReset,
@@ -78,15 +102,36 @@ from .errors import (
     TLSHandshakeError,
     Unreachable,
 )
-from .network import Certificate, DnsAnswer, HttpReply, Refused, TlsSession, UntrustedCertificate
+from .network import (
+    Certificate,
+    DnsAnswer,
+    HttpReply,
+    Limits,
+    Refused,
+    SmtpBudget,
+    SmtpObservation,
+    SmtpPurpose,
+    TlsSession,
+    UntrustedCertificate,
+    smtp_target,
+)
 
 MODERN = ("TLSv1.3", "TLSv1.2")
 LEGACY = ("TLSv1.1", "TLSv1")
 
 
 class FixtureNetwork:
-    def __init__(self, data: Mapping[str, Any], now: datetime | None = None):
+    def __init__(self, data: Mapping[str, Any], now: datetime | None = None, *, domain: str = "",
+                 ehlo_name: str | None = None, internal: bool = False):
+        """``domain``, ``ehlo_name`` and ``internal``: as for :class:`~.network.LiveNetwork` (version 0.7)."""
         self.now = now or datetime.now(UTC)
+        self._domain = domain.lower().rstrip(".")
+        self._ehlo_name = ehlo_name
+        self._internal = internal
+        # MX names and addresses as the probe writes them: lower case, canonical address text.
+        self._smtp = {mx.lower().rstrip("."): {str(parse_address(a) or a): spec for a, spec in by_address.items()}
+                      for mx, by_address in data.get("smtp", {}).items()}
+        self._smtp_budget = SmtpBudget(Limits().smtp_attempts)
         self._dns = {self._dns_key(*key.rsplit(" ", 1)): value for key, value in data.get("dns", {}).items()}
         self._certificates = data.get("certificates", {})
         self._tls = data.get("tls", {})
@@ -331,6 +376,123 @@ class FixtureNetwork:
             self._negotiated.add((host, address))
         headers = {name.lower(): value for name, value in reply.get("headers", {}).items()}
         return HttpReply(url, int(reply.get("status", 200)), headers, reply.get("body", ""))
+
+
+    # ------------------------------------------------------------ SMTP (0.7)
+    def _recorded(self, name: str, rtype: str) -> DnsAnswer | None:
+        """The world's DNS answer, as the scan saw it; None for a question that times out (nothing known)."""
+        records = self._dns.get(self._dns_key(name, rtype), [])
+        if records == "timeout":
+            return None
+        return DnsAnswer((), exists=False) if records is None else DnsAnswer(tuple(records))
+
+    def _smtp_spec(self, mx_name: str, address: str, purpose: str) -> Any:
+        spec = self._smtp.get(mx_name, {}).get(address)
+        if isinstance(spec, Mapping) and set(spec) & set(SmtpPurpose):
+            spec = spec.get(purpose)
+        if isinstance(spec, list):
+            key = ("smtp", mx_name, address, purpose)
+            spec = spec[min(self._attempts[key], len(spec) - 1)]
+            self._attempts[key] += 1
+        return spec
+
+    async def smtp_attempt(self, mx_name: str, address: str, purpose: str = SmtpPurpose.VERIFY, *,
+                           deadline: float) -> SmtpObservation:
+        self.asked.append(f"smtp {mx_name} {address} {purpose}")
+        target = smtp_target(purpose=purpose, internal=self._internal, domain=self._domain,
+                             ehlo_name=self._ehlo_name, mx_name=mx_name, address=address, answer=self._recorded)
+        if isinstance(target, SmtpObservation):
+            return target
+        name, ip = target.mx_name, str(target.address)
+        spec = self._smtp_spec(name, ip, purpose)
+        if spec == "policy":
+            return SmtpObservation(name, ip, purpose, "policy", "private",
+                                   f"{name} ({ip}) port 25: destination blocked (private)")
+        refusal = self._smtp_budget.refusal(name, ip, purpose)
+        if refusal is not None:
+            return SmtpObservation(name, ip, purpose, "budget", *refusal)
+        if asyncio.get_running_loop().time() >= deadline:
+            return SmtpObservation(name, ip, purpose, "budget", "deadline", "no time left before connecting")
+        if spec is None:
+            return SmtpObservation(name, ip, purpose, "tool", "not_recorded", "this world records nothing here")
+        self._smtp_budget.take(name, ip, purpose)
+        async with self._connection("smtp", name, ip, 25):
+            observation = await self._smtp_play(name, ip, purpose, spec)
+        if (purpose == SmtpPurpose.VERIFY and observation.dialogue is not None
+                and observation.dialogue.reason is smtp.Reason.CERTIFICATE_REFUSED):
+            self._smtp_budget.certificate_refused(name, ip)
+        return observation
+
+    async def _smtp_play(self, name: str, ip: str, purpose: str, spec: Any) -> SmtpObservation:
+        detail: Mapping[str, Any] = spec if isinstance(spec, Mapping) else {"reason": spec}
+        outcome = str(detail["reason"])
+        if outcome == "hang":
+            await asyncio.Event().wait()  # until the caller is cancelled
+        connection = {"refused": ("refused", "connection refused"), "timeout": ("timeout", "no connection"),
+                      "unreachable": ("no_route", "network is unreachable")}
+        if outcome in connection:
+            return SmtpObservation(name, ip, purpose, "network", *connection[outcome], socket=True)
+        reason, _, stage = outcome.partition("@")
+        attempt = self._smtp_dialogue(name, smtp.Reason(reason), smtp.Stage(stage) if stage else None, detail)
+        return SmtpObservation(name, ip, purpose, dialogue=attempt, socket=True)
+
+    def _smtp_dialogue(self, name: str, reason: smtp.Reason, stage: smtp.Stage | None,
+                       detail: Mapping[str, Any]) -> smtp.Attempt:
+        """A plausible dialogue that ends with ``reason``, at the stage it belongs to."""
+        r, s = smtp.Reason, smtp.Stage
+        stage = stage or _SMTP_STAGES.get(reason, s.BANNER)
+        order = list(s)
+        beyond = order.index(stage)
+        banner = (smtp.Reply(554, ("5.7.1 no service for you",), 1, "5.7.1") if reason is r.BANNER_REFUSED
+                  else smtp.Reply(220, (f"{name} ESMTP",), 1) if beyond > 0 else None)
+        ehlo: smtp.Reply | None = None
+        capabilities: tuple[str, ...] = ()
+        altered: tuple[str, ...] = ()
+        if reason is r.EHLO_REFUSED:
+            ehlo = smtp.Reply(550, ("5.7.1 not welcome",), 1, "5.7.1")
+        elif beyond > order.index(s.EHLO) or reason in (r.ESMTP_ALTERED, r.STARTTLS_ABSENT):
+            capabilities = {r.ESMTP_ALTERED: ("PIPELINING", "XXXXXXXA"),
+                            r.STARTTLS_ABSENT: ("PIPELINING", "8BITMIME")}.get(reason, ("PIPELINING", "STARTTLS"))
+            altered = ("XXXXXXXA",) if reason is r.ESMTP_ALTERED else ()
+            ehlo = smtp.Reply(250, (name, *capabilities[:3]), 1 + len(capabilities))
+        starttls = {r.STARTTLS_TEMPORARY: smtp.Reply(454, ("4.7.0 not now",), 1, "4.7.0"),
+                    r.STARTTLS_POLICY_REFUSAL: smtp.Reply(550, ("5.7.1 not for you",), 1, "5.7.1"),
+                    r.STARTTLS_UNAVAILABLE: smtp.Reply(502, ("5.5.1 not implemented",), 1, "5.5.1"),
+                    r.STARTTLS_DIALOGUE_ERROR: smtp.Reply(501, ("5.5.4 syntax error",), 1, "5.5.4")}.get(reason)
+        if starttls is None and beyond > order.index(s.STARTTLS):
+            starttls = smtp.Reply(220, ("2.0.0 ready",), 1, "2.0.0")
+        version = certificate = None
+        if reason in (r.TLS_VERIFIED, r.TLS_UNVERIFIED):
+            version = str(detail.get("tls_version", "TLSv1.3"))
+            recorded = self._certificates.get(name)
+            values = {**(recorded if isinstance(recorded, Mapping) else {}), **detail.get("certificate", {})}
+            read = self._certificate(name, values, version)
+            certificate = (replace(read, trusted=True, problem="") if reason is r.TLS_VERIFIED
+                           else replace(read, trusted=False))
+        refused = reason is r.CERTIFICATE_REFUSED
+        # QUIT follows a complete answer in the clear, and a negotiation that succeeded (core/smtp.py).
+        quits = (reason in (r.TLS_VERIFIED, r.TLS_UNVERIFIED, r.BANNER_REFUSED, r.EHLO_REFUSED, r.ESMTP_ALTERED,
+                            r.STARTTLS_ABSENT) or (starttls is not None and stage is s.STARTTLS))
+        message = f"Hostname mismatch, certificate is not valid for '{name}'."
+        return smtp.Attempt(
+            mx_name=name, stage=stage, reason=reason, banner=banner, ehlo=ehlo, capabilities=capabilities,
+            altered=altered, starttls=starttls, tls_version=version or "",
+            tls_cipher="TLS_AES_256_GCM_SHA384" if version else "", certificate=certificate,
+            verify_code=int(detail.get("verify_code", 62)) if refused else None,
+            verify_message=str(detail.get("verify_message", message)) if refused else "",
+            detail=str(detail.get("detail", "")), quit_reply=221 if quits else None)
+
+
+# The stage each dialogue reason of a recorded world is observed at, unless "<reason>@<stage>" says another.
+_SMTP_STAGES = {
+    smtp.Reason.TLS_VERIFIED: smtp.Stage.QUIT, smtp.Reason.TLS_UNVERIFIED: smtp.Stage.QUIT,
+    smtp.Reason.BANNER_REFUSED: smtp.Stage.BANNER, smtp.Reason.EHLO_REFUSED: smtp.Stage.EHLO,
+    smtp.Reason.ESMTP_ALTERED: smtp.Stage.EHLO, smtp.Reason.STARTTLS_ABSENT: smtp.Stage.EHLO,
+    smtp.Reason.STARTTLS_TEMPORARY: smtp.Stage.STARTTLS, smtp.Reason.STARTTLS_POLICY_REFUSAL: smtp.Stage.STARTTLS,
+    smtp.Reason.STARTTLS_UNAVAILABLE: smtp.Stage.STARTTLS, smtp.Reason.STARTTLS_DIALOGUE_ERROR: smtp.Stage.STARTTLS,
+    smtp.Reason.CERTIFICATE_REFUSED: smtp.Stage.TLS, smtp.Reason.TLS_VERSION_REFUSED: smtp.Stage.TLS,
+    smtp.Reason.TLS_DIALOGUE_ERROR: smtp.Stage.TLS, smtp.Reason.TLS_HANDSHAKE_ERROR: smtp.Stage.TLS,
+}
 
 
 def _highest(offer: str) -> str:

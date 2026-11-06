@@ -188,6 +188,14 @@ class EgressPolicy:
 
 INTERNET = EgressPolicy()
 
+# Version 0.7: the SMTP probe (S01). Port 25 of public addresses, and nothing else: no network is ever
+# added, whatever the perimeter of the scan, because the probe asks what a sending server on the
+# Internet sees, and port 25 of an internal machine is no business of an audit of public mail. Every
+# internal address is refused ("private"), every forbidden one too ("forbidden"), and so is any other
+# port ("port"). LiveNetwork applies it, on top of its other refusals, just before opening the socket.
+SMTP_PORT = 25
+SMTP_EGRESS = EgressPolicy(networks=(), ports=frozenset({SMTP_PORT}), name="smtp")
+
 
 def parse_address(text: str) -> Address | None:
     """The address written in ``text`` (``"192.0.2.1"``, ``"2001:db8::1"``), or None for a host name.

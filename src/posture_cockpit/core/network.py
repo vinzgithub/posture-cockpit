@@ -23,6 +23,15 @@ is tested, with the audited name as TLS SNI and HTTP ``Host``.
   goes through the same rule;
 - it bounds what a scan may cost: a time limit on every operation and a maximum
   number of DNS queries and connections (:class:`Limits`).
+
+Version 0.7 adds one SMTP attempt on one address of a published MX
+(:meth:`LiveNetwork.smtp_attempt`), for the SMTP probe. It is not a mail client:
+it can only reach port 25 of a public address of an MX the audited domain
+publishes, as this scan's DNS already answered, and only say what
+:mod:`.smtp` says (``EHLO``, ``STARTTLS``, ``QUIT``). Every condition is checked
+here, in the method itself, before any socket, whoever calls it (see
+:meth:`LiveNetwork.smtp_attempt`). It returns an observation, never a socket or a
+stream, and never a verdict.
 """
 
 from __future__ import annotations
@@ -35,7 +44,8 @@ import ssl
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
-from typing import Any, Protocol, TypeVar
+from enum import StrEnum
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar
 
 import dns.asyncresolver
 import dns.exception
@@ -48,8 +58,9 @@ from cryptography.hazmat.primitives.asymmetric import dsa, ec, ed448, ed25519, r
 from cryptography.x509.oid import NameOID
 
 from .. import __version__
+from ..config import check_host_name
 from . import legacy_tls
-from .egress import INTERNET, Address, DestinationBlocked, EgressPolicy, parse_address
+from .egress import INTERNET, SMTP_EGRESS, SMTP_PORT, Address, DestinationBlocked, EgressPolicy, parse_address
 from .errors import (
     ConnectionClosed,
     ConnectionReset,
@@ -61,6 +72,9 @@ from .errors import (
     TLSHandshakeError,
     Unreachable,
 )
+
+if TYPE_CHECKING:
+    from .smtp import Attempt
 
 USER_AGENT = f"PostureCockpit/{__version__} (+https://github.com/vinzgithub/posture-cockpit)"
 MAX_BODY = 64 * 1024  # bytes of a web page kept for the checks
@@ -78,10 +92,16 @@ _TLS_VERSION = {"TLSv1.2": ssl.TLSVersion.TLSv1_2, "TLSv1.3": ssl.TLSVersion.TLS
 _UNREACHABLE = frozenset({errno.ENETUNREACH, errno.EAFNOSUPPORT, errno.EADDRNOTAVAIL})
 # Errors of this machine's own TLS library, before anything reached the server.
 _LOCAL_TLS = frozenset({"NO_PROTOCOLS_AVAILABLE", "NO_CIPHERS_AVAILABLE"})
+# Version 0.7, the SMTP probe (R11): the TCP connection to port 25, capped by the caller's deadline; and
+# how many SMTP connections one scan may have open at once, whoever asks for them.
+SMTP_CONNECT_SECONDS = 5.0
+SMTP_CONNECTIONS = 8
 
 __all__ = [
-    "MAX_BODY", "OFFERS", "TLS_VERSIONS", "USER_AGENT", "Certificate", "DestinationBlocked", "DnsAnswer",
-    "HttpReply", "Limits", "LiveNetwork", "Network", "NetworkError", "Refused", "TlsSession", "UntrustedCertificate",
+    "MAX_BODY", "OFFERS", "SMTP_CONNECTIONS", "SMTP_CONNECT_SECONDS", "TLS_VERSIONS", "USER_AGENT", "Certificate",
+    "DestinationBlocked", "DnsAnswer", "HttpReply", "Limits", "LiveNetwork", "Network", "NetworkError", "Refused",
+    "SmtpBudget", "SmtpObservation", "SmtpPurpose", "SmtpTarget", "TlsSession", "UntrustedCertificate", "mx_record",
+    "smtp_target",
 ]
 
 
@@ -105,6 +125,17 @@ class DnsAnswer:
 
     records: tuple[str, ...] = ()
     exists: bool = True  # False when the name does not exist at all (NXDOMAIN)
+
+
+def mx_record(text: str) -> tuple[int | None, str]:
+    """(preference, host) of an MX record in its text form, ``"10 mx.example.org."`` (version 0.7).
+
+    The host in lower case without the root's dot; ``""`` for the null MX ``"0 ."`` (RFC 7505).
+    The preference is None when the record does not start with a number. The host is read as the mail
+    checks always read it, the last word of the record: an empty record raises IndexError, as it did."""
+    words = text.split()
+    host = words[-1].lower().rstrip(".")
+    return (int(words[0]) if len(words) > 1 and words[0].isdigit() else None), host
 
 
 @dataclass(frozen=True)
@@ -197,6 +228,15 @@ class Network(Protocol):
         """(name, address) of every TLS negotiation that succeeded so far in the scan."""
         ...
 
+    # Version 0.7: the SMTP probe.
+    def smtp_attempt(self, mx_name: str, address: str, purpose: str = "verify", *,
+                     deadline: float) -> Awaitable[SmtpObservation]:
+        """One SMTP dialogue with ``address`` of ``mx_name``, port 25, returned by ``deadline``.
+
+        Never raises for what the network or the server does: a refusal before any socket, a failed
+        connection and a dialogue are all observations (:class:`SmtpObservation`)."""
+        ...
+
 
 @dataclass(frozen=True)
 class Limits:
@@ -207,6 +247,137 @@ class Limits:
     operation_seconds: float = 20.0  # one question, all attempts included
     # Version 0.4: the HTTPS probe, by attempt; at worst 16 addresses, about 8 connections each.
     probe_connections: int = 160
+    # Version 0.7: the SMTP probe, by attempt, its own count: 8 MX with an IPv4 and an IPv6 address each,
+    # or fewer with one certificate reading per MX. It shares nothing with the counts above.
+    smtp_attempts: int = 16
+
+
+# ------------------------------------------------------------ SMTP (0.7)
+class SmtpPurpose(StrEnum):
+    """Why an SMTP attempt is made: to verify, or to read a certificate verification refused."""
+
+    VERIFY = "verify"
+    READ_CERTIFICATE = "read_certificate"
+
+
+@dataclass(frozen=True)
+class SmtpObservation:
+    """One SMTP attempt on one address: refused before any socket, a connection that failed, or a dialogue.
+
+    ``cause`` and ``reason`` say why there is no dialogue:
+
+    - ``"policy"``, before any socket: ``"purpose"`` (unknown), ``"internal"`` (an internal perimeter),
+      ``"not_bound"`` (no audited domain), ``"not_configured"`` (no EHLO name), ``"not_in_cache"`` (this
+      scan's DNS has not answered that question), ``"not_published"`` (not an MX of the audited domain, or
+      not an address of that MX), ``"not_an_address"``, or the egress rule's ``"forbidden"``, ``"private"``,
+      ``"port"``;
+    - ``"invalid_mx_name"``, before any socket and any resolution: ``"syntax"``;
+    - ``"budget"``, before any socket: ``"attempts"`` (the scan's count is spent), ``"diagnostic_used"``
+      (a certificate already read for this MX), ``"diagnostic_not_allowed"`` (no certificate refused on
+      this address), ``"deadline"`` (no time left, the connection included);
+    - ``"network"``, a socket was opened: ``"refused"``, ``"timeout"``, ``"no_route"``, ``"error"``;
+    - ``"tool"`` (recorded worlds only): ``"not_recorded"``.
+
+    With a dialogue, ``cause`` is empty and :attr:`dialogue` holds it. A refusal never counts as a
+    defect of the server: the decision reads it as "not testable"."""
+
+    mx_name: str
+    address: str
+    purpose: str
+    cause: str = ""
+    reason: str = ""
+    detail: str = ""
+    dialogue: Attempt | None = None
+    socket: bool = False  # a socket was opened for this attempt (never for a refusal)
+
+
+@dataclass(frozen=True)
+class SmtpTarget:
+    """Where an SMTP attempt may go: a valid published MX name, and one of its published addresses."""
+
+    mx_name: str
+    address: Address
+
+
+def smtp_target(*, purpose: str, internal: bool, domain: str, ehlo_name: str | None, mx_name: str, address: str,
+                answer: Callable[[str, str], DnsAnswer | None]) -> SmtpTarget | SmtpObservation:
+    """The refusals that need neither a socket nor a network rule, in order; the target when none applies.
+
+    ``answer(name, type)``: what this scan's DNS already answered, None when it did not (yet). Nothing is
+    resolved here: the attempt can only go where the scan's discovery saw the MX and its address, so a
+    DNS answer that changes between two questions (rebinding) cannot move it. Shared by the real network
+    and the recorded worlds, so that both refuse the same attempts."""
+
+    def refused(cause: str, reason: str, detail: str) -> SmtpObservation:
+        return SmtpObservation(_shown(mx_name), _shown(address), _shown(purpose), cause, reason, detail)
+
+    if purpose not in set(SmtpPurpose):
+        return refused("policy", "purpose", "an SMTP attempt verifies or reads a certificate, nothing else")
+    if internal:
+        return refused("policy", "internal", "the SMTP probe never runs inside an internal perimeter")
+    if not domain:
+        return refused("policy", "not_bound", "this network is bound to no audited domain")
+    if not ehlo_name:
+        return refused("policy", "not_configured", "no EHLO name: the SMTP probe is off")
+    try:
+        name = check_host_name(mx_name, "MX name")
+    except ValueError as e:
+        return refused("invalid_mx_name", "syntax", str(e))
+    published = answer(domain, "MX")
+    if published is None:
+        return refused("policy", "not_in_cache", f"the MX of {domain} were not read in this scan")
+    # An empty record cannot name this MX: skipped here, where mx_record() would raise.
+    if name not in {mx_record(r)[1] for r in published.records if r.split()}:
+        return refused("policy", "not_published", f"{name} is not an MX of {domain} in this scan")
+    target = parse_address(address)
+    if target is None:
+        return refused("policy", "not_an_address", f"{_shown(address)} is not an IP address")
+    family = answer(name, "A" if target.version == 4 else "AAAA")
+    if family is None:
+        return refused("policy", "not_in_cache", f"the addresses of {name} were not read in this scan")
+    if target not in {a for a in map(parse_address, family.records) if a is not None}:
+        return refused("policy", "not_published", f"{target} is not an address of {name} in this scan")
+    return SmtpTarget(name, target)
+
+
+class SmtpBudget:
+    """The SMTP attempts of one scan: at most ``attempts`` (16), and one certificate reading per MX, only
+    on an address whose verifying attempt had its certificate refused (decision of the review, C).
+
+    :meth:`refusal` says whether an attempt may go; :meth:`take` says it again and counts it, with no
+    pause in between, so two attempts running at once cannot both take the last unit."""
+
+    def __init__(self, attempts: int):
+        self.attempts = attempts
+        self.spent = 0
+        self._refused: set[tuple[str, str]] = set()  # (MX, address) whose certificate verification failed
+        self._read: set[str] = set()                 # MX whose certificate was read already
+
+    def refusal(self, mx_name: str, address: str, purpose: str) -> tuple[str, str] | None:
+        if purpose == SmtpPurpose.READ_CERTIFICATE:
+            if (mx_name, address) not in self._refused:
+                return "diagnostic_not_allowed", f"no certificate of {mx_name} was refused on {address}"
+            if mx_name in self._read:
+                return "diagnostic_used", f"the certificate of {mx_name} was read once already"
+        if self.spent >= self.attempts:
+            return "attempts", f"the {self.attempts} SMTP attempts of this scan are spent"
+        return None
+
+    def take(self, mx_name: str, address: str, purpose: str) -> tuple[str, str] | None:
+        refusal = self.refusal(mx_name, address, purpose)
+        if refusal is None:
+            self.spent += 1
+            if purpose == SmtpPurpose.READ_CERTIFICATE:
+                self._read.add(mx_name)
+        return refusal
+
+    def certificate_refused(self, mx_name: str, address: str) -> None:
+        self._refused.add((mx_name, address))
+
+
+def _shown(text: str) -> str:
+    """A name or an address as given, made safe to keep: printable ASCII, at most 255 characters."""
+    return "".join(c if " " <= c <= "~" else "?" for c in text[:255])
 
 
 T = TypeVar("T")
@@ -218,14 +389,27 @@ class LiveNetwork:
     ``policy``: where connections may go (default: public addresses, ports 80 and 443).
     ``nameservers``: resolvers to query (IP addresses); empty means those of the system.
     ``trusted_ca``: extra certificate authorities in PEM, trusted on top of the
-    system's (an internal CA). Certificate verification itself is never turned off."""
+    system's (an internal CA). Certificate verification itself is never turned off.
+
+    Version 0.7, the SMTP probe: ``domain``, the audited domain, whose published MX are the only
+    servers :meth:`smtp_attempt` may reach; ``ehlo_name``, the name it introduces itself with, as the
+    configuration checked it at start (None: the probe is off); ``internal``, the scan runs in an internal
+    perimeter, where the probe never runs. There is no parameter for the port, the rule or the TLS
+    context of the probe: those are the methods ``_smtp_policy``, ``_smtp_port`` and ``_smtp_tls_context``,
+    which only a test subclass redefines."""
 
     def __init__(self, nameservers: list[str] | None = None, timeout: float = 6.0, *,
                  policy: EgressPolicy = INTERNET, trusted_ca: str = "", dns_port: int = 53,
-                 limits: Limits | None = None):
+                 limits: Limits | None = None, domain: str = "", ehlo_name: str | None = None,
+                 internal: bool = False):
         self.timeout = timeout
         self.policy = policy
         self.limits = limits or Limits()
+        self._domain = domain.lower().rstrip(".")
+        self._ehlo_name = ehlo_name
+        self._internal = internal
+        self._smtp_budget = SmtpBudget(self.limits.smtp_attempts)
+        self._smtp_gate = asyncio.Semaphore(SMTP_CONNECTIONS)
         self._trusted_ca = trusted_ca
         self._verified: ssl.SSLContext | None = None
         self._resolver = dns.asyncresolver.Resolver(configure=not nameservers)
@@ -269,6 +453,17 @@ class LiveNetwork:
     # ------------------------------------------------------------------ DNS
     async def dns(self, name: str, rtype: str) -> DnsAnswer:
         return await self._cached(("dns", name.lower().rstrip("."), rtype.upper()), lambda: self._dns(name, rtype))
+
+    def _cached_answer(self, name: str, rtype: str) -> DnsAnswer | None:
+        """What this scan's DNS already answered, without asking again (version 0.7).
+
+        None when the question was not asked, is not answered yet, or failed: then nothing is known,
+        and an SMTP attempt that depends on it is refused."""
+        future = self._cache.get(("dns", name.lower().rstrip("."), rtype.upper()))
+        if future is None or not future.done() or future.cancelled() or future.exception() is not None:
+            return None
+        answer = future.result()
+        return answer if isinstance(answer, DnsAnswer) else None
 
     async def _dns(self, name: str, rtype: str) -> DnsAnswer:
         try:
@@ -594,6 +789,122 @@ class LiveNetwork:
         if context is not None:
             self._negotiated.add((host, address))
         return reply
+
+
+    # ------------------------------------------------------------ SMTP (0.7)
+    # The three values below are those of production. No parameter, no setting and no environment variable
+    # changes them; only the test subclass LabNetwork (tests/smtp_lab.py) redefines these methods, to reach
+    # fake servers on the loopback address, and a test checks that nothing in src/ does.
+    def _smtp_policy(self) -> EgressPolicy:
+        """Where the probe may connect: public addresses, port 25 (SMTP_EGRESS)."""
+        return SMTP_EGRESS
+
+    def _smtp_port(self) -> int:
+        return SMTP_PORT
+
+    def _smtp_tls_context(self, purpose: str) -> ssl.SSLContext:
+        """The context of a negotiation: the public, verifying one, without the perimeter's own authority
+        (S05); or, to read a certificate verification refused, one that verifies nothing, TLS 1.2 and 1.3
+        only (never 1.0 or 1.1, decision D1b), whose success the dialogue never takes for trust."""
+        from . import smtp  # here: smtp reads its certificates with this module's _parse_certificate
+
+        if purpose == SmtpPurpose.READ_CERTIFICATE:
+            return _unverified_context("TLSv1.2", "TLSv1.3")
+        return smtp.public_smtp_context()
+
+    async def smtp_attempt(self, mx_name: str, address: str, purpose: str = SmtpPurpose.VERIFY, *,
+                           deadline: float) -> SmtpObservation:
+        """One SMTP dialogue with ``address`` of ``mx_name``, port 25, returned by ``deadline``.
+
+        ``deadline``: an instant of the running loop's clock (``loop.time()``), computed once by the
+        caller for the whole probe; no attempt extends it. Before any socket, in this order, the attempt
+        is refused when (see :class:`SmtpObservation` for the causes):
+
+        1. the purpose is unknown, the scan runs in an internal perimeter (said by the scanner, or
+           shown by the scan's rule), no audited domain is bound, or no EHLO name is configured;
+        2. ``mx_name`` is not a valid host name (``invalid_mx_name``);
+        3. ``mx_name`` is not among the MX this scan's DNS gave for the audited domain, or ``address``
+           among the A or AAAA records it gave for ``mx_name``; a question not answered in this scan
+           refuses as well (``not_in_cache``): nothing is resolved again;
+        4. the address or the port is refused by :data:`~.egress.SMTP_EGRESS`;
+        5. the scan's 16 attempts are spent, or a certificate reading is asked without a refused
+           certificate on this address, or a second time for this MX;
+        6. the deadline has come.
+
+        Then the socket is opened to that very address (the checked IP, never the name), within
+        :data:`SMTP_CONNECT_SECONDS`, and the dialogue of :func:`.smtp.run_dialogue` runs on it, the
+        MX name as SNI and as the name to check. At most :data:`SMTP_CONNECTIONS` attempts are connected
+        at once in one scan."""
+        target = smtp_target(purpose=purpose, internal=self._internal or self.policy.internal,
+                             domain=self._domain, ehlo_name=self._ehlo_name, mx_name=mx_name, address=address,
+                             answer=self._cached_answer)
+        if isinstance(target, SmtpObservation):
+            return target
+        name, ip = target.mx_name, target.address
+        port = self._smtp_port()
+        try:
+            self._smtp_policy().check(name, ip, port)
+        except DestinationBlocked as e:
+            return SmtpObservation(name, str(ip), purpose, "policy", e.reason, str(e))
+        refusal = self._smtp_budget.refusal(name, str(ip), purpose)
+        if refusal is not None:
+            return SmtpObservation(name, str(ip), purpose, "budget", *refusal)
+        loop = asyncio.get_running_loop()
+        if loop.time() >= deadline:
+            return SmtpObservation(name, str(ip), purpose, "budget", "deadline", "no time left before connecting")
+        try:
+            async with asyncio.timeout_at(deadline):
+                await self._smtp_gate.acquire()
+        except TimeoutError:
+            return SmtpObservation(name, str(ip), purpose, "budget", "deadline",
+                                   "no connection free before the deadline")
+        try:
+            refusal = self._smtp_budget.take(name, str(ip), purpose)  # checked again and counted, no pause between
+            if refusal is not None:
+                return SmtpObservation(name, str(ip), purpose, "budget", *refusal)
+            return await self._smtp_connected(name, ip, port, purpose, deadline)
+        finally:
+            self._smtp_gate.release()
+
+    async def _smtp_connected(self, name: str, ip: Address, port: int, purpose: str,
+                              deadline: float) -> SmtpObservation:
+        """The connection to the checked address, then the dialogue, which closes it."""
+        from . import smtp  # see _smtp_tls_context
+
+        loop = asyncio.get_running_loop()
+        limit = min(SMTP_CONNECT_SECONDS, deadline - loop.time())
+        if limit <= 0:
+            return SmtpObservation(name, str(ip), purpose, "budget", "deadline", "no time left before connecting")
+        try:
+            sock = socket.socket(socket.AF_INET6 if ip.version == 6 else socket.AF_INET, socket.SOCK_STREAM)
+        except OSError as e:  # this machine cannot even make the socket (no IPv6)
+            return SmtpObservation(name, str(ip), purpose, "network", "no_route", e.strerror or str(e))
+        try:
+            sock.setblocking(False)
+            async with asyncio.timeout(limit):
+                await loop.sock_connect(sock, (str(ip), port))
+            reader, writer = await asyncio.open_connection(sock=sock)
+        except TimeoutError:
+            sock.close()
+            cause, reason = ("budget", "deadline") if limit < SMTP_CONNECT_SECONDS else ("network", "timeout")
+            return SmtpObservation(name, str(ip), purpose, cause, reason, f"no connection within {limit:.1f} s",
+                                   socket=True)
+        except ConnectionRefusedError:
+            sock.close()
+            return SmtpObservation(name, str(ip), purpose, "network", "refused", "connection refused", socket=True)
+        except OSError as e:
+            sock.close()
+            reason = "no_route" if e.errno in _UNREACHABLE else "error"
+            return SmtpObservation(name, str(ip), purpose, "network", reason, e.strerror or str(e), socket=True)
+        except BaseException:
+            sock.close()
+            raise
+        assert self._ehlo_name is not None  # smtp_target refused the attempt otherwise
+        attempt = await smtp.run_dialogue(reader, writer, mx_name=name, ehlo_name=self._ehlo_name,
+                                          tls_context=self._smtp_tls_context(purpose), deadline=deadline)
+        if purpose == SmtpPurpose.VERIFY and attempt.reason is smtp.Reason.CERTIFICATE_REFUSED:
+            self._smtp_budget.certificate_refused(name, str(ip))
+        return SmtpObservation(name, str(ip), purpose, dialogue=attempt, socket=True)
 
 
 # ---------------------------------------------------------------- helpers
