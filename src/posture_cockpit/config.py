@@ -25,8 +25,9 @@ SMTP_PROBE_VALUES = ("off", "on")
 # Seconds the engine keeps for itself after the SMTP probe's deadline, to gather and store what the
 # probe observed before it stops the check (specification 0.7.0, F02: min(12 s, CHECK_TIMEOUT - 2 s)).
 SMTP_CHECK_MARGIN = 2.0
-# A host name in EHLO (RFC 5321 §4.1.1.1, §2.3.5): at most 253 characters, labels of letters, digits
-# and hyphens (RFC 1123 §2.1), neither starting nor ending with a hyphen, 63 characters at most.
+# A host name in EHLO (RFC 5321 §4.1.1.1, §2.3.5), and the MX name of the SMTP dialogue: at most 253
+# characters, labels of letters, digits and hyphens (RFC 1123 §2.1), neither starting nor ending with a
+# hyphen, 63 characters at most (check_host_name).
 _HOST_LABEL = re.compile(r"(?!-)[a-z0-9-]{1,63}(?<!-)")
 MAX_HOST_NAME = 253
 
@@ -192,28 +193,53 @@ def validate_ehlo_name(value: str) -> str:
     command ``EHLO <name>``: a control character (CR, LF) could add a command of its own, so any
     such character refuses the value, wherever it is. Only ASCII is accepted: an internationalised
     name is written in its ``xn--`` form. The check is a syntax check: it does not prove that the
-    name exists in the DNS, nor that it belongs to the operator."""
-    variable = "POSTURE_COCKPIT_SMTP_EHLO_NAME"
+    name exists in the DNS, nor that it belongs to the operator.
+
+    One tolerance, here only, because the value comes from a file the administrator edits: spaces
+    around it, as an editor may leave them, are not part of the name and are dropped before the
+    check. Only spaces: a tab, CR or LF at either end is a control character and refuses the value.
+    Then the strict rules of :func:`check_host_name`; the name sent is the one they return."""
+    return check_host_name(value.strip(" "), "POSTURE_COCKPIT_SMTP_EHLO_NAME")
+
+
+def check_host_name(value: str, what: str) -> str:
+    """``value`` checked as a fully qualified ASCII host name, strictly; returned normalised.
+
+    Raises ValueError, its message starting with ``what``. The rules, in the order they are checked:
+    no control character anywhere (CR, LF, tab…); ASCII only; no space, around the name or in it;
+    not empty; at most 253 characters; at least two labels; each label 1 to 63 letters, digits and
+    hyphens, no hyphen at either end (so no underscore and no empty label); the last label not all
+    digits (an address is not a host name).
+
+    Nothing is trimmed or repaired. The only normalisation changes the form, never the name: lower
+    case (host names are case-insensitive, RFC 4343) and no root's dot (``mx.example.org.`` is the
+    absolute form of ``mx.example.org``).
+
+    One rule for every host name the SMTP probe uses (version 0.7): the EHLO name at start, then,
+    just before anything is sent, the EHLO name and the published MX name in the SMTP dialogue
+    (core/smtp.py), where the MX name is also the TLS SNI and the name the certificate must carry."""
     if any(ord(c) < 32 or ord(c) == 127 for c in value):
-        raise ValueError(f"{variable}: control characters (CR, LF...) are not allowed")
+        raise ValueError(f"{what}: control characters (CR, LF...) are not allowed")
     if not value.isascii():
-        raise ValueError(f"{variable}: {value!r} is not ASCII; write an internationalised name in its xn-- form")
-    name = value.strip().lower()
+        raise ValueError(f"{what}: {value!r} is not ASCII; write an internationalised name in its xn-- form")
+    if " " in value:
+        raise ValueError(f"{what}: {value!r} contains a space; a host name has none")
+    name = value.lower()
     name = name[:-1] if name.endswith(".") else name  # the root's dot is not sent
     if not name:
-        raise ValueError(f"{variable}: empty")
+        raise ValueError(f"{what}: empty")
     if len(name) > MAX_HOST_NAME:
-        raise ValueError(f"{variable}: longer than {MAX_HOST_NAME} characters")
+        raise ValueError(f"{what}: longer than {MAX_HOST_NAME} characters")
     labels = name.split(".")
     if len(labels) < 2:
-        raise ValueError(f"{variable}: {value!r} is not a fully qualified name (at least two labels, "
-                         "e.g. probe.example.org)")
+        raise ValueError(f"{what}: {value!r} is not a fully qualified name (at least two labels, "
+                         "e.g. host.example.org)")
     for label in labels:
         if not _HOST_LABEL.fullmatch(label):
-            raise ValueError(f"{variable}: {label!r} is not a valid label (letters, digits and hyphens, "
+            raise ValueError(f"{what}: {label!r} is not a valid label (letters, digits and hyphens, "
                              "at most 63, no hyphen at either end)")
     if labels[-1].isdigit():  # an IPv4 address (192.0.2.1) or a numeric top-level label: not a host name
-        raise ValueError(f"{variable}: {value!r} is an address, not a host name")
+        raise ValueError(f"{what}: {value!r} is an address, not a host name")
     return name
 
 
