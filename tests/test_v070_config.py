@@ -229,7 +229,10 @@ def test_the_engine_hands_settings_and_time_limit_to_the_checks():
 
 
 def test_the_scanner_hands_the_instance_settings_to_scans_and_rechecks(tmp_path):
-    """A1a, §5: scans, scheduled scans and rechecks all go through Scanner, with the instance's settings."""
+    """A1a, §5: Scanner.scan() and Scanner.recheck_group() hand over the instance's settings.
+
+    Covered directly: scans and rechecks. Scheduled scans call Scanner.scan() too
+    (web/scheduler.py) and so receive the same settings, but the scheduler itself is not run here."""
     extension, seen = capturing_extension()
     config = Config(data_dir=tmp_path, smtp_probe=True, smtp_ehlo_name="probe.example.org", check_timeout=9)
     scanner = Scanner(Registry([extension]), config, network_factory=lambda domain: FixtureNetwork({}))
