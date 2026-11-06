@@ -109,6 +109,17 @@ def legacy_server(pki: TestPki, version: ssl.TLSVersion) -> ssl.SSLContext:
     return context
 
 
+def reading_context() -> ssl.SSLContext:
+    """A context that verifies nothing, as for reading a certificate already refused."""
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    context.check_hostname = False
+    context.verify_mode = ssl.CERT_NONE
+    # Set, not assumed: some builds (Ubuntu's Python 3.12) leave the minimum to the system, which can mean
+    # TLS 1.0, and the dialogue refuses such a context (decision D1b).
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    return context
+
+
 def refused_before_sending(*, match: str, mx_name: str = MX, ehlo_name: str = EHLO_NAME,
                            tls_context: ssl.SSLContext | None = None) -> None:
     """run_dialogue raises ValueError matching ``match``, the server received nothing, the connection is closed."""
@@ -510,17 +521,52 @@ def test_the_expiry_date_is_kept_for_the_decision(pki, days):
 def test_a_context_that_verifies_nothing_never_claims_trust(pki, tmp_path):
     """F03 (diagnostic reconnection: reading a refused certificate never makes it trusted): with a context
     that checks nothing, the negotiation succeeds, the certificate is read, and stays untrusted."""
-    reader = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-    reader.check_hostname = False
-    reader.verify_mode = ssl.CERT_NONE
-    # Set, not assumed: some builds (Ubuntu's Python 3.12) leave the minimum to the system, which can mean
-    # TLS 1.0, and the dialogue refuses such a context (decision D1b).
-    reader.minimum_version = ssl.TLSVersion.TLSv1_2
     other = TestPki(tmp_path, "Other CA")
-    attempt = talk(tls_script(other.server_context(MX)), reader).attempt
+    attempt = talk(tls_script(other.server_context(MX)), reading_context()).attempt
     assert (attempt.stage, attempt.reason) == (Stage.QUIT, Reason.TLS_UNVERIFIED)
     assert attempt.certificate is not None and not attempt.certificate.trusted
     assert attempt.certificate.issuer == "Other CA"
+
+
+def test_two_kinds_of_context():
+    """F03: the production context proves trust, the reading context does not; nothing else is accepted."""
+    assert smtp.proves_trust(smtp.public_smtp_context()) is True
+    assert smtp.proves_trust(reading_context()) is False
+
+
+HALFWAY = {
+    "common name accepted": lambda context: setattr(context, "hostname_checks_common_name", True),
+    "certificate optional": lambda context: setattr(context, "verify_mode", ssl.CERT_OPTIONAL),
+    "name not checked": lambda context: setattr(context, "check_hostname", False),
+    "dates not checked": lambda context: setattr(context, "verify_flags", context.verify_flags | 0x200000),
+}
+
+
+@pytest.mark.parametrize("change", list(HALFWAY))
+def test_a_context_halfway_is_refused_before_anything_is_sent(pki, change):
+    """F03, RFC 8461 §4.1: a context that verifies part of what MTA-STS requires is neither one that proves
+    trust nor one that only reads; it could make a refused certificate look verified, so it is refused."""
+    context = lab_context(pki)
+    HALFWAY[change](context)
+    with pytest.raises(ValueError, match="must verify as MTA-STS does"):
+        smtp.proves_trust(context)
+    refused_before_sending(tls_context=context, match="must verify as MTA-STS does")
+
+
+def test_a_common_name_only_certificate_never_becomes_verified(pki, monkeypatch):
+    """F03, T02 (CN only, SAN absent), Q02: whatever context is given, a certificate naming the MX in its
+    common name only is never verified. The verifying context refuses it (62); a context that accepts the
+    common name is refused before anything is sent; the reading context reads it, untrusted."""
+    refused_certificate(talk(tls_script(pki.server_context(MX, san=False)), lab_context(pki)), 62)
+    accepts_cn = lab_context(pki)
+    accepts_cn.hostname_checks_common_name = True
+    refused_before_sending(tls_context=accepts_cn, match="must verify as MTA-STS does")
+    read = talk(tls_script(pki.server_context(MX, san=False)), reading_context()).attempt
+    assert read.reason is Reason.TLS_UNVERIFIED and read.certificate is not None and not read.certificate.trusted
+    # Why the guard matters: without it, that context would have passed the certificate as verified.
+    monkeypatch.setattr(smtp, "proves_trust", lambda context: True)
+    unguarded = talk(tls_script(pki.server_context(MX, san=False)), accepts_cn).attempt
+    assert unguarded.reason is Reason.TLS_VERIFIED
 
 
 # ------------------------------------------------------------------ R10: nothing after TLS but QUIT

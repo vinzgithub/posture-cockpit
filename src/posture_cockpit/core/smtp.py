@@ -136,11 +136,14 @@ _VERSION_REFUSED = frozenset({"TLSV1_ALERT_PROTOCOL_VERSION", "UNSUPPORTED_PROTO
 # What came back is not TLS at all: usually an SMTP reply in the clear, read as a TLS record.
 _NOT_TLS = frozenset({"WRONG_VERSION_NUMBER"})
 _EOF = frozenset({"UNEXPECTED_EOF_WHILE_READING"})
+# OpenSSL's X509_V_FLAG_NO_CHECK_TIME (x509_vfy.h), which Python does not name: certificate dates not
+# checked. A context with it does not verify what RFC 8461 §4.1 requires (a certificate not expired).
+_NO_CHECK_TIME = 0x200000
 
 __all__ = [
     "BANNER_SECONDS", "EVIDENCE_CHARS", "EVIDENCE_LINES", "MAX_LINE_BYTES", "MAX_REPLY_LINES", "QUIT_SECONDS",
-    "REPLY_SECONDS", "TLS_SECONDS", "Attempt", "Command", "Reason", "Reply", "Stage", "public_smtp_context",
-    "run_dialogue", "starttls_refusal", "tls_failure",
+    "REPLY_SECONDS", "TLS_SECONDS", "Attempt", "Command", "Reason", "Reply", "Stage", "proves_trust",
+    "public_smtp_context", "run_dialogue", "starttls_refusal", "tls_failure",
 ]
 
 
@@ -296,6 +299,34 @@ def tls_failure(error: BaseException) -> tuple[Reason, str]:
     return Reason.TLS_HANDSHAKE_ERROR, _cut(f"{error.__class__.__name__} {error}".strip())
 
 
+def proves_trust(context: ssl.SSLContext) -> bool:
+    """Whether a negotiation with ``context`` proves the certificate (True) or only reads it (False).
+
+    Two kinds of context are accepted, and nothing in between (F03):
+
+    - one that verifies what MTA-STS requires (RFC 8461 §4.1): a certificate required
+      (``CERT_REQUIRED``), its chain and dates checked, and the MX name checked
+      (``check_hostname``) as a DNS-ID of the subject alternative name only
+      (``hostname_checks_common_name = False``). :func:`public_smtp_context` is one;
+    - one that verifies nothing (``CERT_NONE``, no name check), to read a certificate already
+      refused. A negotiation with it never claims trust: :attr:`Reason.TLS_UNVERIFIED`.
+
+    A context halfway (the common name accepted, a certificate optional, dates not checked, no
+    name check) would make a certificate that MTA-STS refuses, one naming the MX in its CN only
+    for instance, look verified: it raises ValueError. So does any context that would accept a
+    version older than TLS 1.2 (decision D1b). Which authorities a context trusts is the caller's
+    choice: :func:`public_smtp_context` takes the system's only."""
+    if context.minimum_version < ssl.TLSVersion.TLSv1_2:
+        raise ValueError("SMTP dialogue: the TLS context must not offer versions older than TLS 1.2")
+    if (context.verify_mode == ssl.CERT_REQUIRED and context.check_hostname
+            and not context.hostname_checks_common_name and not context.verify_flags & _NO_CHECK_TIME):
+        return True
+    if context.verify_mode == ssl.CERT_NONE and not context.check_hostname:
+        return False
+    raise ValueError("SMTP dialogue: the TLS context must verify as MTA-STS does (certificate required, "
+                     "dates and name checked, no common name) or verify nothing")
+
+
 async def run_dialogue(reader: asyncio.StreamReader, writer: asyncio.StreamWriter, *, mx_name: str,
                        ehlo_name: str, tls_context: ssl.SSLContext, deadline: float) -> Attempt:
     """One dialogue on a connection already open to port 25 of one address of ``mx_name``.
@@ -304,21 +335,18 @@ async def run_dialogue(reader: asyncio.StreamReader, writer: asyncio.StreamWrite
     certificate must carry, never replaced by the target of a CNAME. ``ehlo_name``: the probe's
     configured name. Both are checked by :func:`~posture_cockpit.config.check_host_name` (a fully
     qualified ASCII host name) and used in lower case, without the root's dot; the caller can run
-    the same check on an MX name before connecting. ``tls_context``: :func:`public_smtp_context`,
-    or a context that verifies nothing for reading a certificate that was refused (the observation then
-    never says the certificate is trusted). ``deadline``: an instant of the running loop's clock
+    the same check on an MX name before connecting. ``tls_context``: one of the two kinds
+    :func:`proves_trust` accepts. ``deadline``: an instant of the running loop's clock
     (``loop.time()``); the observation is returned before it.
 
     The connection belongs to the dialogue from now on: it is always closed when this returns.
-    Raises ValueError, before anything is sent, for an invalid name or a context that would accept a
-    version older than TLS 1.2. A cancellation is not caught."""
+    Raises ValueError, before anything is sent, for an invalid name or context. A cancellation is
+    not caught."""
     try:
         name = check_host_name(mx_name, "SMTP dialogue, MX name")
         ehlo = check_host_name(ehlo_name, "SMTP dialogue, EHLO name")
-        # Decision D1b, kept here too: whatever context is given, TLS 1.0 and 1.1 are never offered.
-        if tls_context.minimum_version < ssl.TLSVersion.TLSv1_2:
-            raise ValueError("SMTP dialogue: the TLS context must not offer versions older than TLS 1.2")
-        return await _Dialogue(reader, writer, name, ehlo, tls_context, deadline).run()
+        verifies = proves_trust(tls_context)
+        return await _Dialogue(reader, writer, name, ehlo, tls_context, verifies, deadline).run()
     finally:
         # No close_notify, no wait for the server: the dialogue is over, and the deadline holds.
         writer.transport.abort()
@@ -352,12 +380,11 @@ class _Dialogue:
     """The state of one dialogue: the connection, the read buffer, and what was observed so far."""
 
     def __init__(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter, mx_name: str, ehlo_name: str,
-                 tls_context: ssl.SSLContext, deadline: float):
+                 tls_context: ssl.SSLContext, verifies: bool, deadline: float):
         self._reader, self._writer = reader, writer
         self._mx_name, self._ehlo_name = mx_name, ehlo_name
         self._context, self._deadline = tls_context, deadline
-        # Trust is claimed only when the context checked both the chain and the name.
-        self._verifies = tls_context.verify_mode == ssl.CERT_REQUIRED and tls_context.check_hostname
+        self._verifies = verifies  # proves_trust(tls_context): trust is claimed only when it was checked
         self._loop = asyncio.get_running_loop()
         self._buffer = bytearray()          # bytes read, not yet made into lines
         self._partial: list[bytes] = []     # lines of the reply being read
