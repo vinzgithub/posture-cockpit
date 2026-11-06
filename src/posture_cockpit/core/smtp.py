@@ -98,7 +98,9 @@ import ssl
 from dataclasses import dataclass
 from enum import StrEnum
 
-# The certificate is read exactly as the HTTPS checks read theirs, by the same function.
+# Shared rather than copied: host names are checked by the rule the configuration applies at start,
+# and the certificate is read exactly as the HTTPS checks read theirs.
+from ..config import check_host_name
 from .network import Certificate, _parse_certificate
 
 # ------------------------------------------------------------------ time limits (R11)
@@ -127,10 +129,6 @@ _ENHANCED = re.compile(rb"([245])\.([0-9]{1,3})\.([0-9]{1,3})(?=[ \t]|$)")
 # firewalls (Cisco ESMTP inspection, for one) mask STARTTLS. It points to an inspection on the path,
 # not to a given product, and keywords that merely start with X (XCLIENT, XFORWARD) do not match.
 _MASKED = re.compile(r"X{4,}[A-Z]?")
-# What may be sent as the EHLO argument or used as the TLS name: an ASCII host name, nothing else.
-# The EHLO name was fully checked at start (config.validate_ehlo_name); this second check only makes
-# sure no space, CR or LF can ever reach the wire (CRLF injection, S04).
-_HOST_NAME = re.compile(r"[A-Za-z0-9_](?:[A-Za-z0-9_.-]{0,251}[A-Za-z0-9_])?")
 
 # ------------------------------------------------------------------ TLS failures (R1, D1b)
 # The server refused TLS 1.2 and 1.3: an alert "protocol version", or a reply in an older version.
@@ -302,24 +300,25 @@ async def run_dialogue(reader: asyncio.StreamReader, writer: asyncio.StreamWrite
                        ehlo_name: str, tls_context: ssl.SSLContext, deadline: float) -> Attempt:
     """One dialogue on a connection already open to port 25 of one address of ``mx_name``.
 
-    ``mx_name``: the published MX host, ASCII, as the DNS gives it (a final dot is ignored); it is
-    the TLS SNI and the name the certificate must carry. ``ehlo_name``: the probe's configured name.
-    ``tls_context``: :func:`public_smtp_context`, or a context that verifies nothing for reading a
-    certificate that was refused (the observation then never says the certificate is trusted).
-    ``deadline``: an instant of the running loop's clock (``loop.time()``); the observation is
-    returned before it.
+    ``mx_name``: the published MX host, as the DNS gives it; it is the TLS SNI and the name the
+    certificate must carry, never replaced by the target of a CNAME. ``ehlo_name``: the probe's
+    configured name. Both are checked by :func:`~posture_cockpit.config.check_host_name` (a fully
+    qualified ASCII host name) and used in lower case, without the root's dot; the caller can run
+    the same check on an MX name before connecting. ``tls_context``: :func:`public_smtp_context`,
+    or a context that verifies nothing for reading a certificate that was refused (the observation then
+    never says the certificate is trusted). ``deadline``: an instant of the running loop's clock
+    (``loop.time()``); the observation is returned before it.
 
     The connection belongs to the dialogue from now on: it is always closed when this returns.
-    Raises ValueError, before anything is sent, for a name that is not an ASCII host name or a
-    context that would accept a version older than TLS 1.2. A cancellation is not caught."""
+    Raises ValueError, before anything is sent, for an invalid name or a context that would accept a
+    version older than TLS 1.2. A cancellation is not caught."""
     try:
-        name = mx_name.rstrip(".")
-        if not _HOST_NAME.fullmatch(name) or not _HOST_NAME.fullmatch(ehlo_name):
-            raise ValueError("SMTP dialogue: the MX name and the EHLO name must be ASCII host names")
+        name = check_host_name(mx_name, "SMTP dialogue, MX name")
+        ehlo = check_host_name(ehlo_name, "SMTP dialogue, EHLO name")
         # Decision D1b, kept here too: whatever context is given, TLS 1.0 and 1.1 are never offered.
         if tls_context.minimum_version < ssl.TLSVersion.TLSv1_2:
             raise ValueError("SMTP dialogue: the TLS context must not offer versions older than TLS 1.2")
-        return await _Dialogue(reader, writer, name, ehlo_name, tls_context, deadline).run()
+        return await _Dialogue(reader, writer, name, ehlo, tls_context, deadline).run()
     finally:
         # No close_notify, no wait for the server: the dialogue is over, and the deadline holds.
         writer.transport.abort()
@@ -452,7 +451,8 @@ class _Dialogue:
 
         It takes a :class:`Command`, never a text: EHLO, STARTTLS and QUIT are all the probe may
         say, so it can neither deliver, relay nor authenticate (S04). The EHLO argument is the
-        configured name, checked at start and again in :func:`run_dialogue`."""
+        configured name, checked at start and again in :func:`run_dialogue`, so no space, CR or LF
+        can reach the wire."""
         text = f"{command.value} {self._ehlo_name}" if command is Command.EHLO else command.value
         self._writer.write(text.encode("ascii") + b"\r\n")
         await self._writer.drain()

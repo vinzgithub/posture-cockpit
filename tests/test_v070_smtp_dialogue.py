@@ -34,6 +34,7 @@ from pathlib import Path
 import pytest
 
 from local_servers import LOOPBACK, TestPki
+from posture_cockpit import config
 from posture_cockpit.core import smtp
 from posture_cockpit.core.smtp import Command, Reason, Reply, Stage
 from smtp_servers import CLOSE, MX, SILENT, Record, Script, Session, ehlo, smtp_server
@@ -106,6 +107,24 @@ def legacy_server(pki: TestPki, version: ssl.TLSVersion) -> ssl.SSLContext:
     except (ValueError, ssl.SSLError):
         pytest.skip("this machine's OpenSSL cannot serve TLS 1.0 or 1.1")
     return context
+
+
+def refused_before_sending(*, match: str, mx_name: str = MX, ehlo_name: str = EHLO_NAME,
+                           tls_context: ssl.SSLContext | None = None) -> None:
+    """run_dialogue raises ValueError matching ``match``, the server received nothing, the connection is closed."""
+
+    async def main() -> tuple[Record, bool]:
+        async with smtp_server(Script()) as (record, port):
+            reader, writer = await asyncio.open_connection(LOOPBACK, port)
+            with pytest.raises(ValueError, match=match):
+                await smtp.run_dialogue(reader, writer, mx_name=mx_name, ehlo_name=ehlo_name,
+                                        tls_context=tls_context or smtp.public_smtp_context(),
+                                        deadline=asyncio.get_running_loop().time() + 5)
+            closed = writer.transport.is_closing()
+        return record, closed
+
+    record, closed = asyncio.run(main())
+    assert all(session.commands == [] and session.early == b"" for session in record.sessions) and closed
 
 
 def refused_certificate(result: Talk, code: int) -> None:
@@ -673,22 +692,37 @@ def test_three_commands_and_one_function_that_writes():
     assert writers == ["_send"]
 
 
-@pytest.mark.parametrize("name", [f"{EHLO_NAME}\r\nMAIL FROM:<>", f"{EHLO_NAME} x", "", "probe\x00.example.org"])
-def test_an_ehlo_name_that_is_not_a_host_name_is_never_sent(name):
-    """S04, F02 bis (CR LF injection): checked again before anything is sent; the connection is closed."""
+INVALID_NAMES = [
+    "localhost", "mx..example.org", "mx_foo.example.org", "mx.-bad.example.org", "mx.bad-.example.org",
+    ".mx.example.org", "192.0.2.25", f"{'a' * 64}.example.org", ("a" * 60 + ".") * 5 + "org", "mx.exämple.org",
+    "", ".", f"{EHLO_NAME}\r\nMAIL FROM:<>", f"{EHLO_NAME} x", "probe\x00.example.org",
+]
 
-    async def main() -> tuple[Record, bool]:
-        async with smtp_server(Script()) as (record, port):
-            reader, writer = await asyncio.open_connection(LOOPBACK, port)
-            with pytest.raises(ValueError, match="host names"):
-                await smtp.run_dialogue(reader, writer, mx_name=MX, ehlo_name=name,
-                                        tls_context=smtp.public_smtp_context(),
-                                        deadline=asyncio.get_running_loop().time() + 5)
-            closed = writer.transport.is_closing()
-        return record, closed
 
-    record, closed = asyncio.run(main())
-    assert record.sessions[0].commands == [] and closed
+@pytest.mark.parametrize("field", ["mx_name", "ehlo_name"])
+@pytest.mark.parametrize("name", INVALID_NAMES)
+def test_an_invalid_name_is_refused_before_anything_is_sent(field, name):
+    """F02 bis, S04 (CR LF injection), F03: the MX name and the EHLO name are fully qualified ASCII host names,
+    labels of 1 to 63 letters, digits and hyphens, no underscore, no hyphen at either end, no empty label, not
+    an address; anything else is refused before a byte is sent, and the connection is closed."""
+    label = {"mx_name": "MX", "ehlo_name": "EHLO"}[field]
+    refused_before_sending(match=f"SMTP dialogue, {label} name: ", **{field: name})
+
+
+def test_names_are_used_in_lower_case_without_the_final_dot(pki):
+    """F02 bis, F03: the names given are used as given, only normalised (lower case, no root dot): the EHLO
+    argument, the SNI and the name checked; the MX is never replaced by another name."""
+    result = talk(tls_script(pki.server_context(MX)), lab_context(pki), mx="MX.Lab.Example.",
+                  ehlo_name="Probe.Example.ORG.")
+    assert result.attempt.reason is Reason.TLS_VERIFIED and result.attempt.mx_name == MX
+    assert result.session.sni == [MX] and result.commands[0] == (False, f"EHLO {EHLO_NAME}")
+
+
+def test_one_rule_for_host_names():
+    """F02 bis, S04, Q03: the dialogue checks names with the rule the configuration applies at start, not a
+    copy of it; the EHLO name gets the same answer from both."""
+    assert smtp.check_host_name is config.check_host_name
+    assert config.validate_ehlo_name("Probe.Example.org.") == config.check_host_name("Probe.Example.org.", "x")
 
 
 def test_the_module_opens_no_connection():
@@ -696,7 +730,8 @@ def test_the_module_opens_no_connection():
     tree = ast.parse(SOURCE.read_text())
     imported = {alias.name for node in ast.walk(tree) if isinstance(node, ast.Import) for alias in node.names}
     imported |= {node.module or "" for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)}
-    assert imported == {"__future__", "asyncio", "contextlib", "re", "ssl", "dataclasses", "enum", "network"}
+    assert imported == {"__future__", "asyncio", "contextlib", "re", "ssl", "dataclasses", "enum", "config",
+                        "network"}
     called = {node.func.attr for node in ast.walk(tree)
               if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)}
     assert not called & {"open_connection", "create_connection", "sock_connect", "start_server", "connect"}
