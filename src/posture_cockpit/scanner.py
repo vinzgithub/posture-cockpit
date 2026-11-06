@@ -62,17 +62,24 @@ class Scanner:
         return SmtpSettings(enabled=self.config.smtp_probe, ehlo_name=self.config.smtp_ehlo_name)
 
     def network_for(self, domain: str, perimeter: Perimeter | None = None) -> Network:
-        """A fresh network per scan, so cached answers never outlive it."""
+        """A fresh network per scan, so cached answers never outlive it.
+
+        Version 0.7: the network is bound to the audited domain, whose published MX are the only servers
+        the SMTP probe may reach, and gets the EHLO name checked at start (None: the probe is off). An
+        internal perimeter says so explicitly: the probe never runs there, whatever its rule allows."""
         if perimeter is not None and not self.config.internal_scans:
             raise InternalScansDisabled()
         if self._network_factory is not None:
             return self._network_factory(domain)
+        settings = self.smtp
+        ehlo_name = settings.ehlo_name if settings.enabled else None
         if perimeter is not None:
-            return LiveNetwork(list(perimeter.nameservers), policy=perimeter.policy(), trusted_ca=perimeter.ca_pem)
+            return LiveNetwork(list(perimeter.nameservers), policy=perimeter.policy(), trusted_ca=perimeter.ca_pem,
+                               domain=domain, internal=True)
         data = demo_data(domain)
         if data is not None:
-            return FixtureNetwork(data)
-        return LiveNetwork(self.config.nameservers)
+            return FixtureNetwork(data, domain=domain, ehlo_name=ehlo_name)
+        return LiveNetwork(self.config.nameservers, domain=domain, ehlo_name=ehlo_name)
 
     async def preflight(self, domain: str, perimeter: Perimeter | None = None) -> str | None:
         """Why the domain cannot be scanned ("unknown", "empty"), or None (see engine.preflight)."""
