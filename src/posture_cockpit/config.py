@@ -193,18 +193,27 @@ def validate_ehlo_name(value: str) -> str:
     command ``EHLO <name>``: a control character (CR, LF) could add a command of its own, so any
     such character refuses the value, wherever it is. Only ASCII is accepted: an internationalised
     name is written in its ``xn--`` form. The check is a syntax check: it does not prove that the
-    name exists in the DNS, nor that it belongs to the operator. The rules are those of
-    :func:`check_host_name`."""
-    return check_host_name(value, "POSTURE_COCKPIT_SMTP_EHLO_NAME")
+    name exists in the DNS, nor that it belongs to the operator.
+
+    One tolerance, here only, because the value comes from a file the administrator edits: spaces
+    around it, as an editor may leave them, are not part of the name and are dropped before the
+    check. Only spaces: a tab, CR or LF at either end is a control character and refuses the value.
+    Then the strict rules of :func:`check_host_name`; the name sent is the one they return."""
+    return check_host_name(value.strip(" "), "POSTURE_COCKPIT_SMTP_EHLO_NAME")
 
 
 def check_host_name(value: str, what: str) -> str:
-    """``value`` checked as a fully qualified ASCII host name; returned in lower case, without the root's dot.
+    """``value`` checked as a fully qualified ASCII host name, strictly; returned normalised.
 
     Raises ValueError, its message starting with ``what``. The rules, in the order they are checked:
-    no control character anywhere (CR, LF…); ASCII only; not empty; at most 253 characters; at least
-    two labels; each label 1 to 63 letters, digits and hyphens, no hyphen at either end (so no
-    underscore and no empty label); the last label not all digits (an address is not a host name).
+    no control character anywhere (CR, LF, tab…); ASCII only; no space, around the name or in it;
+    not empty; at most 253 characters; at least two labels; each label 1 to 63 letters, digits and
+    hyphens, no hyphen at either end (so no underscore and no empty label); the last label not all
+    digits (an address is not a host name).
+
+    Nothing is trimmed or repaired. The only normalisation changes the form, never the name: lower
+    case (host names are case-insensitive, RFC 4343) and no root's dot (``mx.example.org.`` is the
+    absolute form of ``mx.example.org``).
 
     One rule for every host name the SMTP probe uses (version 0.7): the EHLO name at start, then,
     just before anything is sent, the EHLO name and the published MX name in the SMTP dialogue
@@ -213,7 +222,9 @@ def check_host_name(value: str, what: str) -> str:
         raise ValueError(f"{what}: control characters (CR, LF...) are not allowed")
     if not value.isascii():
         raise ValueError(f"{what}: {value!r} is not ASCII; write an internationalised name in its xn-- form")
-    name = value.strip().lower()
+    if " " in value:
+        raise ValueError(f"{what}: {value!r} contains a space; a host name has none")
+    name = value.lower()
     name = name[:-1] if name.endswith(".") else name  # the root's dot is not sent
     if not name:
         raise ValueError(f"{what}: empty")

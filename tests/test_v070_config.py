@@ -125,6 +125,19 @@ def test_an_invalid_ehlo_name_stops_the_start(env, name):
         Config.from_env()
 
 
+@pytest.mark.parametrize(("written", "refused"), [
+    ("\tprobe.example.org", "control characters"), ("probe.example.org\t", "control characters"),
+    (" probe.example.org\r", "control characters"), ("\u00a0probe.example.org", "not ASCII"),
+    ("probe.example.org\u3000", "not ASCII"), ("probe .example.org", "contains a space"),
+])
+def test_only_spaces_around_the_ehlo_name_are_dropped(env, written, refused):
+    """F02 bis, S04: the start drops the spaces an editor may leave around the value, and nothing else: a tab,
+    a CR, a non-breaking or ideographic space is refused, and so is a space inside the name."""
+    env(SMTP_PROBE="on", SMTP_EHLO_NAME=written)
+    with pytest.raises(ValueError, match=f"POSTURE_COCKPIT_SMTP_EHLO_NAME: .*{refused}"):
+        Config.from_env()
+
+
 def test_an_injection_attempt_is_refused_whatever_the_rest_of_the_value():
     """S04: the name goes into the EHLO command as it is; a CR or LF anywhere would add a command.
 

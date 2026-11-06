@@ -742,6 +742,7 @@ INVALID_NAMES = [
     "localhost", "mx..example.org", "mx_foo.example.org", "mx.-bad.example.org", "mx.bad-.example.org",
     ".mx.example.org", "192.0.2.25", f"{'a' * 64}.example.org", ("a" * 60 + ".") * 5 + "org", "mx.exämple.org",
     "", ".", f"{EHLO_NAME}\r\nMAIL FROM:<>", f"{EHLO_NAME} x", "probe\x00.example.org",
+    " mx.example.org", "mx.example.org ", "  mx.example.org  ", "\tmx.example.org", "mx.example.org\n",
 ]
 
 
@@ -750,7 +751,8 @@ INVALID_NAMES = [
 def test_an_invalid_name_is_refused_before_anything_is_sent(field, name):
     """F02 bis, S04 (CR LF injection), F03: the MX name and the EHLO name are fully qualified ASCII host names,
     labels of 1 to 63 letters, digits and hyphens, no underscore, no hyphen at either end, no empty label, not
-    an address; anything else is refused before a byte is sent, and the connection is closed."""
+    an address, no space even around them; anything else is refused before a byte is sent, and the connection
+    is closed. Nothing is trimmed: the names reach the dialogue already checked."""
     label = {"mx_name": "MX", "ehlo_name": "EHLO"}[field]
     refused_before_sending(match=f"SMTP dialogue, {label} name: ", **{field: name})
 
@@ -769,6 +771,21 @@ def test_one_rule_for_host_names():
     copy of it; the EHLO name gets the same answer from both."""
     assert smtp.check_host_name is config.check_host_name
     assert config.validate_ehlo_name("Probe.Example.org.") == config.check_host_name("Probe.Example.org.", "x")
+
+
+@pytest.mark.parametrize("value", [" probe.example.org", "probe.example.org ", "  probe.example.org  "])
+def test_the_shared_rule_trims_nothing(value):
+    """F02 bis, S04: check_host_name is strict, spaces around a name refuse it. Dropping the spaces an editor
+    may leave in the .env file is the configuration's own tolerance, at start only (validate_ehlo_name)."""
+    with pytest.raises(ValueError, match="contains a space"):
+        config.check_host_name(value, "x")
+    assert config.validate_ehlo_name(value) == "probe.example.org"
+
+
+@pytest.mark.parametrize(("value", "normalised"), [("MX.Lab.Example", MX), (f"{MX}.", MX), ("Mx.Lab.Example.", MX)])
+def test_the_only_normalisation_is_case_and_the_root_dot(value, normalised):
+    """F02 bis, F03: the form changes (lower case, RFC 4343; no root's dot), the name never does."""
+    assert config.check_host_name(value, "x") == normalised
 
 
 def test_the_module_opens_no_connection():
