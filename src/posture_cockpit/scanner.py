@@ -21,6 +21,7 @@ from pathlib import Path
 
 from .config import Config
 from .core import engine
+from .core.extension import SmtpSettings
 from .core.fixture import FixtureNetwork
 from .core.model import HTTPS_FAMILY, Finding
 from .core.network import LiveNetwork, Network
@@ -55,6 +56,11 @@ class Scanner:
         self.disabled = disabled
         self._network_factory = network_factory
 
+    @property
+    def smtp(self) -> SmtpSettings:
+        """The SMTP probe settings, as the configuration checked them at start (version 0.7.0)."""
+        return SmtpSettings(enabled=self.config.smtp_probe, ehlo_name=self.config.smtp_ehlo_name)
+
     def network_for(self, domain: str, perimeter: Perimeter | None = None) -> Network:
         """A fresh network per scan, so cached answers never outlive it."""
         if perimeter is not None and not self.config.internal_scans:
@@ -76,7 +82,8 @@ class Scanner:
                    ) -> engine.ScanResult:
         checks = self.registry.checks(disabled=self.disabled())
         return await engine.scan(domain, checks, self.network_for(domain, perimeter),
-                                 timeout=self.config.check_timeout, internal=perimeter is not None, history=history)
+                                 timeout=self.config.check_timeout, internal=perimeter is not None, history=history,
+                                 smtp=self.smtp)
 
     async def recheck_group(self, domain: str, check_id: str, perimeter: Perimeter | None = None,
                             history: dict | None = None) -> list[Finding]:
@@ -87,7 +94,8 @@ class Scanner:
             return []
         selected = [c for c in checks if c.family == HTTPS_FAMILY] if check.family == HTTPS_FAMILY else [check]
         result = await engine.scan(domain, selected, self.network_for(domain, perimeter),
-                                   timeout=self.config.check_timeout, internal=perimeter is not None, history=history)
+                                   timeout=self.config.check_timeout, internal=perimeter is not None, history=history,
+                                   smtp=self.smtp)
         return result.findings
 
     async def recheck(self, domain: str, check_id: str, perimeter: Perimeter | None = None) -> Finding | None:

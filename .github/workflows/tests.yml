@@ -32,7 +32,10 @@ jobs:
   # The pages in Chromium (tests/browser): copy buttons on a page in plain HTTP,
   # language switch, steps on a phone. A missing browser fails the job, never skips it.
   browser:
-    runs-on: ubuntu-latest
+    # Pinned, unlike the other jobs: ubuntu-latest moved to Ubuntu 26.04 (November 2026), where the
+    # pinned Playwright cannot install Chromium and the job failed before any test ran. Move to a newer
+    # image together with a Playwright version that supports it; never by skipping the browser tests.
+    runs-on: ubuntu-24.04
     env:
       PYTHONDONTWRITEBYTECODE: "1"
     steps:

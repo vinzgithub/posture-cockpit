@@ -144,6 +144,23 @@ def load_messages(directory: Path, prefix: str) -> dict[str, dict[str, str]]:
     return messages
 
 
+@dataclass(frozen=True)
+class SmtpSettings:
+    """The instance's settings of the SMTP probe of the MX servers (version 0.7.0).
+
+    Read from POSTURE_COCKPIT_SMTP_PROBE and POSTURE_COCKPIT_SMTP_EHLO_NAME, already checked by
+    :mod:`posture_cockpit.config` when the instance starts. Off by default: a scan built without
+    settings never probes port 25."""
+
+    enabled: bool = False
+    ehlo_name: str | None = None  # the fully qualified name sent in EHLO; required when enabled
+
+    def __post_init__(self) -> None:
+        # A second guard behind the configuration: the probe must never invent an EHLO name.
+        if self.enabled and not self.ehlo_name:
+            raise ValueError("an enabled SMTP probe needs an EHLO name")
+
+
 @dataclass
 class CheckContext:
     """What a check function receives: the domain, the network, the time of the scan."""
@@ -153,6 +170,11 @@ class CheckContext:
     now: datetime
     internal: bool = False  # the scan runs inside an internal perimeter
     history: dict = field(default_factory=dict)  # read-only snapshot, never mutated by checks
+    # Version 0.7.0. The SMTP probe settings of the instance, and the seconds the engine gives each
+    # check before it stops it (the engine sets both; 15 s is engine.CHECK_TIMEOUT). A check that
+    # must return what it observed before being stopped computes its own deadline from it.
+    smtp: SmtpSettings = field(default_factory=SmtpSettings)
+    check_timeout: float = 15.0
     _memo: dict[str, asyncio.Future[Any]] = field(default_factory=dict, repr=False)
 
     def fqdn(self, label: str) -> str:
