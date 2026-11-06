@@ -157,7 +157,7 @@ def test_the_probe_on_needs_more_than_the_engine_margin(env, seconds):
 def test_the_probe_on_needs_a_finite_time_limit(env, seconds):
     """F02, T03: float() accepts these words; nan escapes any comparison and inf would mean no deadline."""
     env(SMTP_PROBE="on", SMTP_EHLO_NAME="probe.example.org", CHECK_TIMEOUT=seconds)
-    with pytest.raises(ValueError, match="POSTURE_COCKPIT_CHECK_TIMEOUT: .* is not a finite number"):
+    with pytest.raises(ValueError, match=r"POSTURE_COCKPIT_CHECK_TIMEOUT: .* is not a finite number"):
         Config.from_env()
 
 
