@@ -7,7 +7,7 @@ What is checked here, with the requirement of the specification 0.7.0 (revision 
 - the probe is off unless the operator writes ``on`` (decision A1a, §2);
 - with the probe on, an EHLO name is required, checked as a fully qualified ASCII host name, and
   never replaced by a default or by the host name (F02 bis, S04, decision R9);
-- with the probe on, CHECK_TIMEOUT must leave the probe some time (F02, T03);
+- with the probe on, CHECK_TIMEOUT must be a finite number that leaves the probe some time (F02, T03);
 - the engine and the scanner hand these settings and the check time limit to every check, for
   scans and rechecks alike.
 
@@ -15,6 +15,7 @@ No check uses these settings yet: the SMTP check arrives with PR-C. Nothing here
 """
 
 import asyncio
+import math
 
 import pytest
 
@@ -150,6 +151,29 @@ def test_the_probe_on_needs_more_than_the_engine_margin(env, seconds):
     env(SMTP_PROBE="on", SMTP_EHLO_NAME="probe.example.org", CHECK_TIMEOUT=seconds)
     with pytest.raises(ValueError, match="POSTURE_COCKPIT_CHECK_TIMEOUT"):
         Config.from_env()
+
+
+@pytest.mark.parametrize("seconds", ["NaN", "nan", "Infinity", "inf", "-Infinity", "-inf"])
+def test_the_probe_on_needs_a_finite_time_limit(env, seconds):
+    """F02, T03: float() accepts these words; nan escapes any comparison and inf would mean no deadline."""
+    env(SMTP_PROBE="on", SMTP_EHLO_NAME="probe.example.org", CHECK_TIMEOUT=seconds)
+    with pytest.raises(ValueError, match="POSTURE_COCKPIT_CHECK_TIMEOUT: .* is not a finite number"):
+        Config.from_env()
+
+
+@pytest.mark.parametrize("seconds", [math.nan, math.inf, -math.inf])
+def test_a_config_built_directly_needs_a_finite_time_limit_with_the_probe_on(tmp_path, seconds):
+    """F02: the same rule when Config is built directly (tests, command line)."""
+    with pytest.raises(ValueError, match="POSTURE_COCKPIT_CHECK_TIMEOUT"):
+        Config(data_dir=tmp_path, smtp_probe=True, smtp_ehlo_name="probe.example.org", check_timeout=seconds)
+
+
+@pytest.mark.parametrize("seconds", ["NaN", "Infinity"])
+def test_a_non_finite_time_limit_is_unchanged_with_the_probe_off(env, seconds):
+    """§2, A1a: with the probe off, CHECK_TIMEOUT is parsed exactly as in v0.6.1. Tightening it for every
+    instance is outside PR-A; this test records the unchanged behaviour so that a later change is deliberate."""
+    env(CHECK_TIMEOUT=seconds)
+    assert not math.isfinite(Config.from_env().check_timeout)
 
 
 def test_a_short_time_limit_is_accepted_when_it_leaves_the_probe_some_time(env):

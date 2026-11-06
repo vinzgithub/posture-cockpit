@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import math
 import os
 import re
 import secrets
@@ -164,14 +165,20 @@ def check_smtp_settings(probe: bool, ehlo_name: str | None, check_timeout: float
     - With the probe on, the EHLO name is required. There is deliberately no default and no
       fallback on the host name: in a container it is not a fully qualified name, and it would
       reveal an internal identifier to every mail server the probe talks to.
-    - With the probe on, CHECK_TIMEOUT must leave the probe some time after the margin the engine
-      keeps for itself, otherwise the probe's deadline would be zero or negative (F02)."""
+    - With the probe on, CHECK_TIMEOUT must be a finite number of seconds that leaves the probe some
+      time after the margin the engine keeps for itself, otherwise the probe's deadline would be zero,
+      negative or undefined (F02). float() accepts "nan", "inf" and "-inf": a comparison with nan is
+      always false and inf would mean no deadline at all, so both are refused before comparing. With
+      the probe off, CHECK_TIMEOUT keeps the meaning and the accepted values it had in v0.6.1."""
     name = validate_ehlo_name(ehlo_name) if ehlo_name is not None else None
     if not probe:
         return name
     if name is None:
         raise ValueError("POSTURE_COCKPIT_SMTP_EHLO_NAME: required when POSTURE_COCKPIT_SMTP_PROBE=on; "
                          "write a fully qualified name under your control, e.g. probe.example.org")
+    if not math.isfinite(check_timeout):
+        raise ValueError(f"POSTURE_COCKPIT_CHECK_TIMEOUT: {check_timeout!r} is not a finite number of seconds; "
+                         "with POSTURE_COCKPIT_SMTP_PROBE=on write a number such as 15")
     if check_timeout <= SMTP_CHECK_MARGIN:
         raise ValueError(f"POSTURE_COCKPIT_CHECK_TIMEOUT: {check_timeout:g} s leaves no time to the SMTP probe; "
                          f"with POSTURE_COCKPIT_SMTP_PROBE=on it must be above {SMTP_CHECK_MARGIN:g} s")
