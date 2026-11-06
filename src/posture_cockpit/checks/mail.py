@@ -40,6 +40,7 @@ from ..core import (
     warn,
 )
 from ..core.egress import parse_address
+from ..core.network import mx_record
 from . import LOCALES
 from .records import (
     Dmarc,
@@ -92,14 +93,24 @@ MTA_STS_MIN_MAX_AGE = 86_400  # a policy cached for less than a day protects lit
 
 
 # ---------------------------------------------------------------- helpers
-async def _mx_hosts(ctx: CheckContext) -> list[str]:
-    """Hosts of the MX records; empty for a domain that receives no mail ("0 ." null MX, or no MX)."""
-    async def find() -> list[str]:
-        records = (await ctx.net.dns(ctx.domain, "MX")).records
-        hosts = [r.split()[-1].lower().rstrip(".") for r in records]
-        return [h for h in hosts if h]
+async def _mx_records(ctx: CheckContext) -> list[tuple[int | None, str]]:
+    """(preference, host) of each MX record, in the order the DNS gave them, read once per scan.
 
-    return await ctx.shared("mx_hosts", find)
+    The host in lower case without the root's dot, ``""`` for the null MX "0 ." (RFC 7505), duplicates
+    kept (:func:`~posture_cockpit.core.network.mx_record`). Version 0.7: the SMTP probe reads the MX
+    here too, so that it probes exactly the servers the mail checks judge. Callers must not change
+    the list: it is shared."""
+    async def find() -> list[tuple[int | None, str]]:
+        return [mx_record(r) for r in (await ctx.net.dns(ctx.domain, "MX")).records]
+
+    return await ctx.shared("mx_records", find)
+
+
+async def _mx_hosts(ctx: CheckContext) -> list[str]:
+    """Hosts of the MX records; empty for a domain that receives no mail ("0 ." null MX, or no MX).
+
+    In the DNS order, duplicates kept, as before version 0.7 (tests/test_v070_mail_mx_records.py)."""
+    return [host for _, host in await _mx_records(ctx) if host]
 
 
 def _tags_text(errors: tuple[tuple[str, str], ...]) -> str:
