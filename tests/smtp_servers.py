@@ -100,6 +100,8 @@ class Session:
 @dataclass
 class Record:
     sessions: list[Session] = field(default_factory=list)
+    open: int = 0  # connections open right now, and the most at once (version 0.7)
+    peak: int = 0
 
     @property
     def connections(self) -> int:
@@ -107,8 +109,11 @@ class Record:
 
 
 @contextlib.asynccontextmanager
-async def smtp_server(script: Script) -> AsyncIterator[tuple[Record, int]]:
+async def smtp_server(script: Script, host: str = LOOPBACK, port: int = 0) -> AsyncIterator[tuple[Record, int]]:
     """Starts a fake SMTP server playing ``script``; yields what it records and its port.
+
+    ``host`` and ``port`` (version 0.7, for the network tests): several servers on several loopback
+    addresses (127.0.0.2, 127.0.0.3…) can share one port, as MX servers share port 25.
 
     Leaving the block waits for the connections to end, then fails the test if the client sent
     any command other than EHLO, STARTTLS and QUIT."""
@@ -121,16 +126,19 @@ async def smtp_server(script: Script) -> AsyncIterator[tuple[Record, int]]:
         handlers.add(task)
         session = Session()
         record.sessions.append(session)
+        record.open += 1
+        record.peak = max(record.peak, record.open)
         try:
             await _Play(script, session, reader, writer).run()
         except (ConnectionError, ssl.SSLError, asyncio.IncompleteReadError):
             pass  # the client left: what it did is in the session
         finally:
+            record.open -= 1
             writer.close()
             with contextlib.suppress(OSError, ssl.SSLError, TimeoutError):
                 await asyncio.wait_for(writer.wait_closed(), 1)
 
-    server = await asyncio.start_server(handle, LOOPBACK, 0)
+    server = await asyncio.start_server(handle, host, port)
     async with server:
         yield record, server.sockets[0].getsockname()[1]
     # The client has closed its side: each handler ends at once. A handler still running after
