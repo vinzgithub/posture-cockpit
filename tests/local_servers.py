@@ -10,6 +10,8 @@ servers listen on the loopback address and answer what the test tells them.
 - :func:`http_server` answers every request with the same raw reply and
   records the requests it got;
 - :class:`TestPki` makes a certificate authority and certificates signed by it.
+
+The fake SMTP server of version 0.7 lives in :mod:`smtp_servers`.
 """
 
 from __future__ import annotations
@@ -170,34 +172,73 @@ class TestPki:
                                          key_agreement=False, encipher_only=False, decipher_only=False),
                            critical=True)
             .sign(self._key, hashes.SHA256()))
+        self._intermediate_pair: tuple[ec.EllipticCurvePrivateKey, x509.Certificate] | None = None
 
     @property
     def pem(self) -> str:
         return self.certificate.public_bytes(serialization.Encoding.PEM).decode()
 
-    def server_context(self, *names: str, days: int = 30, valid_from_days: int = -1) -> ssl.SSLContext:
+    def server_context(self, *names: str, days: int = 30, valid_from_days: int = -1, common_name: str | None = None,
+                       san: bool = True, intermediate: bool = False, send_chain: bool = True) -> ssl.SSLContext:
         """A TLS server context with a certificate for ``names``, signed by this authority.
 
         The certificate is valid from ``valid_from_days`` to ``days`` days from now: ``days=-3,
-        valid_from_days=-30`` gives one that expired three days ago."""
+        valid_from_days=-30`` gives one that expired three days ago, ``days=20`` one that expires in
+        20 days. ``names`` may hold a wildcard (``"*.lab.example"``).
+
+        Version 0.7, for the certificates of the SMTP probe (T02):
+
+        - ``common_name``: the subject's common name (default: the first name);
+        - ``san=False``: no subject alternative name, the common name alone names the server;
+        - ``intermediate``: signed by an intermediate authority, itself signed by this one, and
+          presented with it unless ``send_chain=False`` (an incomplete chain)."""
         key = ec.generate_private_key(ec.SECP256R1())
         now = dt.datetime.now(dt.UTC)
-        cert = (x509.CertificateBuilder()
-                .subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, names[0])]))
-                .issuer_name(self._name).public_key(key.public_key()).serial_number(x509.random_serial_number())
-                .not_valid_before(now + dt.timedelta(days=valid_from_days))
-                .not_valid_after(now + dt.timedelta(days=days))
-                .add_extension(x509.SubjectAlternativeName([x509.DNSName(n) for n in names]), critical=False)
-                .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
-                .add_extension(x509.AuthorityKeyIdentifier.from_issuer_public_key(self._key.public_key()),
-                               critical=False)
-                .add_extension(x509.ExtendedKeyUsage([x509.oid.ExtendedKeyUsageOID.SERVER_AUTH]), critical=False)
-                .sign(self._key, hashes.SHA256()))
+        issuer_key, issuer_name = self._intermediate() if intermediate else (self._key, self._name)
+        builder = (x509.CertificateBuilder()
+                   .subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, common_name or names[0])]))
+                   .issuer_name(issuer_name).public_key(key.public_key()).serial_number(x509.random_serial_number())
+                   .not_valid_before(now + dt.timedelta(days=valid_from_days))
+                   .not_valid_after(now + dt.timedelta(days=days))
+                   .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
+                   .add_extension(x509.AuthorityKeyIdentifier.from_issuer_public_key(issuer_key.public_key()),
+                                  critical=False)
+                   .add_extension(x509.ExtendedKeyUsage([x509.oid.ExtendedKeyUsageOID.SERVER_AUTH]), critical=False))
+        if san:
+            builder = builder.add_extension(x509.SubjectAlternativeName([x509.DNSName(n) for n in names]),
+                                            critical=False)
+        cert = builder.sign(issuer_key, hashes.SHA256())
+        chain = cert.public_bytes(serialization.Encoding.PEM)
+        if intermediate and send_chain:
+            assert self._intermediate_pair is not None
+            chain += self._intermediate_pair[1].public_bytes(serialization.Encoding.PEM)
         stem = self.folder / names[0]
-        stem.with_suffix(".crt").write_bytes(cert.public_bytes(serialization.Encoding.PEM))
+        stem.with_suffix(".crt").write_bytes(chain)
         stem.with_suffix(".key").write_bytes(key.private_bytes(
             serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()))
         context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         context.minimum_version = ssl.TLSVersion.TLSv1_2
         context.load_cert_chain(stem.with_suffix(".crt"), stem.with_suffix(".key"))
         return context
+
+    def _intermediate(self) -> tuple[ec.EllipticCurvePrivateKey, x509.Name]:
+        """The intermediate authority (version 0.7), made once: its key and its name."""
+        if self._intermediate_pair is None:
+            key = ec.generate_private_key(ec.SECP256R1())
+            name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "Lab Intermediate CA")])
+            now = dt.datetime.now(dt.UTC)
+            certificate = (
+                x509.CertificateBuilder().subject_name(name).issuer_name(self._name)
+                .public_key(key.public_key()).serial_number(x509.random_serial_number())
+                .not_valid_before(now - dt.timedelta(days=1)).not_valid_after(now + dt.timedelta(days=365))
+                .add_extension(x509.BasicConstraints(ca=True, path_length=0), critical=True)
+                .add_extension(x509.SubjectKeyIdentifier.from_public_key(key.public_key()), critical=False)
+                .add_extension(x509.AuthorityKeyIdentifier.from_issuer_public_key(self._key.public_key()),
+                               critical=False)
+                .add_extension(x509.KeyUsage(digital_signature=True, key_cert_sign=True, crl_sign=True,
+                                             content_commitment=False, key_encipherment=False,
+                                             data_encipherment=False, key_agreement=False, encipher_only=False,
+                                             decipher_only=False), critical=True)
+                .sign(self._key, hashes.SHA256()))
+            self._intermediate_pair = (key, certificate)
+        return self._intermediate_pair[0], self._intermediate_pair[1].subject
