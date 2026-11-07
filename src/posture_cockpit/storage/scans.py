@@ -34,6 +34,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from ..core import generation, scoring
+from ..core.compare import SMTP_CHECK, measurement_scope
 from ..core.engine import ScanResult
 from ..core.model import HTTPS_ROOT_CHECK, Finding
 from ..core.schedule_time import format_time
@@ -359,12 +360,20 @@ class Scans:
 
     def _add_state(self, scan_id: int, at: str, origin: str, engine: int | None, a: scoring.Assessment,
                    findings: list[Finding]) -> None:
-        """Adds a state to the timeline of a scan; called inside the transaction of its change."""
+        """Adds a state to the timeline of a scan; called inside the transaction of its change.
+
+        Version 0.7 (R5, D5a): the metrics of the state also keep its measurement scope, computed from
+        the findings it holds (a recheck's included) and the perimeter of the scan, in the JSON only:
+        no column, no migration."""
+        metrics = _metrics(a, findings)
+        perimeter = self.db.value("SELECT perimeter FROM scans WHERE id=?", (scan_id,))
+        smtp = next((f.outcome.evidence for f in findings if f.check_id == SMTP_CHECK), None)
+        metrics["measurement_scope"] = measurement_scope(smtp, internal=bool(perimeter))
         self.db.execute(
             "INSERT INTO scan_states(scan_id, at, origin, engine, score, grade, coverage, evaluation, metrics, checks)"
             " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (scan_id, at, origin, engine, a.score, a.grade, a.coverage, a.evaluation,
-             json.dumps(_metrics(a, findings), sort_keys=True),
+             json.dumps(metrics, sort_keys=True),
              json.dumps({f.check_id: f.status.value for f in findings}, sort_keys=True)))
         # Same transaction as the immutable measurement; no orphan event on a crash.
         from .events import record_state

@@ -38,13 +38,30 @@ def stored(scans: Scans, scan_id: int) -> tuple[dict, list[dict]]:
     return dict(row), [dict(s) for s in scans.states(scan_id)]
 
 
-def expected_state(scan: dict, checks: dict) -> dict:
-    """What a state holds, deduced from the stored columns of its scan as migration 5 does."""
+def expected_state(scan: dict, checks: dict, scope: str) -> dict:
+    """What a state holds, deduced from the stored columns of its scan as migration 5 does, and, since
+    version 0.7 (R5, D5a), the measurement scope deduced from its stored findings (stored_scope)."""
     return {"engine": scan["engine"], "score": scan["score"], "grade": scan["grade"], "coverage": scan["coverage"],
             "evaluation": schema.stored_evaluation(scan["score"], scan["coverage"], scan["grade_withheld_reason"]),
             "metrics": {**{name: scan[name] for name in schema.METRICS},
-                        "cap_reasons": json.loads(scan["cap_reasons"])},
+                        "cap_reasons": json.loads(scan["cap_reasons"]), "measurement_scope": scope},
             "checks": checks}
+
+
+def stored_scope(scans: Scans, scan_id: int) -> str:
+    """The scope of a scan read back from what it stored: the perimeter, then the probe_enabled of the
+    mail.smtp_starttls outcome (its latest recheck first), as the specification of R5 states it."""
+    scan = scans.db.one("SELECT perimeter FROM scans WHERE id = ?", (scan_id,))
+    if scan["perimeter"]:
+        return "internal"
+    row = (scans.db.one("SELECT outcome FROM rechecks WHERE scan_id = ? AND check_id = 'mail.smtp_starttls'",
+                        (scan_id,))
+           or scans.db.one("SELECT outcome FROM findings WHERE scan_id = ? AND check_id = 'mail.smtp_starttls'",
+                           (scan_id,)))
+    if row is None:
+        return "absent"
+    enabled = json.loads(row["outcome"]).get("evidence", {}).get("probe_enabled")
+    return {True: "on", False: "off"}.get(enabled, "unknown") if isinstance(enabled, bool) else "unknown"
 
 
 def as_compared(state: dict) -> dict:
@@ -62,8 +79,9 @@ def test_a_scan_writes_a_complete_first_state(signed_in):
     assert (state["origin"], state["at"], state["engine"]) == ("scan", scan.started_at, generation.GENERATION)
     assert row["engine"] == generation.GENERATION
     checks = {f.check_id: f.status.value for f in scan.findings}
-    assert len(checks) == 20 and json.loads(state["checks"]) == checks  # every check, its status
-    assert as_compared(state) == expected_state(row, checks)
+    assert len(checks) == 21 and json.loads(state["checks"]) == checks  # every check, its status
+    assert as_compared(state) == expected_state(row, checks, "off")  # the probe is off by default (A1a)
+    assert stored_scope(scans, scan.id) == "off"
     assert state["evaluation"] == scan.assessment().evaluation == "complete"
     assert (state["score"], state["grade"]) == (57, "C")
 
@@ -92,7 +110,7 @@ def test_each_recheck_adds_a_state_at_its_time_and_the_earlier_ones_never_change
     scores = [s["score"] for s in states]
     assert scores[0] == 57 and scores[0] < scores[1] < scores[2] == row["score"]
     checks = {f.check_id: f.status.value for f in scans.get(scan_id).current()}
-    assert as_compared(states[-1]) == expected_state(row, checks)  # the last state is the stored scan
+    assert as_compared(states[-1]) == expected_state(row, checks, stored_scope(scans, scan_id))  # the stored scan
 
 
 def test_a_state_cannot_be_changed(signed_in):
@@ -117,7 +135,7 @@ def test_the_live_state_and_the_migrated_state_agree_on_every_world(tmp_path):
         scan_id = scans.save(scans.add_domain(f"{name.replace('_', '-')}.example", None), result, "0.5.0", None)
         row, [state] = stored(scans, scan_id)
         checks = {f.check_id: f.status.value for f in result.findings}
-        assert as_compared(state) == expected_state(row, checks), name
+        assert as_compared(state) == expected_state(row, checks, stored_scope(scans, scan_id)), name
         assert state["evaluation"] == scoring.assess(result.findings).evaluation, name
         evaluations.add(state["evaluation"])
     assert evaluations == {"complete", "partial", "undetermined", "not_evaluated"}

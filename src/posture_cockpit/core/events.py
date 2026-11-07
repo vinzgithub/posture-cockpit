@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .compare import Comparison, Snapshot, compare
+from .compare import Comparison, Snapshot, compare, same_scope
 
 
 @dataclass(frozen=True)
@@ -28,6 +28,10 @@ def derive(previous: Snapshot | None, current: Snapshot) -> tuple[Candidate, ...
         return ()
     # Incomparable inventories or engines cannot prove a security change.
     if previous.engine is None or current.engine is None or previous.engine != current.engine:
+        return ()
+    # Version 0.7 (R5): the SMTP probe turned on or off measures something else: no regression, no
+    # resolution, no score drop and no coverage loss come from the configuration.
+    if not same_scope(previous, current):
         return ()
     if set(previous.checks) != set(current.checks):
         return ()
