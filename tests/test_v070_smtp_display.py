@@ -14,7 +14,7 @@ hostile or very long contents from the network, shown as text.
 The review of the first head of PR-D: R1, every MX measured is kept in the bounded evidence (a valid MX
 after sixteen invalid names), and what is left out is said; R2, long and hostile names (MX, aliases, the
 MX a policy leaves out) are bounded for the eye, break where they must and never widen the page nor the
-PDF, the JSON keeping them whole.
+PDF, the JSON keeping them whole; R3, a report of eight MX measured spans several pages, its rows whole.
 """
 
 import asyncio
@@ -544,3 +544,50 @@ def test_r2_long_names_never_run_past_the_page_of_the_pdf(instance):
     assert past_margin(document) <= 0.5
     assert split_rows(document) == []
 
+
+# ------------------------------------------------------------------ R3: a large report
+V6S = [f"2001:db8:ffff:ffff:ffff:ffff:ffff:{n:x}" for n in range(0x101, 0x109)]
+
+
+def large() -> dict:
+    """Eight MX measured, IPv4 and IPv6, every kind of result: verified, refused with a diagnostic reading, no
+    route, no connection, refused by the server, keywords masked, STARTTLS deferred, TLS failed."""
+    refused = {"verify": {"reason": "certificate_refused", "verify_code": 62, "verify_message": "Hostname mismatch"},
+               "read_certificate": "tls_unverified"}
+    mx = {"mx1.example.net": {"192.0.2.31": "tls_verified", V6S[0]: "tls_verified"},
+          "mx2.example.net": {"192.0.2.32": "tls_verified", V6S[1]: "no_ipv6"},
+          "mx3.example.net": {"192.0.2.33": refused},
+          "mx4.example.net": {"192.0.2.34": "timeout", V6S[3]: "unreachable"},
+          "mx5.example.net": {"192.0.2.35": "banner_refused", V6S[4]: "tls_verified"},
+          "mx6.example.net": {"192.0.2.36": "esmtp_altered", V6S[5]: "starttls_temporary"},
+          "mx7.example.net": {"192.0.2.37": "tls_handshake_error", V6S[6]: "refused"},
+          "mx8.example.net": {"192.0.2.38": refused}}
+    return world(mx)
+
+
+def test_r3_a_report_of_eight_mx_spans_pages_with_whole_rows(instance):
+    """R3 of the review of PR-D, T05, F06: eight MX measured, fourteen addresses, two certificates refused and read
+    for the diagnosis, every cause of a measure not made: the annex runs over several pages, its header repeated;
+    every row is laid out on one page, every IPv6 address in one piece, nothing past the margin."""
+    weasyprint = pytest.importorskip("weasyprint")
+    from posture_cockpit.report import REPORT_DIR
+
+    i = instance()
+    page = i.scan(large())
+    assert len(rows(page)) == 14
+    scan = i.scans.get(i.scans.latest_id(i.scans.domain(DOMAIN)["id"]))
+    exhaustivity = next(f for f in scan.current() if f.check_id == CHECK).outcome.evidence["exhaustivity"]
+    assert (exhaustivity["mx"], exhaustivity["addresses"], exhaustivity["certificate_readings"]) == (8, 14, 2)
+    html = render_html(i.app.state.services.catalog, "fr", scan)
+    annex = html[html.index('class="smtp-annex"'):]
+    for expected in ("Vérifié (chaîne de confiance", "Lecture diagnostique, non vérifiée", "Port 25 inaccessible",
+                     "Non joignable depuis ce réseau", "Dialogue SMTP refusé", "Capacités SMTP altérées",
+                     "STARTTLS refusé ou différé", "Négociation TLS inaboutie"):
+        assert expected in annex, expected
+    document = weasyprint.HTML(string=html, base_url=str(REPORT_DIR)).render()
+    headers = [n for n, p in enumerate(document.pages) if any(b.text == "Serveur (MX)" for b in _texts(p._page_box))]
+    assert len(headers) >= 2  # the annex spans pages, the header of its table on each
+    assert split_rows(document) == []
+    text = [box.text for p in document.pages for box in _texts(p._page_box)]
+    assert all(v6 in text for v6 in (a for m in large()["smtp"].values() for a in m if ":" in a))
+    assert past_margin(document) <= 0.5
