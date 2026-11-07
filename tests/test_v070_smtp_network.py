@@ -436,6 +436,80 @@ def test_the_deadline_is_never_extended():
     assert cut.dialogue.partial == ("220-mx.lab.example",) and elapsed < 1.0 and connections == 1
 
 
+def blocked_hand_over(monkeypatch) -> list[socket.socket]:
+    """asyncio.open_connection(sock=...) never returns: the socket is connected, never handed over."""
+    handed: list[socket.socket] = []
+
+    async def never(*_args, sock: socket.socket, **_options):
+        handed.append(sock)
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(asyncio, "open_connection", never)
+    return handed
+
+
+def test_a_socket_hand_over_that_blocks_ends_at_the_deadline(monkeypatch):
+    """R1 of the review of PR-B2, R11, F02: the TCP connection and the hand-over of the socket to asyncio share one
+    absolute limit. A hand-over that never ends stops at the deadline (budget, deadline), not later; the attempt
+    stays counted; the socket is closed."""
+    handed = blocked_hand_over(monkeypatch)
+
+    async def main():
+        async with dns_server(zone("127.0.0.2")) as (_, dns_port), lab_servers("127.0.0.2") as (servers, port):
+            net = lab(dns_port, port)
+            await discovered(net, MX)
+            loop = asyncio.get_running_loop()
+            start = loop.time()
+            observation = await net.smtp_attempt(MX, "127.0.0.2", deadline=soon(0.5))
+            elapsed = loop.time() - start
+        return observation, elapsed, net._smtp_budget.spent, servers[0].connections
+
+    observation, elapsed, spent, connections = asyncio.run(main())
+    assert (observation.cause, observation.reason, observation.socket) == ("budget", "deadline", True)
+    assert observation.dialogue is None and 0.4 < elapsed < 0.8
+    assert (spent, connections) == (1, 1)  # counted, and the TCP connection had been made
+    assert handed and handed[0].fileno() == -1  # closed
+
+
+def test_a_socket_hand_over_that_blocks_ends_at_the_connection_limit(monkeypatch):
+    """R1 of the review of PR-B2, R11: with time left before the deadline, the connection's own limit ends it,
+    observed as a network timeout; the socket is closed."""
+    handed = blocked_hand_over(monkeypatch)
+    monkeypatch.setattr(network, "SMTP_CONNECT_SECONDS", 0.3)
+
+    async def main():
+        async with dns_server(zone("127.0.0.2")) as (_, dns_port), lab_servers("127.0.0.2") as (_, port):
+            net = lab(dns_port, port)
+            await discovered(net, MX)
+            return await net.smtp_attempt(MX, "127.0.0.2", deadline=soon(10))
+
+    observation = asyncio.run(main())
+    assert (observation.cause, observation.reason, observation.socket) == ("network", "timeout", True)
+    assert handed[0].fileno() == -1
+
+
+def test_a_cancelled_hand_over_closes_the_socket(monkeypatch):
+    """R1 of the review of PR-B2: an attempt cancelled while its socket is being handed over closes the socket,
+    and the cancellation goes on."""
+    handed = blocked_hand_over(monkeypatch)
+
+    async def main() -> bool:
+        async with dns_server(zone("127.0.0.2")) as (_, dns_port), lab_servers("127.0.0.2") as (_, port):
+            net = lab(dns_port, port)
+            await discovered(net, MX)
+            task = asyncio.create_task(net.smtp_attempt(MX, "127.0.0.2", deadline=soon(10)))
+            while not handed:
+                await asyncio.sleep(0.01)
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                return True
+        return False
+
+    assert asyncio.run(main()) and handed[0].fileno() == -1
+
+
 def test_a_closed_port_is_a_network_observation():
     """T03, T04: a port that refuses the connection is observed as such (network, refused), socket opened."""
 

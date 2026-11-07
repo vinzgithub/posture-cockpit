@@ -868,37 +868,45 @@ class LiveNetwork:
 
     async def _smtp_connected(self, name: str, ip: Address, port: int, purpose: str,
                               deadline: float) -> SmtpObservation:
-        """The connection to the checked address, then the dialogue, which closes it."""
+        """The connection to the checked address, then the dialogue, which closes it.
+
+        One absolute instant bounds the whole connection: the TCP handshake *and* the hand-over of the
+        socket to asyncio's streams, never more than SMTP_CONNECT_SECONDS from now, never later than the
+        caller's deadline, which is never extended. Whatever stops it (a failure, the time limit, a
+        cancellation), the socket, or the transport that took it over, is closed before going on."""
         from . import smtp  # see _smtp_tls_context
 
         loop = asyncio.get_running_loop()
-        limit = min(SMTP_CONNECT_SECONDS, deadline - loop.time())
-        if limit <= 0:
+        connect_by = min(loop.time() + SMTP_CONNECT_SECONDS, deadline)
+        by_deadline = connect_by == deadline  # the deadline, not the connection's own limit, comes first
+        if connect_by <= loop.time():
             return SmtpObservation(name, str(ip), purpose, "budget", "deadline", "no time left before connecting")
         try:
             sock = socket.socket(socket.AF_INET6 if ip.version == 6 else socket.AF_INET, socket.SOCK_STREAM)
         except OSError as e:  # this machine cannot even make the socket (no IPv6)
             return SmtpObservation(name, str(ip), purpose, "network", "no_route", e.strerror or str(e))
+        writer: asyncio.StreamWriter | None = None
         try:
             sock.setblocking(False)
-            async with asyncio.timeout(limit):
+            async with asyncio.timeout_at(connect_by):
                 await loop.sock_connect(sock, (str(ip), port))
-            reader, writer = await asyncio.open_connection(sock=sock)
-        except TimeoutError:
+                reader, writer = await asyncio.open_connection(sock=sock)
+        except BaseException as e:
+            if writer is not None:
+                writer.transport.abort()  # the transport owns the socket now
             sock.close()
-            cause, reason = ("budget", "deadline") if limit < SMTP_CONNECT_SECONDS else ("network", "timeout")
-            return SmtpObservation(name, str(ip), purpose, cause, reason, f"no connection within {limit:.1f} s",
-                                   socket=True)
-        except ConnectionRefusedError:
-            sock.close()
-            return SmtpObservation(name, str(ip), purpose, "network", "refused", "connection refused", socket=True)
-        except OSError as e:
-            sock.close()
-            reason = "no_route" if e.errno in _UNREACHABLE else "error"
-            return SmtpObservation(name, str(ip), purpose, "network", reason, e.strerror or str(e), socket=True)
-        except BaseException:
-            sock.close()
-            raise
+            if isinstance(e, TimeoutError):  # before OSError: TimeoutError is one of them
+                cause, reason = ("budget", "deadline") if by_deadline else ("network", "timeout")
+                return SmtpObservation(name, str(ip), purpose, cause, reason, "no connection before "
+                                       + ("the deadline" if by_deadline else f"{SMTP_CONNECT_SECONDS:.0f} s"),
+                                       socket=True)
+            if isinstance(e, ConnectionRefusedError):
+                return SmtpObservation(name, str(ip), purpose, "network", "refused", "connection refused",
+                                       socket=True)
+            if isinstance(e, OSError):
+                reason = "no_route" if e.errno in _UNREACHABLE else "error"
+                return SmtpObservation(name, str(ip), purpose, "network", reason, e.strerror or str(e), socket=True)
+            raise  # a cancellation, or a bug: the socket is closed, the error goes on
         assert self._ehlo_name is not None  # smtp_target refused the attempt otherwise
         attempt = await smtp.run_dialogue(reader, writer, mx_name=name, ehlo_name=self._ehlo_name,
                                           tls_context=self._smtp_tls_context(purpose), deadline=deadline)
