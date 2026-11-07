@@ -568,7 +568,8 @@ def large() -> dict:
 def test_r3_a_report_of_eight_mx_spans_pages_with_whole_rows(instance):
     """R3 of the review of PR-D, T05, F06: eight MX measured, fourteen addresses, two certificates refused and read
     for the diagnosis, every cause of a measure not made: the annex runs over several pages, its header repeated;
-    every row is laid out on one page, every IPv6 address in one piece, nothing past the margin."""
+    every row is laid out on one page, every IPv6 address and every word of ordinary length in one piece,
+    nothing past the margin."""
     weasyprint = pytest.importorskip("weasyprint")
     from posture_cockpit.report import REPORT_DIR
 
@@ -590,4 +591,6 @@ def test_r3_a_report_of_eight_mx_spans_pages_with_whole_rows(instance):
     assert split_rows(document) == []
     text = [box.text for p in document.pages for box in _texts(p._page_box)]
     assert all(v6 in text for v6 in (a for m in large()["smtp"].values() for a in m if ":" in a))
+    # Words of ordinary length are never cut, however narrow the columns: a cipher, a stage.
+    assert all(any(word in line for line in text) for word in ("TLS_AES_256_GCM_SHA384", "Négociation"))
     assert past_margin(document) <= 0.5

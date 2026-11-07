@@ -121,8 +121,8 @@ p { orphans: 3; widows: 3; }
 .smtp-small { font-size: 7.5pt; color: #5A554B; margin: 0 0 3pt; }
 .smtp-rows { width: 100%; border-collapse: collapse; font-size: 7.5pt; margin-top: 4pt; }
 .smtp-rows th { text-align: left; font: 600 7pt "IBM Plex Sans"; color: #6B6559; padding: 3pt 4pt; border-bottom: 1pt solid #1C1B18; }
-.smtp-rows td { padding: 3pt 4pt; border-bottom: 0.4pt solid #CFC6B5; vertical-align: top; overflow-wrap: anywhere; }
-.smtp-rows td:first-child { overflow-wrap: break-word; min-width: 9em; }  /* an MX name is not cut... */
+.smtp-rows td { padding: 3pt 4pt; border-bottom: 0.4pt solid #CFC6B5; vertical-align: top; overflow-wrap: break-word; }
+.smtp-rows td:first-child { min-width: 9em; }  /* a word of ordinary length (a name, a cipher) is not cut... */
 /* ...unless it is a word longer than report/smtp.py's LONG_WORD (R2 of the review of PR-D): then it breaks
    where it must, never past the page; so do the names a policy leaves out, in a paragraph. */
 .smtp-rows .smtp-long, .smtp-annex p.smtp-small { overflow-wrap: anywhere; }
