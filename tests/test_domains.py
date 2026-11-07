@@ -195,7 +195,7 @@ def test_the_dns_host_choice_is_remembered(signed_in):
 def test_details_show_every_check_and_its_values(signed_in):
     scan(signed_in, DEMO)
     page = signed_in.get(f"/domains/{DEMO}/details").text
-    assert page.count('class="check status-') == 20
+    assert page.count('class="check status-') == 21  # version 0.7: mail.smtp_starttls, NA with the probe off
     assert "Apache/2.4.41" in page
 
 

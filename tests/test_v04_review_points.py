@@ -39,7 +39,9 @@ from test_v04_scoring import BLOCKED_ALL, REGISTRY, UNMEASURED_ALL, family
 from worlds import DOMAIN, NOW, with_certificate
 
 FIX = Remedy(15, Effort.DELEGATE)
-MAIL_DNS = [c for c in REGISTRY.checks() if c.family is None and c.category in ("mail", "dns") and c.id != "mail.mx"]
+# Version 0.7: mail.smtp_starttls is left out, as it is NA in a scan with the probe off (the default, A1a).
+MAIL_DNS = [c for c in REGISTRY.checks() if c.family is None and c.category in ("mail", "dns")
+            and c.id not in ("mail.mx", "mail.smtp_starttls")]
 
 
 def _mail(**statuses: Status) -> list[Finding]:

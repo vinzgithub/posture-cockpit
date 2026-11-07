@@ -121,7 +121,7 @@ def test_builtin_extensions_load():
     reg = Registry.discover()
     assert reg.errors == []
     assert [e.id for e in reg.extensions] == ["mail", "tls", "web", "dns"]
-    assert len(reg.checks()) == 20
+    assert len(reg.checks()) == 21  # version 0.7: mail.smtp_starttls
     assert all(c.category == "tls" for c in reg.checks() if c.extension == "tls")
     assert "mail.dmarc" not in {c.id for c in reg.checks(disabled={"mail"})}
 

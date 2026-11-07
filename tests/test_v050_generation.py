@@ -17,6 +17,7 @@ import pytest
 import https_worlds
 import worlds
 from posture_cockpit.core import engine, generation, scoring
+from posture_cockpit.core.extension import SmtpSettings
 from posture_cockpit.core.fixture import FixtureNetwork
 from posture_cockpit.core.registry import Registry
 from posture_cockpit.scanner import DEMO_DOMAIN, demo_data
@@ -55,15 +56,36 @@ WORLDS = {
     "mail_unanswered": (worlds.DOMAIN, lambda: mail_unanswered(worlds.healthy())),
     "unreachable": (worlds.DOMAIN, unreachable),
     "nothing": (worlds.DOMAIN, dict),
+    # Version 0.7 (generation 5): mail.smtp_starttls. The worlds above run with the probe off (NA); those
+    # below with the probe on (SMTP_ON), and the last one off on a domain without website (T08).
+    "smtp_ok": (worlds.DOMAIN, lambda: worlds.with_smtp(worlds.healthy(), {"192.0.2.25": "tls_verified"})),
+    "smtp_ok_ipv6_untested": (worlds.DOMAIN, lambda: worlds.with_smtp(
+        worlds.healthy(), {"192.0.2.25": "tls_verified", "2001:db8::25": "no_ipv6"},
+        **{"mx.example.net AAAA": ["2001:db8::25"]})),
+    "smtp_starttls_absent": (worlds.DOMAIN, lambda: worlds.with_smtp(
+        worlds.healthy(), {"192.0.2.25": "starttls_absent"})),
+    "smtp_certificate_enforce": (worlds.DOMAIN, lambda: worlds.with_smtp(
+        worlds.healthy(), {"192.0.2.25": "certificate_refused"})),
+    "smtp_certificate_testing": (worlds.DOMAIN, lambda: worlds.with_smtp(
+        worlds.http_only_with_redirect_elsewhere(), {"192.0.2.25": "certificate_refused"})),
+    "smtp_certificate_expiring": (worlds.DOMAIN, lambda: worlds.with_smtp(
+        worlds.healthy(), {"192.0.2.25": {"reason": "tls_verified", "certificate": {"expires_in_days": 15}}})),
+    "smtp_port25_blocked": (worlds.DOMAIN, lambda: worlds.with_smtp(worlds.healthy(), {"192.0.2.25": "timeout"})),
+    "smtp_port25_blocked_no_website": (worlds.DOMAIN, lambda: worlds.with_smtp(
+        worlds.without_website(worlds.healthy()), {"192.0.2.25": "timeout"})),
+    "smtp_off_no_website": (worlds.DOMAIN, lambda: worlds.without_website(worlds.healthy())),
 }
+SMTP_ON = {name for name in WORLDS if name.startswith("smtp_") and not name.startswith("smtp_off")}
 
 
 def fingerprint() -> dict:
     registry = Registry.discover()
     result = {}
     for name, (domain, make) in WORLDS.items():
-        scan = asyncio.run(engine.scan(domain, registry.checks(), FixtureNetwork(make(), worlds.NOW), timeout=5,
-                                       now=worlds.NOW))
+        on = name in SMTP_ON
+        net = FixtureNetwork(make(), worlds.NOW, domain=domain, ehlo_name=worlds.EHLO if on else None)
+        smtp = SmtpSettings(enabled=on, ehlo_name=worlds.EHLO if on else None)
+        scan = asyncio.run(engine.scan(domain, registry.checks(), net, timeout=5, now=worlds.NOW, smtp=smtp))
         a = scoring.assess(scan.findings)
         result[name] = {
             "score": a.score, "grade": a.grade, "evaluation": a.evaluation,
@@ -83,6 +105,21 @@ def test_the_rules_are_those_of_their_generation():
     assert not changed, (
         f"The verdicts or the scores changed for {changed}. If the change of the rules is intended, "
         "raise GENERATION in core/generation.py and write the new file: python tests/test_v050_generation.py")
+
+
+def test_generation_5_changes_the_worlds_of_generation_4_by_the_smtp_check_only():
+    """Version 0.7, T05, T08: the differences between generation 4 and 5, read one by one. On every world
+    of generation 4, generation 5 adds mail.smtp_starttls, NA with the probe off (A1a), and changes
+    nothing else: the other verdicts, the score, the grade, the coverage and the caps are those of
+    generation 4. The new worlds are those of the SMTP check."""
+    old = json.loads((DATA / "generation-4.json").read_text())["worlds"]
+    new = json.loads((DATA / "generation-5.json").read_text())["worlds"]
+    for name, before in old.items():
+        after = new[name]
+        assert after["statuses"] == {**before["statuses"], "mail.smtp_starttls": "na"}, name
+        assert {k: v for k, v in after.items() if k != "statuses"} == {
+            k: v for k, v in before.items() if k != "statuses"}, name
+    assert set(new) - set(old) == {name for name in WORLDS if name.startswith("smtp_")}
 
 
 def test_the_worlds_cover_the_states_that_matter():
