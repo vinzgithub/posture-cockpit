@@ -278,10 +278,13 @@ def decide(probe: ProbeResult | None, policy: PolicyView | None, now: datetime) 
     # concluded (D1b, D2b), the anti-SSRF rule: measures not made, never defects of the target.
     silent = [m for m in _retained(probe) if not any(seen(a) is Seen.VERIFIED for a in m.addresses)]
     if probe.discovery_error or silent:
-        cause = "dns" if probe.discovery_error else min(map(_mx_cause, silent), key=CAUSE_ORDER.index)
-        host = silent[0].name if silent else ""
-        return not_evaluated(f"{KEY}.unmeasured.{cause}", _evidence(probe, "F05.08", ready, notes),
-                             host=host, n=len(silent))
+        # The message names one MX with its own cause (the most specific, the preferred MX on a tie);
+        # every MX without a conclusion is listed with its cause, the observations of all MX are kept.
+        named = min(silent, key=lambda m: CAUSE_ORDER.index(_mx_cause(m))) if silent else None
+        cause = "dns" if probe.discovery_error or named is None else _mx_cause(named)
+        evidence = _evidence(probe, "F05.08", ready, notes)
+        evidence["silent_mx"] = [{"name": m.name, "cause": _mx_cause(m)} for m in silent]
+        return not_evaluated(f"{KEY}.unmeasured.{cause}", evidence, host=named.name if named else "", n=len(silent))
 
     # F05.09 — every MX kept has a verified address, nothing is proven wrong, but some published
     # address, MX or answer was not measured (A2b): OK, and the notes say what is missing.

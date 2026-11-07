@@ -219,6 +219,32 @@ def test_f05_08_an_mx_without_any_conclusion_is_error_even_when_another_verifies
     assert [a["seen"] for m in finding.outcome.evidence["mx"] for a in m["addresses"]] == ["verified", "unmeasured"]
 
 
+def test_f05_08_the_message_names_the_mx_of_its_cause():
+    """F05.08, F01 (arbitration 3 of the review of PR-C): an invalid MX name first, then a valid MX that times out:
+    ERROR. The message gives one cause and the MX it belongs to, never the cause of one MX on the name of
+    another; every MX without a conclusion is listed with its own cause."""
+    data = changed(world({MX2: {V4B: "timeout"}}), dns={f"{DOMAIN} MX": ["10 bad_name!.example.", f"20 {MX2}."]})
+    finding, _ = check(data)
+    assert verdict(finding) == ("error", "unmeasured.network", "F05.08")
+    assert finding.outcome.params == {"host": MX2, "n": 2}
+    assert finding.outcome.evidence["silent_mx"] == [{"name": "bad_name!.example", "cause": "invalid_name"},
+                                                     {"name": MX2, "cause": "network"}]
+
+
+def test_f05_08_an_invalid_mx_keeps_the_observations_of_the_others():
+    """F05.08, F01, F05.10 (arbitration 3): an invalid MX name beside an MX that verifies: ERROR for the check, the
+    invalid MX named, never contacted, and the observations of the other MX kept whole in the evidence."""
+    data = changed(world({MX1: {V4: "tls_verified"}}), dns={f"{DOMAIN} MX": [f"10 {MX1}.", "20 bad_name!.example."]})
+    finding, net = check(data)
+    assert verdict(finding) == ("error", "unmeasured.invalid_name", "F05.08")
+    assert finding.outcome.params == {"host": "bad_name!.example", "n": 1}
+    assert [q for q in net.asked if q.startswith("smtp ")] == [f"smtp {MX1} {V4} verify"]
+    verified, invalid = finding.outcome.evidence["mx"]
+    assert (verified["name"], verified["addresses"][0]["seen"]) == (MX1, "verified")
+    assert verified["addresses"][0]["observations"][0]["dialogue"]["reason"] == "tls_verified"
+    assert (invalid["name"], invalid["valid"], invalid["addresses"]) == ("bad_name!.example", False, [])
+
+
 def test_f05_09_one_verified_address_per_mx_is_ok_with_notes_a2b():
     """F05.09, A2b, T03: the IPv4 address verified, the IPv6 one untestable from here (no route): OK with the
     coverage notes, and readiness unconfirmed while a published address is not evaluated."""
