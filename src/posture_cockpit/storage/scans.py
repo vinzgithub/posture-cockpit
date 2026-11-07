@@ -385,10 +385,18 @@ class Scans:
         return self.save_rechecks(scan_id, [finding])
 
     def save_rechecks(self, scan_id: int, findings: list[Finding]) -> scoring.Assessment:
-        """Store a whole recheck group and its metrics in one transaction."""
+        """Store a whole recheck group and its metrics in one transaction.
+
+        Version 0.7: a finding of a check the scan does not hold is not stored. A group rechecks its
+        checks together (mail.mta_sts with mail.smtp_starttls, R6); on a scan made before a check
+        existed, the scan keeps the checks it was made with."""
         with self.db.transaction():
             stamp = utcnow()
+            held = {row["check_id"] for row in self.db.all("SELECT check_id FROM findings WHERE scan_id=?",
+                                                           (scan_id,))}
             for finding in findings:
+                if finding.check_id not in held:
+                    continue
                 if finding.check_id == HTTPS_ROOT_CHECK:
                     previous = self.db.one("SELECT outcome, checked_at FROM rechecks WHERE scan_id=? AND check_id=?",
                                            (scan_id, HTTPS_ROOT_CHECK))
