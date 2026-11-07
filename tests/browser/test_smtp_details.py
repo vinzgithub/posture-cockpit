@@ -7,6 +7,9 @@ verifies, an IPv6 address without route and a backup MX that times out. The page
 and in English, on a desktop and on a phone, with the keyboard: the readiness, the table by MX and
 address (caption, headers, a scrollable region reachable by the keyboard), no horizontal scroll of the
 page on a phone, the IPv6 address on one line, and the JSON of the evidence still there after it.
+
+R2 of the review of PR-D: a second instance scans MX names, aliases and names a policy leaves out that are
+long and hostile; neither the page nor the table on a desktop scrolls sideways, and nothing of them is markup.
 """
 
 import re
@@ -22,6 +25,7 @@ from helpers import PASSWORD
 from posture_cockpit.config import Config
 from posture_cockpit.core.fixture import FixtureNetwork
 from posture_cockpit.web.app import create_app
+from test_v070_smtp_display import long_names
 from worlds import DOMAIN, EHLO, changed, healthy
 
 V6 = "2001:db8:ffff:ffff:ffff:ffff:ffff:25"
@@ -31,10 +35,10 @@ WORLD["smtp"] = {"mx.example.net": {"192.0.2.25": "tls_verified", V6: "no_ipv6"}
                  "mx2.example.net": {"192.0.2.26": "timeout"}}
 
 
-@pytest.fixture(scope="module")
-def smtp_port(tmp_path_factory):
-    app = create_app(Config(data_dir=tmp_path_factory.mktemp("smtp"), smtp_probe=True, smtp_ehlo_name=EHLO),
-                     network_factory=lambda d: FixtureNetwork(WORLD, domain=d, ehlo_name=EHLO))
+def serve(directory, world):
+    """An instance with the probe on, its account made and the domain scanned in ``world``: its port."""
+    app = create_app(Config(data_dir=directory, smtp_probe=True, smtp_ehlo_name=EHLO),
+                     network_factory=lambda d: FixtureNetwork(world, domain=d, ehlo_name=EHLO))
     sock = socket.socket()
     sock.bind(("127.0.0.1", 0))
     server = uvicorn.Server(uvicorn.Config(app, log_level="warning"))
@@ -50,17 +54,30 @@ def smtp_port(tmp_path_factory):
                                     "password": PASSWORD, "password2": PASSWORD, "lang": "fr"})
         csrf = re.search(r'name="csrf" content="([^"]+)"', client.get("/domains").text).group(1)
         assert client.post("/domains", data={"csrf": csrf, "domain": DOMAIN}).status_code == 303
+    return number, server
+
+
+@pytest.fixture(scope="module")
+def smtp_port(tmp_path_factory):
+    number, server = serve(tmp_path_factory.mktemp("smtp"), WORLD)
+    yield number
+    server.should_exit = True
+
+
+@pytest.fixture(scope="module")
+def long_port(tmp_path_factory):
+    number, server = serve(tmp_path_factory.mktemp("long"), long_names())
     yield number
     server.should_exit = True
 
 
 @pytest.fixture
-def details(browser, playwright, smtp_port):
+def details(browser, playwright, smtp_port, long_port):
     contexts = []
 
-    def open_page(device=None, lang="fr"):
+    def open_page(device=None, lang="fr", port=smtp_port):
         options = dict(playwright.devices[device]) if device else {}
-        context = browser.new_context(base_url=f"http://127.0.0.1:{smtp_port}", **options)
+        context = browser.new_context(base_url=f"http://127.0.0.1:{port}", **options)
         contexts.append(context)
         page = context.new_page()
         page.goto("/login")
@@ -98,6 +115,8 @@ def test_the_smtp_table_on_a_desktop_in_french(details):
     assert region.evaluate("e => e.scrollWidth <= e.clientWidth")  # on a desktop, the whole table is in view
     address = block.locator("code.smtp-address", has_text=V6)
     assert address.evaluate("e => e.getClientRects().length") == 1  # one line box: never cut
+    names = block.locator(".smtp-name")
+    assert all(names.nth(n).evaluate("e => e.getClientRects().length") == 1 for n in range(names.count()))
     smtp = page.locator("li#mail\\.smtp_starttls")
     assert smtp.locator("details summary").count() == 1  # the technical JSON, after the readable part
 
@@ -131,3 +150,19 @@ def test_the_smtp_table_in_english(details):
     assert block.locator(".smtp-readiness .badge").inner_text() == "To fix"
     assert "Results by server and address" in block.inner_text()
     assert "no guarantee of delivery from the Internet" in block.inner_text()
+
+
+@pytest.mark.parametrize("device", [None, "iPhone 13"])
+def test_long_and_hostile_names_never_widen_the_page(details, long_port, device):
+    """R2 of the review of PR-D, S05: names of 200 characters and more, ten aliases, twelve MX a policy leaves out,
+    HTML in a name: on a desktop the table holds in its region, on a phone too the page never scrolls sideways;
+    the long words break, the ordinary names do not; no element was made of what the network sent."""
+    page = details(device=device, port=long_port)
+    assert page.evaluate("document.scrollingElement.scrollWidth <= window.innerWidth + 1")
+    block = page.locator(".smtp")
+    if device is None:
+        assert block.locator(".table-scroll").evaluate("e => e.scrollWidth <= e.clientWidth")
+    assert block.locator("script, img").count() == 0 and "<img/src=x/onerror=alert(1)>" in block.inner_text()
+    assert block.locator(".smtp-name.smtp-long").count() >= 3
+    short = block.locator(".smtp-name", has_text="bad_0!.example")
+    assert short.evaluate("e => e.getClientRects().length") == 1

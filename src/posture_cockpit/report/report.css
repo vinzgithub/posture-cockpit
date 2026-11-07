@@ -84,6 +84,9 @@ p { orphans: 3; widows: 3; }
 .checks tr { page-break-inside: avoid; }
 .checks td:first-child { width: 34%; }
 .checks td:nth-child(2) { width: 15%; }
+/* A text that names what the DNS published (an MX, an alias) breaks a word too long for its line rather
+   than run past the page (R2 of the review of PR-D); the widths above stay those of the columns. */
+.areas td:last-child, .checks td:nth-child(3), .improvements li { overflow-wrap: anywhere; }
 .pill { display: inline-block; padding: 1pt 6pt; border-radius: 8pt; font: 600 7.5pt "IBM Plex Sans"; white-space: nowrap; }
 .pill-ok { background: #E3EFE3; color: #24572D; }
 .pill-warn { background: #F6E8CC; color: #7A4B06; }
@@ -119,7 +122,12 @@ p { orphans: 3; widows: 3; }
 .smtp-rows { width: 100%; border-collapse: collapse; font-size: 7.5pt; margin-top: 4pt; }
 .smtp-rows th { text-align: left; font: 600 7pt "IBM Plex Sans"; color: #6B6559; padding: 3pt 4pt; border-bottom: 1pt solid #1C1B18; }
 .smtp-rows td { padding: 3pt 4pt; border-bottom: 0.4pt solid #CFC6B5; vertical-align: top; overflow-wrap: anywhere; }
-.smtp-rows td:first-child { overflow-wrap: break-word; }  /* an MX name breaks at its dots only if it must */
+.smtp-rows td:first-child { overflow-wrap: break-word; min-width: 9em; }  /* an MX name is not cut... */
+/* ...unless it is a word longer than report/smtp.py's LONG_WORD (R2 of the review of PR-D): then it breaks
+   where it must, never past the page; so do the names a policy leaves out, in a paragraph. */
+.smtp-rows .smtp-long, .smtp-annex p.smtp-small { overflow-wrap: anywhere; }
+.smtp-rows td:nth-child(3), .smtp-rows td:nth-child(5) { min-width: 7em; }  /* none collapses */
+.smtp-rows td:nth-child(4) { min-width: 11em; }
 .smtp-rows tr { break-inside: avoid; page-break-inside: avoid; }
 .smtp-rows thead { display: table-header-group; }
 .smtp-rows td.smtp-address { font-family: "IBM Plex Mono", monospace; font-size: 7pt; white-space: nowrap; overflow-wrap: normal; }

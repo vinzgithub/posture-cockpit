@@ -12,7 +12,9 @@ reasons "engine", "scope" and an unknown scope; the additive API fields for ever
 hostile or very long contents from the network, shown as text.
 
 The review of the first head of PR-D: R1, every MX measured is kept in the bounded evidence (a valid MX
-after sixteen invalid names), and what is left out is said.
+after sixteen invalid names), and what is left out is said; R2, long and hostile names (MX, aliases, the
+MX a policy leaves out) are bounded for the eye, break where they must and never widen the page nor the
+PDF, the JSON keeping them whole.
 """
 
 import asyncio
@@ -293,7 +295,7 @@ def test_hostile_and_long_contents_are_text_in_the_page_and_the_pdf(instance):
     part = smtp_part(page)
     assert "<script>alert" not in page and "<img src=x" not in part
     assert "&lt;script&gt;alert(&#34;smtp&#34;)&lt;/script&gt;" in part
-    assert max(len(m) for m in re.findall(r'<code class="smtp-banner">(.*?)</code>', part, re.S)) < 400
+    assert max(len(m) for m in re.findall(r'<code class="smtp-banner[^"]*">(.*?)</code>', part, re.S)) < 400
     html = render_html(i.app.state.services.catalog, "fr", i.scans.get(scan_id))
     assert "<script>alert" not in html and "&lt;script&gt;" in html
 
@@ -458,4 +460,87 @@ def test_r1_the_evidence_keeps_every_resolved_mx_within_its_bound():
     assert sum(len(m["addresses"]) for m in evidence["mx"]) == evidence["exhaustivity"]["addresses"] == 8
     small = probe_of([MxProbe(MX1, 10, addresses=[AddressProbe(MX1, V4)], discovery_complete=True)])
     assert smtp_verdict.decide(small, None, now).evidence["mx_omitted"] == 0  # the key on every line
+
+
+# ------------------------------------------------------------------ R2: long and hostile names
+NAME = ".".join(c * 63 for c in "abc") + ".example.net"            # a valid name of 203 characters
+ALIAS = ".".join(c * 63 for c in "wxyz")[:240] + ".example"
+HOSTILE_MX = '<img/src=x/onerror=alert(1)><script>alert(1)</script>' + "z" * 230 + ".example"
+
+
+def long_names() -> dict:
+    """A valid MX with a long name and ten long aliases, then an invalid one, long and hostile, and eleven more
+    invalid names; the policy covers the first only: it leaves twelve MX out."""
+    return changed(world({NAME: {V4: "tls_verified", V6: "no_ipv6"}}, policy="testing"),
+                   dns={f"{DOMAIN} MX": [f"10 {NAME}.", f"15 {HOSTILE_MX}."] + [f"{20 + i} bad_{i}!.example."
+                                                                              for i in range(11)],
+                        f"{NAME} CNAME": [f"{ALIAS}."] + [f"alias{i}.{ALIAS[:200]}." for i in range(9)]})
+
+
+def test_r2_long_and_hostile_names_are_bounded_escaped_text(instance):
+    """R2 of the review of PR-D, F05.12, S05: names from the DNS are shown bounded (SHOWN_CHARS each, two aliases
+    of an MX and eight names of a policy at most, then how many more), as escaped text, never markup; only a word
+    longer than LONG_WORD may break (smtp-long), a host name of ordinary length never; the JSON after the block
+    keeps every value whole."""
+    from posture_cockpit.report.smtp import LONG_WORD, SHOWN_CHARS
+
+    page = instance().scan(long_names())
+    part = smtp_part(page)
+    assert "<img/src" not in page and "<script>alert(1)" not in page
+    assert "&lt;img/src=x/onerror=alert(1)&gt;&lt;script&gt;" in part
+    names = [markup.unescape(n) for n in re.findall(r'<span class="smtp-name[^"]*">(.*?)</span>', part, re.S)]
+    assert max(map(len, names)) == SHOWN_CHARS + 1 and names[0] == NAME[:SHOWN_CHARS] + "…" == names[1]
+    assert 'class="smtp-name smtp-long">' in part and '<span class="smtp-name">bad_0!.example</span>' in part
+    assert len(NAME.split(".")[0]) > LONG_WORD > len("bad_0!.example")
+    assert part.count("et 8 autres") == 2  # the aliases, on both rows of the MX
+    assert "MX non couverts" in part and "et 4 autres" in part  # twelve left out, eight shown
+    evidence = json.loads(markup.unescape(re.search(
+        rf'id="{re.escape(CHECK)}".*?<pre class="evidence">(.*?)</pre>', page, re.S).group(1)))
+    assert evidence["mx"][1]["name"] == HOSTILE_MX[:255] and len(evidence["mx"][0]["cname"]) == 10
+    assert len(evidence["readiness"]["policy"]["uncovered"]) == 12
+
+
+def past_margin(document) -> float:
+    """How far the text of the PDF runs past the right margin of its page, at worst (0 when it never does)."""
+    worst = 0.0
+    for page in document.pages:
+        box = page._page_box
+        right = box.margin_width() - box.margin_right
+        worst = max([worst] + [t.position_x + t.width - right for t in _texts(box)])
+    return worst
+
+
+def split_rows(document) -> list:
+    """The rows of the SMTP table that WeasyPrint laid out on more than one page (its header, repeated on every
+    page, is not one of them)."""
+    pages: dict[int, set[int]] = {}
+
+    def walk(box, number, inside=False):
+        element = getattr(box, "element", None)
+        inside = inside or (element is not None and "smtp-rows" in (element.get("class") or ""))
+        if getattr(box, "is_header", False):
+            return
+        if inside and type(box).__name__ == "TableRowBox":
+            pages.setdefault(id(element), set()).add(number)
+        for child in getattr(box, "children", []):
+            walk(child, number, inside)
+
+    for number, page in enumerate(document.pages):
+        walk(page._page_box, number)
+    return [element for element, on in pages.items() if len(on) > 1]
+
+
+def test_r2_long_names_never_run_past_the_page_of_the_pdf(instance):
+    """R2 of the review of PR-D, T05: the same names in the PDF: escaped, and no text past the right margin of any
+    page, in the SMTP annex or in the texts of the findings that name the same MX and aliases."""
+    weasyprint = pytest.importorskip("weasyprint")
+    from posture_cockpit.report import REPORT_DIR
+
+    i = instance()
+    i.scan(long_names())
+    html = render_html(i.app.state.services.catalog, "fr", i.scans.get(i.scans.latest_id(i.scans.domain(DOMAIN)["id"])))
+    assert "<img/src" not in html and "&lt;img/src=x/onerror=alert(1)&gt;" in html
+    document = weasyprint.HTML(string=html, base_url=str(REPORT_DIR)).render()
+    assert past_margin(document) <= 0.5
+    assert split_rows(document) == []
 

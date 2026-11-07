@@ -19,14 +19,16 @@ limits of the measure (addresses, connections, budget, deadline), and how many M
 notes of the evidence are not repeated: the text of every finding already ends with them
 (i18n.finding_summary).
 
-Every string from the network (banner, certificate names, verification messages) is data: it is
-returned as text, and the templates escape it (autoescape in both environments). Nothing here is
-marked safe.
+Every string from the network (MX names, aliases, banner, certificate names, verification messages, the
+names a policy covers) is data: it is returned as text, bounded for the eye (:data:`SHOWN_CHARS`, and
+:data:`SHOWN_NAMES` names in a list, then how many more), and the templates escape it (autoescape in both
+environments). Nothing here is marked safe; the whole value stays in the stored evidence, which the
+details show as JSON after this block.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from typing import Any
 
 from ..core.network import Limits
@@ -38,12 +40,38 @@ FAMILIES = {4: "IPv4", 6: "IPv6"}
 READINESS_BADGES = {"ready": "ok", "compatible": "ok", "to_fix": "warn", "unconfirmed": "error",
                     "not_applicable": "na"}
 SHOWN_CHARS = 200  # a string from the network shown at most this long (B1 already bounds what it keeps)
+SHOWN_NAMES = 8    # names shown at most in a list (the MX a policy covers or leaves out)
+# Aliases of one MX shown at most in its cell (a name has one CNAME, RFC 1034 §3.6.2): with a name and the
+# certificate, a row of the PDF stays shorter than a page, so that no row is ever split (R3 of the review).
+SHOWN_ALIASES = 2
+# A word from the network longer than this (a name, a banner, a certificate name) may be broken where it
+# must, in the cells listed in a row's ``wrap``; a shorter one is never cut, as host names usually are.
+LONG_WORD = 40
+WRAPPED = ("mx", "cname", "banner")
+Text = Callable[..., str]
 
 
 def _bounded(value: Any) -> str:
     text = str(value)
     return text if len(text) <= SHOWN_CHARS else text[:SHOWN_CHARS] + "…"
-Text = Callable[..., str]
+
+
+def _names(names: Iterable[Any], t: Text, most: int = SHOWN_NAMES) -> str:
+    """Names from the network as one bounded line: each bounded, ``most`` at most, then how many more."""
+    shown = [_bounded(n) for n in names]
+    line = ", ".join(shown[:most])
+    return line + (" " + t("smtp.more", n=len(shown) - most) if len(shown) > most else "")
+
+
+def _long(text: str) -> bool:
+    return any(len(word) > LONG_WORD for word in text.split())
+
+
+def _wrap(row: dict[str, Any]) -> dict[str, Any]:
+    """The row, with the cells where a word is long enough to be broken (R2 of the review of PR-D)."""
+    row["wrap"] = [k for k in WRAPPED if _long(row[k])] + (
+        ["certificate"] if any(_long(line) for line in row["certificate"]) else [])
+    return row
 
 
 def view(evidence: Mapping[str, Any] | None, t: Text) -> dict[str, Any] | None:
@@ -62,7 +90,7 @@ def _readiness(readiness: Mapping[str, Any], t: Text) -> dict[str, Any]:
     shown = None
     if isinstance(policy, Mapping):
         shown = {"state": policy.get("state", ""), "label": t(f"{KEY}.policy.{policy.get('state', 'unreadable')}"),
-                 "covered": list(policy.get("covered", [])), "uncovered": list(policy.get("uncovered", []))}
+                 "covered": _names(policy.get("covered", []), t), "uncovered": _names(policy.get("uncovered", []), t)}
     return {"state": state, "label": t(f"{KEY}.readiness.{state}"), "badge": READINESS_BADGES.get(state, "na"),
             "causes": [t(f"{KEY}.readiness.cause.{c}") for c in readiness.get("causes", [])],
             "policy": shown, "scope": t(f"{KEY}.readiness.scope")}
@@ -82,14 +110,14 @@ def _mx_cause(mx: Mapping[str, Any], evidence: Mapping[str, Any]) -> str:
 
 
 def _rows(mx: Mapping[str, Any], evidence: Mapping[str, Any], t: Text) -> list[dict[str, Any]]:
-    base = {"mx": mx.get("name", ""), "preference": mx.get("preference"),
-            "cname": ", ".join(mx.get("cname", []))}
+    base = {"mx": _bounded(mx.get("name", "")), "preference": mx.get("preference"),
+            "cname": _names(mx.get("cname", []), t, SHOWN_ALIASES)}
     addresses = mx.get("addresses", [])
     if not addresses:
         cause = _mx_cause(mx, evidence)
-        return [{**base, "address": "", "family": "", "stage": "", "codes": "", "banner": "", "tls": "",
-                 "certificate": [], "result": t(f"smtp.cause.{cause}"), "kind": "unmeasured", "cause": cause}]
-    return [{**base, **_address(a, t)} for a in addresses]
+        return [_wrap({**base, "address": "", "family": "", "stage": "", "codes": "", "banner": "", "tls": "",
+                       "certificate": [], "result": t(f"smtp.cause.{cause}"), "kind": "unmeasured", "cause": cause})]
+    return [_wrap({**base, **_address(a, t)}) for a in addresses]
 
 
 def _address(address: Mapping[str, Any], t: Text) -> dict[str, Any]:

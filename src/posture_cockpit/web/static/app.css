@@ -417,6 +417,9 @@ span.side-link-icon svg { width: 13px; height: 13px; }
 .check:first-child { border-top: 0; }
 .check > .icon { margin-top: 2px; }
 .check-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+/* The text of a finding may name what the DNS published, one long word (an MX, an alias): it breaks
+   where it must rather than widen the page (R2 of the review of PR-D); ordinary text is unchanged. */
+.check-body > p { overflow-wrap: anywhere; }
 .check-title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .check-id { flex: none; }
 .icon-ok { color: var(--ok); } .icon-warn { color: var(--warn); } .icon-fail { color: var(--fail); }
@@ -614,4 +617,10 @@ span.side-link-icon svg { width: 13px; height: 13px; }
 .smtp-table .smtp-address { white-space: nowrap; font-size: 12px; }
 .smtp-table .smtp-banner { font-size: 12px; }
 .smtp-table td:nth-child(4) { min-width: 11em; }
+/* A name, an alias, a banner or a certificate from the network may be one long word (R2 of the review of
+   PR-D): a word longer than report/smtp.py's LONG_WORD breaks where it must (smtp-long), a shorter one
+   never; every column keeps a width of its own, so that none collapses. */
+.smtp-table th[scope=row], .smtp-table td:nth-child(3) { min-width: 9em; }
+.smtp-table td:nth-child(5) { min-width: 8em; }
+.smtp-table .smtp-long, .smtp-hosts { overflow-wrap: anywhere; }
 .table-scroll:focus-visible { outline: 2px solid var(--accent, #2563eb); outline-offset: 2px; }

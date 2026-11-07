@@ -834,5 +834,6 @@
   "smtp.cause.tool": "Erreur de l'outil",
   "smtp.readiness": "Préparation au mode enforce",
   "smtp.preference": "priorité {n}",
-  "smtp.omitted": "{n:autre MX publié n'est pas repris|autres MX publiés ne sont pas repris} dans ce tableau ni dans la preuve : noms invalides ou au-delà de l'échantillon, jamais contactés. Tous les MX mesurés y figurent."
+  "smtp.omitted": "{n:autre MX publié n'est pas repris|autres MX publiés ne sont pas repris} dans ce tableau ni dans la preuve : noms invalides ou au-delà de l'échantillon, jamais contactés. Tous les MX mesurés y figurent.",
+  "smtp.more": "et {n:autre|autres}"
 }

@@ -138,7 +138,7 @@
     <div class="smtp-annex">
       <h3 class="smtp-annex-title">{{ t('smtp.report_title') }}</h3>
       <p class="smtp-readiness"><strong>{{ t('smtp.readiness') }} :</strong> {{ smtp.readiness.label }}{% if smtp.readiness.causes %} — {{ smtp.readiness.causes | join(' ') }}{% endif %}</p>
-      {% if smtp.readiness.policy %}<p class="smtp-small">{{ t('smtp.policy', state=smtp.readiness.policy.label) }}{% if smtp.readiness.policy.uncovered %} — {{ t('smtp.uncovered', hosts=smtp.readiness.policy.uncovered | join(', ')) }}{% endif %}</p>{% endif %}
+      {% if smtp.readiness.policy %}<p class="smtp-small">{{ t('smtp.policy', state=smtp.readiness.policy.label) }}{% if smtp.readiness.policy.uncovered %} — {{ t('smtp.uncovered', hosts=smtp.readiness.policy.uncovered) }}{% endif %}</p>{% endif %}
       <p class="smtp-small">{{ smtp.readiness.scope }}</p>
       {% if smtp.rows %}
       <table class="smtp-rows">
@@ -146,7 +146,7 @@
         <tbody>
         {% for row in smtp.rows %}
         <tr>
-          <td><strong>{{ row.mx }}</strong>{% if row.preference is not none %}<br><span class="smtp-small">{{ t('smtp.preference', n=row.preference) }}</span>{% endif %}{% if row.cname %}<br><span class="smtp-small">{{ t('smtp.cname', target=row.cname) }}</span>{% endif %}</td>
+          <td><strong class="smtp-name{% if 'mx' in row.wrap %} smtp-long{% endif %}">{{ row.mx }}</strong>{% if row.preference is not none %}<br><span class="smtp-small">{{ t('smtp.preference', n=row.preference) }}</span>{% endif %}{% if row.cname %}<br><span class="smtp-small{% if 'cname' in row.wrap %} smtp-long{% endif %}">{{ t('smtp.cname', target=row.cname) }}</span>{% endif %}</td>
           <td class="smtp-address">{{ row.address or '—' }}{% if row.family %}<br><span class="smtp-small">{{ row.family }}</span>{% endif %}</td>
           <td>{{ row.stage or '—' }}{% if row.codes %}<br><span class="smtp-small">{{ row.codes }}</span>{% endif %}</td>
           <td>{% if row.tls %}{{ row.tls }}{% if row.certificate %}<br>{% endif %}{% endif %}{% for line in row.certificate %}{{ line }}{% if not loop.last %}<br>{% endif %}{% else %}{% if not row.tls %}—{% endif %}{% endfor %}</td>
