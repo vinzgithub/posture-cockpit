@@ -130,6 +130,7 @@ class ProbeResult:
     discovery_error: str = ""    # the MX question itself failed: nothing is known of the MX
     deadline_reached: bool = False
     seconds: float = 0.0
+    budget_spent: int = 0        # SMTP attempts spent, as the network itself counted them
 
     @property
     def addresses(self) -> list[AddressProbe]:
@@ -140,7 +141,11 @@ class ProbeResult:
         return [o for a in self.addresses for o in a.observations]
 
     def exhaustivity(self) -> dict[str, Any]:
-        """How much of what is published was tried (discovered, attempted, with a dialogue), for the decision."""
+        """How much of what is published was tried, for the decision.
+
+        Three counts that are not one another (R2 of the review of PR-B2): ``budget_spent``, the attempts
+        the network counted; ``consumed``, the observations that spent one; ``sockets``, those that opened
+        a socket. A refusal spends nothing; a machine without IPv6 spends one and opens no socket."""
         observations = self.observations
         return {
             "mx": len(self.mx),
@@ -148,7 +153,9 @@ class ProbeResult:
             "mx_beyond_sample": sum(m.reason == "sample" for m in self.mx),
             "addresses": len(self.addresses),
             "planned": sum(a.planned for a in self.addresses),
-            "attempted": sum(o.socket for o in observations),
+            "budget_spent": self.budget_spent,
+            "consumed": sum(o.consumed for o in observations),
+            "sockets": sum(o.socket for o in observations),
             "dialogues": sum(o.dialogue is not None for o in observations),
             "certificate_readings": sum(o.purpose == SmtpPurpose.READ_CERTIFICATE for o in observations),
             "discovery_complete": not self.discovery_error and all(m.discovery_complete for m in self.mx
@@ -172,6 +179,7 @@ async def measure(ctx: CheckContext) -> ProbeResult:
         probe.deadline_reached = True
     if probe.enabled and not probe.internal and not probe.deadline_reached:
         await _attempts(ctx, probe, deadline)
+        probe.budget_spent = ctx.net.smtp_spent()
     _settle(probe)
     probe.seconds = loop.time() - start
     return probe

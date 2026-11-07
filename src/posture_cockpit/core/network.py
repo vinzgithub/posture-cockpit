@@ -237,6 +237,10 @@ class Network(Protocol):
         connection and a dialogue are all observations (:class:`SmtpObservation`)."""
         ...
 
+    def smtp_spent(self) -> int:
+        """How many of the scan's SMTP attempts were spent so far: the network's own count."""
+        ...
+
 
 @dataclass(frozen=True)
 class Limits:
@@ -279,7 +283,13 @@ class SmtpObservation:
     - ``"tool"`` (recorded worlds only): ``"not_recorded"``.
 
     With a dialogue, ``cause`` is empty and :attr:`dialogue` holds it. A refusal never counts as a
-    defect of the server: the decision reads it as "not testable"."""
+    defect of the server: the decision reads it as "not testable".
+
+    Two facts are kept apart (R2 of the review of PR-B2): ``consumed``, one of the scan's 16 attempts
+    was spent on this observation, and ``socket``, a socket was opened. Every refusal before the
+    attempt is counted spends nothing (both False). Once counted, the attempt is spent whatever follows:
+    a socket this machine cannot make (no IPv6: ``consumed`` without ``socket``), a connection refused,
+    unreachable or too slow, the deadline while connecting, or a dialogue."""
 
     mx_name: str
     address: str
@@ -288,7 +298,8 @@ class SmtpObservation:
     reason: str = ""
     detail: str = ""
     dialogue: Attempt | None = None
-    socket: bool = False  # a socket was opened for this attempt (never for a refusal)
+    socket: bool = False    # a socket was opened for this attempt (never for a refusal)
+    consumed: bool = False  # one of the scan's SMTP attempts was spent on it (never for a refusal)
 
 
 @dataclass(frozen=True)
@@ -862,9 +873,13 @@ class LiveNetwork:
             refusal = self._smtp_budget.take(name, str(ip), purpose)  # checked again and counted, no pause between
             if refusal is not None:
                 return SmtpObservation(name, str(ip), purpose, "budget", *refusal)
-            return await self._smtp_connected(name, ip, port, purpose, deadline)
+            # Counted from here on: whatever the connection and the dialogue give, the attempt is spent.
+            return replace(await self._smtp_connected(name, ip, port, purpose, deadline), consumed=True)
         finally:
             self._smtp_gate.release()
+
+    def smtp_spent(self) -> int:
+        return self._smtp_budget.spent
 
     async def _smtp_connected(self, name: str, ip: Address, port: int, purpose: str,
                               deadline: float) -> SmtpObservation:

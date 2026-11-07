@@ -39,7 +39,7 @@ from posture_cockpit.core.registry import Registry
 from posture_cockpit.scanner import DEMO_DOMAIN, Scanner
 from posture_cockpit.storage.perimeters import Perimeter
 from smtp_lab import LabNetwork
-from smtp_servers import Script, ehlo, smtp_server
+from smtp_servers import SILENT, Script, ehlo, smtp_server
 
 DOMAIN = "lab.example"
 MX = "mx.lab.example"
@@ -94,8 +94,26 @@ def soon(seconds: float = 10.0) -> float:
 
 
 def refused(observation: SmtpObservation, cause: str, reason: str) -> None:
+    """A refusal before the attempt is counted: no dialogue, no socket, nothing spent (R2)."""
     assert (observation.cause, observation.reason) == (cause, reason), observation
-    assert observation.dialogue is None and observation.socket is False
+    assert observation.dialogue is None and observation.socket is False and observation.consumed is False
+
+
+def spent(observation: SmtpObservation, cause: str, reason: str, *, socket_opened: bool) -> None:
+    """An attempt that was counted (R2): one of the 16 spent, with or without a socket, never a dialogue."""
+    assert (observation.cause, observation.reason) == (cause, reason), observation
+    assert observation.dialogue is None and observation.consumed is True and observation.socket is socket_opened
+
+
+def stalled_connect(monkeypatch, error: OSError | None = None) -> None:
+    """The TCP connection of an SMTP attempt fails with ``error``, or never completes (no answer to the SYN)."""
+
+    async def connect(_loop, _sock, _address):
+        if error is not None:
+            raise error
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(asyncio.selector_events.BaseSelectorEventLoop, "sock_connect", connect)
 
 
 # ------------------------------------------------------------------ the rule (S01)
@@ -165,8 +183,9 @@ def test_a_port_other_than_25_is_refused_by_the_rule_itself(no_socket):
 
 
 def test_no_ipv6_on_this_machine_is_no_route(monkeypatch):
-    """T03, T04: a machine that cannot make an IPv6 socket: the address is not testable from here (no_route),
-    never a fault of the server."""
+    """T03, T04, R2 of the review of PR-B2: a machine that cannot make an IPv6 socket (EAFNOSUPPORT): the
+    address is not testable from here (no_route), never a fault of the server. The attempt was counted before
+    the socket was made: one of the 16 is spent (consumed), no socket was opened."""
 
     class NoIpv6(NoSocket):
         @staticmethod
@@ -175,14 +194,15 @@ def test_no_ipv6_on_this_machine_is_no_route(monkeypatch):
 
     monkeypatch.setattr(network, "socket", NoIpv6)
 
-    async def main() -> SmtpObservation:
+    async def main() -> tuple[SmtpObservation, int]:
         async with dns_server(zone("2001:4860:4860::8888")) as (_, dns_port):
             net = live(dns_port)
             await discovered(net, MX)
-            return await net.smtp_attempt(MX, "2001:4860:4860::8888", deadline=soon())
+            return await net.smtp_attempt(MX, "2001:4860:4860::8888", deadline=soon()), net.smtp_spent()
 
-    observation = asyncio.run(main())
-    assert (observation.cause, observation.reason, observation.socket) == ("network", "no_route", False)
+    observation, count = asyncio.run(main())
+    spent(observation, "network", "no_route", socket_opened=False)
+    assert count == 1
 
 
 # ------------------------------------------------------- what the attempt is bound to (S02, decisions A, D, E)
@@ -364,19 +384,21 @@ def test_without_an_audited_domain_or_an_ehlo_name_nothing_goes(no_socket):
 
 # ------------------------------------------------------------------ budget and time (T03, T04, decision C)
 def test_the_budget_is_16_attempts_per_scan():
-    """T03, T04: 16 SMTP attempts per scan, then a refusal before any socket (budget)."""
+    """T03, T04, R2: 16 SMTP attempts per scan, then a refusal before any socket (budget), which spends
+    nothing: the network's count stays at 16."""
 
-    async def main() -> tuple[list[SmtpObservation], int]:
+    async def main() -> tuple[list[SmtpObservation], int, int]:
         async with dns_server(zone("127.0.0.2")) as (_, dns_port), lab_servers("127.0.0.2") as (servers, port):
             net = lab(dns_port, port)
             await discovered(net, MX)
             observations = [await net.smtp_attempt(MX, "127.0.0.2", deadline=soon()) for _ in range(17)]
-        return observations, servers[0].connections
+        return observations, servers[0].connections, net.smtp_spent()
 
-    observations, connections = asyncio.run(main())
-    assert all(o.dialogue is not None for o in observations[:16]) and Limits().smtp_attempts == 16
+    observations, connections, count = asyncio.run(main())
+    assert all(o.dialogue is not None and o.consumed and o.socket for o in observations[:16])
+    assert Limits().smtp_attempts == 16
     refused(observations[16], "budget", "attempts")
-    assert connections == 16
+    assert (connections, count) == (16, 16)
 
 
 def test_a_certificate_reading_needs_a_refused_certificate_and_happens_once_per_mx(tmp_path):
@@ -464,10 +486,10 @@ def test_a_socket_hand_over_that_blocks_ends_at_the_deadline(monkeypatch):
             elapsed = loop.time() - start
         return observation, elapsed, net._smtp_budget.spent, servers[0].connections
 
-    observation, elapsed, spent, connections = asyncio.run(main())
-    assert (observation.cause, observation.reason, observation.socket) == ("budget", "deadline", True)
-    assert observation.dialogue is None and 0.4 < elapsed < 0.8
-    assert (spent, connections) == (1, 1)  # counted, and the TCP connection had been made
+    observation, elapsed, count, connections = asyncio.run(main())
+    spent(observation, "budget", "deadline", socket_opened=True)
+    assert 0.4 < elapsed < 0.8
+    assert (count, connections) == (1, 1)  # counted, and the TCP connection had been made
     assert handed and handed[0].fileno() == -1  # closed
 
 
@@ -484,7 +506,7 @@ def test_a_socket_hand_over_that_blocks_ends_at_the_connection_limit(monkeypatch
             return await net.smtp_attempt(MX, "127.0.0.2", deadline=soon(10))
 
     observation = asyncio.run(main())
-    assert (observation.cause, observation.reason, observation.socket) == ("network", "timeout", True)
+    spent(observation, "network", "timeout", socket_opened=True)
     assert handed[0].fileno() == -1
 
 
@@ -511,16 +533,97 @@ def test_a_cancelled_hand_over_closes_the_socket(monkeypatch):
 
 
 def test_a_closed_port_is_a_network_observation():
-    """T03, T04: a port that refuses the connection is observed as such (network, refused), socket opened."""
+    """T03, T04, R2: a port that refuses the connection is observed as such (network, refused), socket opened,
+    the attempt spent."""
 
-    async def main() -> SmtpObservation:
+    async def main() -> tuple[SmtpObservation, int]:
         async with dns_server(zone("127.0.0.2")) as (_, dns_port), lab_servers("127.0.0.3") as (_, port):
             net = lab(dns_port, port)  # nothing listens on 127.0.0.2
             await discovered(net, MX)
-            return await net.smtp_attempt(MX, "127.0.0.2", deadline=soon())
+            return await net.smtp_attempt(MX, "127.0.0.2", deadline=soon()), net.smtp_spent()
 
-    observation = asyncio.run(main())
-    assert (observation.cause, observation.reason, observation.socket) == ("network", "refused", True)
+    observation, count = asyncio.run(main())
+    spent(observation, "network", "refused", socket_opened=True)
+    assert count == 1
+
+
+def test_an_unreachable_network_spends_the_attempt(monkeypatch):
+    """R2 of the review of PR-B2: no route to the network (ENETUNREACH) after the socket was made: no_route,
+    socket opened (and closed), the attempt spent; nothing reached the server."""
+    stalled_connect(monkeypatch, OSError(errno.ENETUNREACH, "Network is unreachable"))
+
+    async def main() -> tuple[SmtpObservation, int, int]:
+        async with dns_server(zone("127.0.0.2")) as (_, dns_port), lab_servers("127.0.0.2") as (servers, port):
+            net = lab(dns_port, port)
+            await discovered(net, MX)
+            observation = await net.smtp_attempt(MX, "127.0.0.2", deadline=soon())
+        return observation, net.smtp_spent(), servers[0].connections
+
+    observation, count, connections = asyncio.run(main())
+    spent(observation, "network", "no_route", socket_opened=True)
+    assert (count, connections) == (1, 0)
+
+
+def test_a_connection_that_never_completes_spends_the_attempt(monkeypatch):
+    """R2, R11: a SYN that gets no answer ends at the connection's limit (network, timeout), or at the deadline
+    when it comes first (budget, deadline); in both, socket opened and the attempt spent."""
+    stalled_connect(monkeypatch)
+    monkeypatch.setattr(network, "SMTP_CONNECT_SECONDS", 0.3)
+
+    async def main() -> tuple[SmtpObservation, SmtpObservation, int]:
+        async with dns_server(zone("127.0.0.2")) as (_, dns_port), lab_servers("127.0.0.2") as (_, port):
+            net = lab(dns_port, port)
+            await discovered(net, MX)
+            limit = await net.smtp_attempt(MX, "127.0.0.2", deadline=soon(10))
+            deadline = await net.smtp_attempt(MX, "127.0.0.2", deadline=soon(0.1))
+        return limit, deadline, net.smtp_spent()
+
+    limit, deadline, count = asyncio.run(main())
+    spent(limit, "network", "timeout", socket_opened=True)
+    spent(deadline, "budget", "deadline", socket_opened=True)
+    assert count == 2
+
+
+def test_every_refusal_before_the_attempt_spends_nothing():
+    """R2 of the review of PR-B2: whatever refuses before the attempt is counted (the purpose, an invalid or
+    unpublished name, an address not in this scan's DNS, the rule, a reading not allowed, the deadline, no free
+    connection before the deadline) spends none of the 16: the network's count stays at what was really tried,
+    and the 16 stay available."""
+
+    async def main():
+        silent = Script(banner=(SILENT,))
+        records = zone("127.0.0.2", "10.0.0.25") | {"other.lab.example": {"A": ["127.0.0.2"]}}
+        async with dns_server(records) as (_, dns_port), lab_servers("127.0.0.2", script=silent) as (servers, port):
+            net = lab(dns_port, port)
+            await discovered(net, MX, "other.lab.example")
+            refusals = [
+                await net.smtp_attempt(MX, "127.0.0.2", "deliver", deadline=soon()),
+                await net.smtp_attempt("-mx.lab.example", "127.0.0.2", deadline=soon()),
+                await net.smtp_attempt("other.lab.example", "127.0.0.2", deadline=soon()),
+                await net.smtp_attempt(MX, "127.0.0.3", deadline=soon()),
+                await net.smtp_attempt(MX, "10.0.0.25", deadline=soon()),
+                await net.smtp_attempt(MX, "127.0.0.2", SmtpPurpose.READ_CERTIFICATE, deadline=soon()),
+                await net.smtp_attempt(MX, "127.0.0.2", deadline=soon(-1)),
+            ]
+            before = net.smtp_spent()
+            # 8 attempts hold the 8 connections on a silent server; a 9th with an earlier deadline never gets one.
+            holding = [asyncio.create_task(net.smtp_attempt(MX, "127.0.0.2", deadline=soon(1.0))) for _ in range(8)]
+            async with asyncio.timeout(5):
+                while servers[0].open < 8:
+                    await asyncio.sleep(0.01)
+            waited = await net.smtp_attempt(MX, "127.0.0.2", deadline=soon(0.2))
+            held = await asyncio.gather(*holding)
+        return refusals, before, waited, held, net.smtp_spent()
+
+    refusals, before, waited, held, after = asyncio.run(main())
+    expected = [("policy", "purpose"), ("invalid_mx_name", "syntax"), ("policy", "not_published"),
+                ("policy", "not_published"), ("policy", "outside"), ("budget", "diagnostic_not_allowed"),
+                ("budget", "deadline")]
+    for observation, (cause, reason) in zip(refusals, expected, strict=True):
+        refused(observation, cause, reason)
+    refused(waited, "budget", "deadline")
+    assert all(o.consumed and o.dialogue is not None and o.dialogue.reason is smtp.Reason.DEADLINE for o in held)
+    assert (before, after) == (0, 8)
 
 
 def test_at_most_8_smtp_connections_at_once_per_scan():

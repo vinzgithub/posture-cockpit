@@ -88,7 +88,8 @@ def test_8_dual_stack_mx_make_16_attempts_without_a_reading():
                                      for i in range(8))))
     assert len(smtp_asked(net)) == 16 and all(q.endswith(" verify") for q in smtp_asked(net))
     summary = probe.exhaustivity()
-    assert (summary["planned"], summary["attempted"], summary["certificate_readings"]) == (16, 16, 0)
+    assert (summary["planned"], summary["certificate_readings"]) == (16, 0)
+    assert (summary["budget_spent"], summary["consumed"], summary["sockets"], summary["dialogues"]) == (16, 16, 16, 16)
 
 
 def test_one_attempt_left_gives_one_reading_never_two_per_mx():
@@ -213,6 +214,23 @@ def test_no_route_for_ipv6_is_kept_as_such():
     ipv4, ipv6 = probe.mx[0].addresses
     assert ipv4.verification.dialogue.reason is Reason.TLS_VERIFIED
     assert (ipv6.verification.cause, ipv6.verification.reason) == ("network", "no_route")
+
+
+def test_attempts_spent_and_sockets_opened_are_told_apart():
+    """R2 of the review of PR-B2, T03: the network's count of attempts spent (budget_spent), the observations
+    that spent one (consumed), those that opened a socket (sockets) and the dialogues are four counts. A refusal
+    before the attempt spends nothing; no IPv6 on this machine spends one without a socket; a refused, timed out
+    or unreachable connection spends one with a socket. They agree with the network's own count."""
+    outcomes = {"192.0.2.1": "tls_verified", "192.0.2.2": "refused", "192.0.2.3": "timeout",
+                "192.0.2.4": "unreachable", "192.0.2.5": "policy", "2001:db8::1": "no_ipv6", "2001:db8::2": None}
+    probe, net, _ = measured(world((f"mx0.{DOMAIN}", 10, list(outcomes), None),
+                                   extra={"smtp": {f"mx0.{DOMAIN}": outcomes}}))
+    by_address = {a.address: a.verification for a in probe.addresses}
+    assert by_address["2001:db8::1"].consumed and not by_address["2001:db8::1"].socket
+    assert not by_address["192.0.2.5"].consumed and not by_address["2001:db8::2"].consumed  # policy, not recorded
+    summary = probe.exhaustivity()
+    assert (summary["budget_spent"], summary["consumed"], summary["sockets"], summary["dialogues"]) == (5, 5, 4, 1)
+    assert summary["budget_spent"] == net.smtp_spent() == 5
 
 
 def test_a_blocked_mx_costs_nothing_to_a_fast_one():

@@ -74,7 +74,8 @@ A dialogue outcome is a :class:`~.smtp.Reason` value (``"tls_verified"``,
 ``"starttls_absent"``, ``"timeout@ehlo"``…), alone or as ``{"reason": ...}`` with
 ``tls_version``, ``certificate`` (over the host's), ``verify_code``,
 ``verify_message``. A connection outcome is ``"refused"``, ``"timeout"``,
-``"unreachable"``, ``"hang"`` (until the caller gives up) or ``"policy"``. An
+``"unreachable"``, ``"no_ipv6"`` (no socket could be made), ``"hang"`` (until the
+caller gives up) or ``"policy"``. An
 address with nothing recorded is not testable (``"tool"``, ``"not_recorded"``).
 """
 
@@ -417,11 +418,14 @@ class FixtureNetwork:
             return SmtpObservation(name, ip, purpose, "tool", "not_recorded", "this world records nothing here")
         self._smtp_budget.take(name, ip, purpose)
         async with self._connection("smtp", name, ip, 25):
-            observation = await self._smtp_play(name, ip, purpose, spec)
+            observation = replace(await self._smtp_play(name, ip, purpose, spec), consumed=True)
         if (purpose == SmtpPurpose.VERIFY and observation.dialogue is not None
                 and observation.dialogue.reason is smtp.Reason.CERTIFICATE_REFUSED):
             self._smtp_budget.certificate_refused(name, ip)
         return observation
+
+    def smtp_spent(self) -> int:
+        return self._smtp_budget.spent
 
     async def _smtp_play(self, name: str, ip: str, purpose: str, spec: Any) -> SmtpObservation:
         detail: Mapping[str, Any] = spec if isinstance(spec, Mapping) else {"reason": spec}
@@ -432,6 +436,8 @@ class FixtureNetwork:
                       "unreachable": ("no_route", "network is unreachable")}
         if outcome in connection:
             return SmtpObservation(name, ip, purpose, "network", *connection[outcome], socket=True)
+        if outcome == "no_ipv6":  # this machine cannot make an IPv6 socket: spent, no socket
+            return SmtpObservation(name, ip, purpose, "network", "no_route", "address family not supported")
         reason, _, stage = outcome.partition("@")
         attempt = self._smtp_dialogue(name, smtp.Reason(reason), smtp.Stage(stage) if stage else None, detail)
         return SmtpObservation(name, ip, purpose, dialogue=attempt, socket=True)
