@@ -213,3 +213,73 @@ def test_a_recheck_of_a_check_the_scan_does_not_hold_is_not_stored(scans):
     scans.save_rechecks(scan_id, findings)
     assert [r["check_id"] for r in scans.db.all("SELECT check_id FROM rechecks WHERE scan_id = ?", (scan_id,))] == [
         "mail.mta_sts"]
+
+
+# ------------------------------------------------------------------ an error of the engine on the SMTP check
+def errored(monkeypatch, how: str):
+    """Makes the next scans' SMTP check end with an error of the engine, without any evidence of its scope:
+    a bug in the verdict (check.error.internal) or a check that never returns (check.error.timeout)."""
+    from posture_cockpit.checks import smtp_measure, smtp_verdict
+
+    if how == "internal":
+        def broken(*args, **kwargs):
+            raise RuntimeError("broken verdict")
+        monkeypatch.setattr(smtp_verdict, "decide", broken)
+    else:
+        async def never(ctx):
+            await asyncio.Event().wait()
+        monkeypatch.setattr(smtp_measure, "result", never)
+
+
+@pytest.mark.parametrize("how", ["internal", "timeout"])
+def test_an_engine_error_of_the_smtp_check_compares_nothing_and_resolves_nothing(scans, monkeypatch, how):
+    """R5, F05.01 (review of PR-C): an error of the engine on the SMTP check (a bug, or the engine's timeout)
+    leaves no probe_enabled: the state is of unknown scope. Nothing is compared across it, in either direction:
+    no comparison, no check transition, no last conclusive verdict found beyond it, no event derived (opening,
+    resolution, score drop, coverage loss). The event opened before it stays open: no false resolution, even
+    when the next scan finds the check OK again."""
+    history = History(scans)
+    history.scan(OK, probe=True)
+    history.scan(FAIL, probe=True)
+    opened = history.events()
+    assert ("check", CHECK, "open") in opened
+    with monkeypatch.context() as patch:
+        errored(patch, how)
+        if how == "timeout":
+            scan_id = scans.save(history.domain, asyncio.run(engine.scan(
+                DOMAIN, Registry.discover().checks(), FixtureNetwork(with_smtp(healthy(), OK), NOW, domain=DOMAIN,
+                                                                     ehlo_name=EHLO),
+                timeout=0.5, now=NOW, smtp=SmtpSettings(True, EHLO))), "0.7.0", None)
+            history.ids.append(scan_id)
+        else:
+            history.scan(OK, probe=True)
+    error, before = history.states()[:2]
+    assert error.checks[CHECK] == "error" and (before.measured, error.measured) == ("on", "unknown")
+    stored = scans.db.one("SELECT metrics FROM scan_states ORDER BY id DESC LIMIT 1")["metrics"]
+    assert json.loads(stored)["measurement_scope"] == "unknown"
+    assert compare(before, error).reason == "scope" and check_changes(before, error).reason == "scope"
+    assert derive(before, error) == () and history.events() == opened
+    assert (last_conclusive(history.states(), CHECK).state, last_conclusive(history.states(), CHECK).reason) == (
+        None, "scope")
+    history.scan(OK, probe=True)  # the probe works again, the check is OK
+    after, error = history.states()[:2]
+    assert compare(error, after).reason == "scope" and derive(error, after) == ()
+    assert history.events() == opened  # still open: the fix is not confirmed across an unknown state
+
+
+def test_a_recheck_whose_smtp_check_errors_is_of_unknown_scope(scans, monkeypatch):
+    """R5, R6 (review of PR-C): a grouped recheck whose SMTP finding is an error of the engine: the recheck
+    state is of unknown scope, compared with nothing, and resolves nothing."""
+    history = History(scans)
+    history.scan(OK, probe=True)
+    scan_id = history.scan(FAIL, probe=True)
+    opened = history.events()
+    errored(monkeypatch, "internal")
+    findings = [f for f in result(with_smtp(healthy(), OK), probe=True).findings
+                if f.check_id in ("mail.mta_sts", CHECK)]
+    assert [f.outcome.summary for f in findings if f.check_id == CHECK] == ["check.error.internal"]
+    scans.save_rechecks(scan_id, findings)
+    current, previous = history.states()[:2]
+    assert (current.origin, current.measured) == ("recheck", "unknown")
+    assert compare(previous, current).reason == "scope" and derive(previous, current) == ()
+    assert history.events() == opened

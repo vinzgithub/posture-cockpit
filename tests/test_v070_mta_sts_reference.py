@@ -111,6 +111,30 @@ def test_mail_mta_sts_gives_the_results_recorded_before_the_shared_reading(name)
     assert finding(name) == recorded["worlds"][name]
 
 
+@pytest.mark.parametrize("name", list(WORLDS))
+def test_mail_mta_sts_gives_the_reference_beside_the_smtp_check(name):
+    """P2, F06, T05 (review of PR-C): scanned together with mail.smtp_starttls, probe on, its MX answering,
+    mail.mta_sts gives on each world the finding of the reference (status, message, parameters, evidence and
+    the order of its keys, remedy): the SMTP check reading the same policy, after its probe, changes nothing."""
+    from posture_cockpit.core.extension import SmtpSettings
+    from worlds import EHLO
+
+    data = WORLDS[name]()
+    data["smtp"] = {"mx.example.net": {"192.0.2.25": "tls_verified"}}
+    net = FixtureNetwork(data, NOW, domain=DOMAIN, ehlo_name=EHLO)
+    registry = Registry.discover()
+    result = asyncio.run(engine.scan(DOMAIN, [registry.get("mail.mta_sts"), registry.get("mail.smtp_starttls")], net,
+                                     timeout=5, now=NOW, smtp=SmtpSettings(True, EHLO)))
+    outcome = next(f.outcome for f in result.findings if f.check_id == "mail.mta_sts")
+    remedy = None if outcome.remedy is None else json.loads(json.dumps(dataclasses.asdict(outcome.remedy),
+                                                                       default=str))
+    recorded = json.loads(REFERENCE.read_text(encoding="utf-8"))["worlds"][name]
+    assert {"status": outcome.status.value, "summary": outcome.summary, "params": dict(outcome.params),
+            "evidence": json.loads(json.dumps(list(outcome.evidence.items()), default=str)), "remedy": remedy,
+            "signals": sorted(outcome.signals)} == {k: v for k, v in recorded.items() if k != "asked"}
+    assert net.asked.count(f"http {URL}") <= 1  # one reading of the policy for both checks
+
+
 def test_the_reference_covers_every_exit_of_the_check():
     """P2 (PR-C): the worlds reach every message of mail.mta_sts, and the errors of the engine."""
     recorded = json.loads(REFERENCE.read_text(encoding="utf-8"))["worlds"]
