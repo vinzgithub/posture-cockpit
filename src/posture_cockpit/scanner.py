@@ -29,6 +29,8 @@ from .core.registry import Registry
 from .storage.perimeters import Perimeter
 
 DEMO_DIR = Path(__file__).parent / "demo"
+# Version 0.7 (R6): checks rechecked together, because they read the same measures.
+MAIL_TLS_GROUP = frozenset({"mail.mta_sts", "mail.smtp_starttls"})
 DEMO_DOMAIN = "menuiserie-dupont.example"
 
 
@@ -94,12 +96,22 @@ class Scanner:
 
     async def recheck_group(self, domain: str, check_id: str, perimeter: Perimeter | None = None,
                             history: dict | None = None) -> list[Finding]:
-        """One fresh probe for the entire enabled HTTPS family; otherwise one check."""
+        """One fresh probe for the entire enabled HTTPS family; otherwise one check.
+
+        Version 0.7 (R6): mail.mta_sts and mail.smtp_starttls are rechecked together, either way: they
+        share one reading of the MTA-STS policy (and the SMTP verdict depends on it), so a recheck
+        stores both from the same measures, in one transaction (save_rechecks). With the probe off,
+        the SMTP check is NA again and asks nothing."""
         checks = self.registry.checks(disabled=self.disabled())
         check = next((c for c in checks if c.id == check_id), None)
         if check is None:
             return []
-        selected = [c for c in checks if c.family == HTTPS_FAMILY] if check.family == HTTPS_FAMILY else [check]
+        if check.family == HTTPS_FAMILY:
+            selected = [c for c in checks if c.family == HTTPS_FAMILY]
+        elif check.id in MAIL_TLS_GROUP:
+            selected = [c for c in checks if c.id in MAIL_TLS_GROUP]
+        else:
+            selected = [check]
         result = await engine.scan(domain, selected, self.network_for(domain, perimeter),
                                    timeout=self.config.check_timeout, internal=perimeter is not None, history=history,
                                    smtp=self.smtp)

@@ -81,7 +81,9 @@ def test_0_3_2_results_are_kept_except_on_the_lines_that_change(name):
     a = scoring.assess(result.findings)
     expected = dict(REFERENCE[name])
     change = CHANGES.get(name, {})
-    statuses = {**expected["statuses"], **change.get("statuses", {})}
+    # Version 0.7: mail.smtp_starttls is added, NA with the probe off (the default, A1a): out of the score
+    # and of the coverage, which stay those of 0.3.2.
+    statuses = {**expected["statuses"], **change.get("statuses", {}), "mail.smtp_starttls": "na"}
     assert {f.check_id: f.status.value for f in result.findings} == statuses
     assert (a.score, a.grade, round(a.coverage, 4)) == (
         change.get("score", expected["score"]), change.get("grade", expected["grade"]), expected["coverage"])

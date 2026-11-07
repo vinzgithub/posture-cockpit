@@ -5,6 +5,13 @@
 This module never recalculates a historic score or turns a failed measurement into a
 security improvement. The caller supplies consecutive states of *one domain*.
 A later step may look farther back for the last conclusive check observation.
+
+Version 0.7 (R5): the *measurement scope*. Turning the SMTP probe on or off changes what is
+measured, not the domain: two states whose scopes differ are not compared (reason ``scope``,
+tested right after ``engine``), and no event is derived from them. The scope is read from what a
+scan really measured (the ``probe_enabled`` of the stored mail.smtp_starttls evidence, and the
+perimeter of the scan), never from the current configuration, and kept in the JSON
+``scan_states.metrics`` (:func:`measurement_scope`). An unknown scope is never equal to another.
 """
 
 from __future__ import annotations
@@ -16,6 +23,11 @@ from datetime import datetime
 from typing import Any
 
 CONCLUSIVE = frozenset({"ok", "warn", "fail", "na"})
+SMTP_CHECK = "mail.smtp_starttls"
+# The measurement scopes (R5): the probe on or off on the instance, an internal perimeter (where the
+# check never runs), the check absent from the scan (states before 0.7, or the mail extension off),
+# and unknown (the check's result carries no structured scope: the engine wrote it after an error).
+SCOPES = frozenset({"on", "off", "internal", "absent", "unknown"})
 NOT_MEASURED = frozenset({"error", "blocked"})
 MIN_SCORING_COVERAGE = 0.90
 
@@ -35,6 +47,17 @@ class Snapshot:
     domain_id: int | None = None
     perimeter: str | None = None
     state_id: int | None = None
+    # Version 0.7 (R5): the measurement scope stored with the state; None when the state has none
+    # (written before 0.7): see :attr:`measured`.
+    scope: str | None = None
+
+    @property
+    def measured(self) -> str:
+        """The measurement scope of the state. A state stored without one is "absent" when the SMTP check
+        is not among its checks (before 0.7), "unknown" otherwise: never guessed comparable."""
+        if self.scope is not None and self.scope in SCOPES:
+            return self.scope
+        return "absent" if self.scope is None and SMTP_CHECK not in self.checks else "unknown"
 
     @classmethod
     def from_row(cls, row: Mapping[str, Any]) -> Snapshot:
@@ -52,7 +75,41 @@ class Snapshot:
             domain_id=int(row["domain_id"]) if "domain_id" in row and row["domain_id"] is not None else None,
             perimeter=str(row["perimeter"]) if "perimeter" in row and row["perimeter"] is not None else None,
             state_id=int(row["id"]) if "id" in row else None,
+            scope=_stored_scope(row),
         )
+
+
+def _stored_scope(row: Mapping[str, Any]) -> str | None:
+    """The scope kept in the metrics of a state (version 0.7); None when there is none."""
+    raw = row.get("metrics")
+    try:
+        metrics = json.loads(raw) if isinstance(raw, str) else raw
+    except ValueError:
+        return "unknown"
+    if not isinstance(metrics, Mapping) or "measurement_scope" not in metrics:
+        return None
+    scope = metrics["measurement_scope"]
+    return scope if isinstance(scope, str) and scope in SCOPES else "unknown"
+
+
+def measurement_scope(smtp_evidence: Mapping[str, Any] | None, *, internal: bool) -> str:
+    """What the scan measured of SMTP (R5), from the stored result, never from the configuration.
+
+    ``smtp_evidence`` is the evidence of mail.smtp_starttls in the scan, None when the check is not in
+    it; ``internal``: the scan ran in an internal perimeter (where the engine gives the check NA)."""
+    if internal:
+        return "internal"
+    if smtp_evidence is None:
+        return "absent"
+    enabled = smtp_evidence.get("probe_enabled")
+    if isinstance(enabled, bool):
+        return "on" if enabled else "off"
+    return "unknown"  # an error of the engine wrote no structured scope
+
+
+def same_scope(previous: Snapshot, current: Snapshot) -> bool:
+    """Two states measured the same thing: equal scopes, neither unknown."""
+    return previous.measured == current.measured != "unknown"
 
 
 @dataclass(frozen=True)
@@ -86,6 +143,8 @@ def compare(previous: Snapshot | None, current: Snapshot) -> Comparison:
         reason = "legacy"
     elif previous.engine is None or current.engine is None or previous.engine != current.engine:
         reason = "engine"
+    elif not same_scope(previous, current):
+        reason = "scope"  # the probe turned on or off: another measure, not another domain (R5)
     elif set(previous.checks) != set(current.checks):
         reason = "checks"
     elif previous.score is None or current.score is None or (
@@ -146,6 +205,8 @@ def _identity_reason(previous: Snapshot, current: Snapshot) -> str | None:
         return "legacy"
     if previous.engine is None or previous.engine != current.engine:
         return "engine"
+    if not same_scope(previous, current):
+        return "scope"  # R5: also a boundary for last_conclusive()
     if set(previous.checks) != set(current.checks):
         return "checks"
     return None

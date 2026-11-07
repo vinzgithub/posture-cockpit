@@ -8,8 +8,15 @@ A record a receiver must ignore is as good as no record (FAIL or WARN as for
 a missing one); a record with a faulty value that receivers replace by the
 default still works, but the fault is reported (WARN).
 
+Version 0.7: mail.smtp_starttls tests STARTTLS and the certificates of the MX
+on port 25, from this instance, when the instance turns the probe on
+(smtp_measure.py observes, smtp_verdict.py decides). It reads the MTA-STS
+policy with mail.mta_sts: one reading per scan (``_mta_sts_reading``), whose
+results mail.mta_sts turns into the same findings as before.
+
 References: RFC 7208 (SPF), RFC 6376 (DKIM), RFC 7489 (DMARC), RFC 7505 (null
-MX), RFC 8461 (MTA-STS), RFC 8460 (TLS-RPT), RFC 8301 and 8463 (DKIM keys);
+MX), RFC 8461 (MTA-STS), RFC 8460 (TLS-RPT), RFC 3207 (STARTTLS), RFC 8301 and
+8463 (DKIM keys);
 ANSSI, « Recommandations pour la mise en place d'une passerelle
 d'interconnexion sécurisée ».
 """
@@ -17,9 +24,11 @@ d'interconnexion sécurisée ».
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import re
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from .. import __version__
 from ..core import (
@@ -44,6 +53,7 @@ from ..core.network import mx_record
 from . import LOCALES
 from .records import (
     Dmarc,
+    MtaStsPolicy,
     Spf,
     is_dmarc_candidate,
     is_spf,
@@ -56,6 +66,12 @@ from .records import (
     tags,
     tls_rpt_problems,
 )
+
+if TYPE_CHECKING:
+    from .smtp_measure import ProbeResult
+    from .smtp_verdict import PolicyView
+
+log = logging.getLogger(__name__)
 
 extension = Extension("mail", name="Mail", version=__version__,
                       description="MX, SPF, DKIM, DMARC, MTA-STS and TLS reporting.",
@@ -455,44 +471,91 @@ async def dkim(ctx: CheckContext) -> Outcome:
 
 
 # ---------------------------------------------------------------- MTA-STS
+@dataclass(frozen=True)
+class MtaStsReading:
+    """What the scan read of the domain's MTA-STS policy (RFC 8461), once for every check (version 0.7).
+
+    ``stage`` says where the reading stopped: "missing" (no TXT record names the protocol),
+    "bad_record" (§3.1), "no_address" (mta-sts.<domain> has no address), "untrusted" (§3.3: the
+    certificate of the policy host is refused), "refused" (nothing serves it), "status" (an answer
+    other than 200), "read" (the policy was parsed, maybe with faulty fields). A question that fails
+    raises, as it did before the reading was shared: each check keeps its own way to say it."""
+
+    stage: str
+    all_records: tuple[str, ...] = ()  # every TXT record of _mta-sts.<domain>
+    records: tuple[str, ...] = ()      # those naming the protocol ("v=sts…")
+    ignored: tuple[str, ...] = ()      # the others, when some name it
+    url: str = ""
+    certificate: str = ""              # why the HTTPS certificate was refused
+    status: int | None = None
+    policy: MtaStsPolicy | None = None
+
+
+async def _mta_sts_reading(ctx: CheckContext) -> MtaStsReading:
+    """The reading of the policy, shared by mail.mta_sts and mail.smtp_starttls (``ctx.shared``): the
+    same questions, in the same order, as mail.mta_sts asked them alone until 0.6.1."""
+
+    async def read() -> MtaStsReading:
+        all_records = tuple(await ctx.txt(f"_mta-sts.{ctx.domain}"))
+        # A TXT that does not name the protocol is not an MTA-STS record; one that does (v=STSv1,
+        # v=stsv1, v=STSv2...) must not vanish when senders cannot use it.
+        records = tuple(r for r in all_records if r[:5].lower() == "v=sts")
+        if not records:
+            return MtaStsReading("missing", all_records)
+        ignored = tuple(r for r in all_records if r not in records) if len(records) < len(all_records) else ()
+        # §3.1: among several TXT records, those that do not begin with "v=STSv1;" are discarded;
+        # exactly one valid record must remain, otherwise senders ignore MTA-STS.
+        kept = all_records if len(all_records) == 1 else [r for r in all_records if r.startswith("v=STSv1;")]
+        if len(kept) != 1 or not mta_sts_record_ok(kept[0]):
+            return MtaStsReading("bad_record", all_records, records, ignored)
+        host = f"mta-sts.{ctx.domain}"
+        url = f"https://{host}/.well-known/mta-sts.txt"
+        if not any([(await ctx.net.dns(host, "A")).records, (await ctx.net.dns(host, "AAAA")).records]):
+            return MtaStsReading("no_address", all_records, records, ignored, url)
+        try:
+            # §3.3: the policy only counts when served over HTTPS with a valid certificate, without redirect.
+            reply = await ctx.net.http_get(url, verify=True)
+        except UntrustedCertificate as e:
+            return MtaStsReading("untrusted", all_records, records, ignored, url, certificate=e.problem)
+        except Refused:
+            return MtaStsReading("refused", all_records, records, ignored, url)  # a timeout says less: it raises
+        if reply.status != 200:
+            return MtaStsReading("status", all_records, records, ignored, url, status=reply.status)
+        return MtaStsReading("read", all_records, records, ignored, url, status=reply.status,
+                             policy=parse_mta_sts_policy(reply.body))
+
+    return await ctx.shared("mta_sts_reading", read)
+
+
 @extension.check("mta_sts", category="mail", weight=3, internal=False)
 async def mta_sts(ctx: CheckContext) -> Outcome:
     """MTA-STS makes the servers that deliver mail to the domain insist on encryption."""
     mx_hosts = await _mx_hosts(ctx)
     if not mx_hosts:
         return na("mail.no_inbound")
-    all_records = await ctx.txt(f"_mta-sts.{ctx.domain}")
+    reading = await _mta_sts_reading(ctx)
     remedy = Remedy(30, Effort.DELEGATE, message="mail.mta_sts.message")
-    # A TXT that does not name the protocol is not an MTA-STS record; one that does (v=STSv1,
-    # v=stsv1, v=STSv2...) must not vanish when senders cannot use it.
-    attempts = [r for r in all_records if r[:5].lower() == "v=sts"]
-    if not attempts:
+    if reading.stage == "missing":
+        all_records = list(reading.all_records)
         return warn("mail.mta_sts.missing", remedy, {"ignored": all_records} if all_records else None)
-    evidence: dict[str, object] = {"records": attempts}
-    if len(attempts) < len(all_records):
-        evidence["ignored"] = [r for r in all_records if r not in attempts]
-    # §3.1: among several TXT records, those that do not begin with "v=STSv1;" are discarded;
-    # exactly one valid record must remain, otherwise senders ignore MTA-STS.
-    kept = all_records if len(all_records) == 1 else [r for r in all_records if r.startswith("v=STSv1;")]
-    if len(kept) != 1 or not mta_sts_record_ok(kept[0]):
+    evidence: dict[str, object] = {"records": list(reading.records)}
+    if reading.ignored:
+        evidence["ignored"] = list(reading.ignored)
+    if reading.stage == "bad_record":
         return warn("mail.mta_sts.bad_record", remedy, evidence)
-    host = f"mta-sts.{ctx.domain}"
-    url = f"https://{host}/.well-known/mta-sts.txt"
-    evidence["url"] = url
-    if not any([(await ctx.net.dns(host, "A")).records, (await ctx.net.dns(host, "AAAA")).records]):
+    evidence["url"] = reading.url
+    if reading.stage == "no_address":
         return warn("mail.mta_sts.no_policy", remedy, evidence)
-    try:
-        # §3.3: the policy only counts when served over HTTPS with a valid certificate, without redirect.
-        reply = await ctx.net.http_get(url, verify=True)
-    except UntrustedCertificate as e:
-        evidence["certificate"] = e.problem
-        return warn("mail.mta_sts.bad_certificate", remedy, evidence, problem=e.problem)
-    except Refused:
-        return warn("mail.mta_sts.no_policy", remedy, evidence)  # nothing serves the policy (a timeout says less)
-    evidence["status"] = reply.status
-    if reply.status != 200:
+    if reading.stage == "untrusted":
+        evidence["certificate"] = reading.certificate
+        return warn("mail.mta_sts.bad_certificate", remedy, evidence, problem=reading.certificate)
+    if reading.stage == "refused":
+        return warn("mail.mta_sts.no_policy", remedy, evidence)  # nothing serves the policy
+    evidence["status"] = reading.status
+    if reading.stage == "status":
         return warn("mail.mta_sts.no_policy", remedy, evidence)
-    policy = parse_mta_sts_policy(reply.body)
+    policy = reading.policy
+    assert policy is not None  # stage "read"
     evidence.update(mode=policy.mode, mx_patterns=list(policy.mx), max_age=policy.max_age)
     if policy.errors:
         return warn("mail.mta_sts.bad_policy", remedy, evidence, fields=", ".join(policy.errors))
@@ -512,6 +575,49 @@ async def mta_sts(ctx: CheckContext) -> Outcome:
         return warn("mail.mta_sts.short_max_age", Remedy(5, Effort.DELEGATE, message="mail.mta_sts.max_age_message"),
                     evidence, seconds=policy.max_age)
     return ok("mail.mta_sts.enforce", evidence)
+
+
+# ---------------------------------------------------------------- STARTTLS of the MX (version 0.7)
+@extension.check("smtp_starttls", category="mail", weight=5, internal=False)
+async def smtp_starttls(ctx: CheckContext) -> Outcome:
+    """STARTTLS and the certificates of the MX on port 25, observed from this instance (version 0.7).
+
+    The probe is off unless the instance turns it on (A1a): then the check is NA (F05.01) and asks
+    nothing, not even the MX. Registered internal=False: the engine gives NA in an internal perimeter
+    before calling it (S05). On, the probe observes (smtp_measure.py), the policy is read with
+    mail.mta_sts, and smtp_verdict.decide() alone gives the verdict (matrix F05)."""
+    # Imported here: smtp_measure reads the MX with _mx_records, from this module.
+    from . import smtp_measure, smtp_verdict
+
+    if not ctx.smtp.enabled:
+        return smtp_verdict.decide(None, None, ctx.now)
+    # One deadline for the probe and for the policy (P1): min(12 s, CHECK_TIMEOUT − 2 s) from now. The
+    # probe returns by it with what it observed; the policy is awaited until it too, never until the
+    # engine stops the check, which would throw away every observation (check.error.timeout).
+    deadline = asyncio.get_running_loop().time() + smtp_measure.deadline_seconds(ctx.check_timeout)
+    probe = await smtp_measure.result(ctx)
+    policy = await _policy_for_smtp(ctx, probe, deadline) if probe.mx else None
+    return smtp_verdict.decide(probe, policy, ctx.now)
+
+
+async def _policy_for_smtp(ctx: CheckContext, probe: ProbeResult, deadline: float) -> PolicyView:
+    """The shared reading of the policy, as F05.04 and F06 read it; unreadable when it fails or when
+    the deadline comes first. Waiting stops only this check: the reading goes on for mail.mta_sts
+    (``ctx.shared`` shields it)."""
+    from . import smtp_verdict
+
+    names = [m.name for m in probe.mx]
+    try:
+        async with asyncio.timeout_at(deadline):
+            reading = await _mta_sts_reading(ctx)
+    except TimeoutError:
+        return smtp_verdict.policy_view("unreadable", None, names, detail="deadline")
+    except NetworkError as e:
+        return smtp_verdict.policy_view("unreadable", None, names, detail=e.__class__.__name__)
+    except Exception as e:  # a bug in the reading must not throw away the SMTP observations
+        log.exception("MTA-STS reading failed on %s", ctx.domain)
+        return smtp_verdict.policy_view("unreadable", None, names, detail=f"bug: {e.__class__.__name__}")
+    return smtp_verdict.policy_view(reading.stage, reading.policy, names)
 
 
 # ---------------------------------------------------------------- TLS-RPT

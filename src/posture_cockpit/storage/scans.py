@@ -34,6 +34,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from ..core import generation, scoring
+from ..core.compare import SMTP_CHECK, measurement_scope
 from ..core.engine import ScanResult
 from ..core.model import HTTPS_ROOT_CHECK, Finding
 from ..core.schedule_time import format_time
@@ -359,12 +360,20 @@ class Scans:
 
     def _add_state(self, scan_id: int, at: str, origin: str, engine: int | None, a: scoring.Assessment,
                    findings: list[Finding]) -> None:
-        """Adds a state to the timeline of a scan; called inside the transaction of its change."""
+        """Adds a state to the timeline of a scan; called inside the transaction of its change.
+
+        Version 0.7 (R5, D5a): the metrics of the state also keep its measurement scope, computed from
+        the findings it holds (a recheck's included) and the perimeter of the scan, in the JSON only:
+        no column, no migration."""
+        metrics = _metrics(a, findings)
+        perimeter = self.db.value("SELECT perimeter FROM scans WHERE id=?", (scan_id,))
+        smtp = next((f.outcome.evidence for f in findings if f.check_id == SMTP_CHECK), None)
+        metrics["measurement_scope"] = measurement_scope(smtp, internal=bool(perimeter))
         self.db.execute(
             "INSERT INTO scan_states(scan_id, at, origin, engine, score, grade, coverage, evaluation, metrics, checks)"
             " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (scan_id, at, origin, engine, a.score, a.grade, a.coverage, a.evaluation,
-             json.dumps(_metrics(a, findings), sort_keys=True),
+             json.dumps(metrics, sort_keys=True),
              json.dumps({f.check_id: f.status.value for f in findings}, sort_keys=True)))
         # Same transaction as the immutable measurement; no orphan event on a crash.
         from .events import record_state
@@ -376,10 +385,18 @@ class Scans:
         return self.save_rechecks(scan_id, [finding])
 
     def save_rechecks(self, scan_id: int, findings: list[Finding]) -> scoring.Assessment:
-        """Store a whole recheck group and its metrics in one transaction."""
+        """Store a whole recheck group and its metrics in one transaction.
+
+        Version 0.7: a finding of a check the scan does not hold is not stored. A group rechecks its
+        checks together (mail.mta_sts with mail.smtp_starttls, R6); on a scan made before a check
+        existed, the scan keeps the checks it was made with."""
         with self.db.transaction():
             stamp = utcnow()
+            held = {row["check_id"] for row in self.db.all("SELECT check_id FROM findings WHERE scan_id=?",
+                                                           (scan_id,))}
             for finding in findings:
+                if finding.check_id not in held:
+                    continue
                 if finding.check_id == HTTPS_ROOT_CHECK:
                     previous = self.db.one("SELECT outcome, checked_at FROM rechecks WHERE scan_id=? AND check_id=?",
                                            (scan_id, HTTPS_ROOT_CHECK))
