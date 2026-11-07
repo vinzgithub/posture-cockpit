@@ -833,5 +833,6 @@
   "smtp.cause.sample": "Outside the tested sample",
   "smtp.cause.tool": "Error of the tool",
   "smtp.readiness": "Readiness for enforce mode",
-  "smtp.preference": "preference {n}"
+  "smtp.preference": "preference {n}",
+  "smtp.omitted": "{n:other published MX is|other published MX are} not listed in this table nor kept in the evidence: invalid names or beyond the sample, never contacted. Every MX measured is listed."
 }

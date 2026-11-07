@@ -10,12 +10,16 @@ address with the cause proper to each (``silent_mx``, never the global one of F0
 the certificate verified, refused or read for the diagnosis only, the limits of the measure. Then the
 reasons "engine", "scope" and an unknown scope; the additive API fields for every kind of scan; and
 hostile or very long contents from the network, shown as text.
+
+The review of the first head of PR-D: R1, every MX measured is kept in the bounded evidence (a valid MX
+after sixteen invalid names), and what is left out is said.
 """
 
 import asyncio
 import html as markup
 import json
 import re
+from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
@@ -377,3 +381,81 @@ def test_api_internal_scan_is_internal_never_off(instance):
 def test_the_view_is_none_without_a_structured_result():
     """F05.08, R5 (P1): an evidence without the structured result (an engine error, or nothing) gives no view."""
     assert view(None, lambda k, **p: k) is None and view({"error": "boom"}, lambda k, **p: k) is None
+
+
+# ------------------------------------------------------------------ R1: every MX measured is in the evidence
+INVALID = [f"bad-name-{i:02d}_.example" for i in range(1, 17)]
+
+
+def after_invalid_names() -> dict:
+    """Sixteen invalid MX names first (preferences 1 to 16), then a valid MX (20) whose address verifies."""
+    return changed(world({MX1: {V4: "tls_verified"}}),
+                   dns={f"{DOMAIN} MX": [f"{i} {n}." for i, n in enumerate(INVALID, 1)] + [f"20 {MX1}."]})
+
+
+def test_r1_a_valid_mx_after_sixteen_invalid_names_is_kept_and_shown(instance):
+    """R1 of the review of PR-D, F05.08, F01, arbitration 3: the valid MX, measured and verified, is in the stored
+    evidence, its row in the details and in the PDF; the evidence stays at EVIDENCE_MX entries and says how many
+    MX it left out, which the page and the PDF say too; each invalid MX keeps its own cause; the verdict is the
+    one the review settled (ERROR, F05.08, the first invalid MX named, sixteen without a conclusion)."""
+    from posture_cockpit.checks.smtp_verdict import EVIDENCE_MX
+
+    i = instance()
+    page = i.scan(after_invalid_names())
+    scan = i.scans.get(i.scans.latest_id(i.scans.domain(DOMAIN)["id"]))
+    finding = next(f for f in scan.current() if f.check_id == CHECK)
+    evidence = finding.outcome.evidence
+    assert (finding.status.value, evidence["rule"], finding.outcome.summary, dict(finding.outcome.params)) == (
+        "error", "F05.08", f"{CHECK}.unmeasured.invalid_name", {"host": INVALID[0], "n": 16})
+    assert [s["name"] for s in evidence["silent_mx"]] == INVALID and evidence["readiness"]["state"] == "to_fix"
+    names = [m["name"] for m in evidence["mx"]]
+    assert len(names) == EVIDENCE_MX and names == [*INVALID[:15], MX1] and evidence["mx_omitted"] == 1
+    kept = next(m for m in evidence["mx"] if m["name"] == MX1)
+    assert [a["seen"] for a in kept["addresses"]] == ["verified"]
+    assert evidence["exhaustivity"]["mx"] == 17 and evidence["exhaustivity"]["mx_invalid"] == 16
+    measured = rows(page)
+    assert len(measured) == 16 and measured[-1].startswith(f"{MX1} priorité 20 {V4} IPv4")
+    assert "Vérifié (chaîne de confiance et nom du MX)" in measured[-1]
+    assert "TLS négocié, certificat vérifié" in measured[-1]
+    assert all("Nom de MX invalide : non testé" in r for r in measured[:-1])
+    assert "Nom de MX invalide" not in measured[-1]  # the global cause of F05.08 is never put on the valid MX
+    omitted = "1 autre MX publié n&#39;est pas repris dans ce tableau ni dans la preuve"
+    assert omitted in smtp_part(page)
+    html = render_html(i.app.state.services.catalog, "fr", scan)
+    annex = html[html.index('class="smtp-annex"'):]
+    assert MX1 in annex and "TLS négocié, certificat vérifié" in annex and omitted in annex
+    summary = _summary(scan)
+    assert summary["smtp_probe"] == {"scope": "on", "status": "error", "rule": "F05.08", "mx": 17, "addresses": 1,
+                                     "verified": 1}
+
+
+def probe_of(mx: list) -> object:
+    from posture_cockpit.checks.smtp_measure import ProbeResult
+
+    return ProbeResult(enabled=True, internal=False, deadline=12.0, mx=mx)
+
+
+def test_r1_the_evidence_keeps_every_resolved_mx_within_its_bound():
+    """R1 of the review of PR-D: whatever the DNS publishes (here 40 invalid names, the 8 MX the probe resolved
+    among them, 10 beyond the sample), the evidence keeps the 8 resolved with their addresses, fills the room
+    left up to EVIDENCE_MX with the others in their order, never more, and counts the rest; the addresses it
+    holds are all those of the probe, so that the counts read from it (the API) are those of the measure."""
+    from posture_cockpit.checks import smtp_measure, smtp_verdict
+    from posture_cockpit.checks.smtp_measure import AddressProbe, MxProbe
+    now = datetime.now(UTC)
+    assert smtp_measure.MAX_MX < smtp_verdict.EVIDENCE_MX
+    mx = [MxProbe(f"bad{i}_.example", i, valid=False, cause="invalid_mx_name", reason="syntax") for i in range(40)]
+    resolved = [MxProbe(f"mx{i}.example.net", 5 * i + 1, addresses=[AddressProbe(f"mx{i}.example.net", f"192.0.2.{i}")],
+                        discovery_complete=True) for i in range(8)]
+    beyond = [MxProbe(f"far{i}.example.net", 100 + i, cause="budget", reason="sample") for i in range(10)]
+    probe = probe_of(sorted(mx + resolved + beyond, key=lambda m: (m.preference, m.name)))
+    evidence = smtp_verdict.decide(probe, None, now).evidence
+    names = [m["name"] for m in evidence["mx"]]
+    assert len(names) == smtp_verdict.EVIDENCE_MX and evidence["mx_omitted"] == 58 - smtp_verdict.EVIDENCE_MX
+    assert [n for n in names if n.startswith("mx")] == [m.name for m in resolved]
+    order = [m.name for m in probe.mx]
+    assert names == sorted(names, key=order.index)  # the order of the probe: preference, then name
+    assert sum(len(m["addresses"]) for m in evidence["mx"]) == evidence["exhaustivity"]["addresses"] == 8
+    small = probe_of([MxProbe(MX1, 10, addresses=[AddressProbe(MX1, V4)], discovery_complete=True)])
+    assert smtp_verdict.decide(small, None, now).evidence["mx_omitted"] == 0  # the key on every line
+

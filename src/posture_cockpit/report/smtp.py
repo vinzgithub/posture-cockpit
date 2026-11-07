@@ -14,8 +14,10 @@ Internet); one row per MX and address (name, preference, address and family, the
 reached with their reply codes, TLS, the certificate: verified, refused, or read without
 verification for the diagnosis, and the result or the exact cause of a measure not made: per address
 from the probe, per MX from ``silent_mx``, never the global cause of F05.08 on every server); the
-limits of the measure (addresses, connections, budget, deadline). The notes of the evidence are not
-repeated: the text of every finding already ends with them (i18n.finding_summary).
+limits of the measure (addresses, connections, budget, deadline), and how many MX the evidence left out
+(``mx_omitted``: invalid names or beyond the sample, never contacted; every MX measured is kept). The
+notes of the evidence are not repeated: the text of every finding already ends with them
+(i18n.finding_summary).
 
 Every string from the network (banner, certificate names, verification messages) is data: it is
 returned as text, and the templates escape it (autoescape in both environments). Nothing here is
@@ -50,7 +52,8 @@ def view(evidence: Mapping[str, Any] | None, t: Text) -> dict[str, Any] | None:
         return None
     return {"rule": evidence["rule"], "readiness": _readiness(evidence["readiness"], t),
             "rows": [row for mx in evidence.get("mx", []) for row in _rows(mx, evidence, t)],
-            "limits": _limits(evidence, t), "probe_enabled": bool(evidence.get("probe_enabled"))}
+            "limits": _limits(evidence, t), "omitted": int(evidence.get("mx_omitted") or 0),
+            "probe_enabled": bool(evidence.get("probe_enabled"))}
 
 
 def _readiness(readiness: Mapping[str, Any], t: Text) -> dict[str, Any]:

@@ -25,7 +25,9 @@ stored result of mail.smtp_starttls, never recomputed, never taken from the curr
 scan without the check (made before 0.7.0), "unknown" a result without its scope (an error of the
 engine, status "error", rule null). ``status`` is null only when the check is absent. ``mx``,
 ``addresses`` and ``verified`` (addresses whose certificate was verified) are null unless the probe
-measured.
+measured. ``mx`` counts every MX published, ``addresses`` every address of the MX measured; ``verified``
+is read from the evidence, which keeps every MX measured with all its addresses (R1 of the review of
+PR-D): the three are those of the measure, whatever MX the bounded evidence left out.
 
 ``mail_enforce_readiness``, always an object, the indicator F06 as the check stored it::
 

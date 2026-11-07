@@ -408,7 +408,21 @@ def _notes(probe: ProbeResult) -> list[dict[str, Any]]:
     return notes
 
 
-EVIDENCE_MX = 16  # MX kept in the evidence (8 measured at most, the rest named): bounds the stored JSON
+EVIDENCE_MX = 16  # MX kept in the evidence: every MX resolved (MAX_MX at most), then others: bounds the stored JSON
+
+
+def _kept(probe: ProbeResult) -> list[MxProbe]:
+    """The MX kept in the evidence, in the order of the probe (preference, then name).
+
+    Every MX the probe resolved, with all its addresses and observations: those are the measures, and
+    the verdict rests on them (R1 of the review of PR-D: a valid MX after many invalid names is kept).
+    In the room left up to EVIDENCE_MX, the MX never resolved nor contacted (an invalid name, beyond the
+    sample), in that order too. The resolved MX are MAX_MX at most, fewer than EVIDENCE_MX: the list is
+    bounded whatever the DNS publishes; ``mx_omitted`` says how many were left out."""
+    resolved = [i for i, m in enumerate(probe.mx) if m.valid and not m.cause]
+    others = [i for i, m in enumerate(probe.mx) if not (m.valid and not m.cause)]
+    kept = sorted(resolved + others[:max(EVIDENCE_MX - len(resolved), 0)])
+    return [probe.mx[i] for i in kept]
 
 
 def _evidence(probe: ProbeResult | None, rule: str, ready: dict[str, Any],
@@ -418,10 +432,11 @@ def _evidence(probe: ProbeResult | None, rule: str, ready: dict[str, Any],
     evidence: dict[str, Any] = {"rule": rule, "probe_enabled": probe is not None and probe.enabled,
                                 "perspective": PERSPECTIVE, "readiness": ready}
     if probe is not None:
+        kept = _kept(probe)
         evidence.update({
             "deadline": probe.deadline, "deadline_reached": probe.deadline_reached,
             "exhaustivity": probe.exhaustivity(), "null_mx": probe.null_mx,
-            "mx": [_mx(m) for m in probe.mx[:EVIDENCE_MX]]})
+            "mx": [_mx(m) for m in kept], "mx_omitted": len(probe.mx) - len(kept)})
         if probe.discovery_error:
             evidence["discovery_error"] = probe.discovery_error
     if notes:

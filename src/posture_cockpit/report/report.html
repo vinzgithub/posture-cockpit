@@ -156,6 +156,7 @@
         </tbody>
       </table>
       {% endif %}
+      {% if smtp.omitted %}<p class="smtp-small">{{ t('smtp.omitted', n=smtp.omitted) }}</p>{% endif %}
       {% if smtp.limits %}<p class="smtp-small">{{ smtp.limits }}</p>{% endif %}
       <p class="smtp-small">{{ t('smtp.rule', rule=smtp.rule) }}</p>
     </div>
