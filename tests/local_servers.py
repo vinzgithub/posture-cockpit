@@ -38,8 +38,9 @@ from cryptography.x509.oid import NameOID
 LOOPBACK = "127.0.0.1"
 
 # name -> {type -> list of values, or a function (number of the question) -> list of values}.
-# A name missing from the dictionary does not exist (NXDOMAIN).
-Zone = dict[str, dict[str, list[str] | Callable[[int], list[str]]]]
+# A name missing from the dictionary does not exist (NXDOMAIN). Version 0.7: None for a type is a
+# question this server never answers (in progress, then failed when the resolver gives up).
+Zone = dict[str, dict[str, list[str] | Callable[[int], list[str]] | None]]
 
 
 class LocalDns(asyncio.DatagramProtocol):
@@ -65,6 +66,8 @@ class LocalDns(asyncio.DatagramProtocol):
             response.set_rcode(dns.rcode.NXDOMAIN)
         else:
             values = self.zone[name].get(rtype, [])
+            if values is None:
+                return  # never answered
             if callable(values):
                 values = values(self.questions[(name, rtype)])
             if values:
