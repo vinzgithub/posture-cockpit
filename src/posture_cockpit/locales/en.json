@@ -794,17 +794,14 @@
   "smtp.title": "Results by server and address",
   "smtp.caption": "SMTP measure on port 25, made from this instance, by mail server (MX) and address.",
   "smtp.col.mx": "Server (MX)",
-  "smtp.col.preference": "Preference",
   "smtp.col.address": "Address",
   "smtp.col.stage": "Stages reached",
-  "smtp.col.tls": "TLS",
-  "smtp.col.certificate": "Certificate",
+  "smtp.col.certificate": "TLS and certificate",
   "smtp.col.result": "Result",
   "smtp.rule": "Decision line: {rule}",
   "smtp.policy": "MTA-STS policy evaluated: {state}",
   "smtp.covered": "MX covered: {hosts}",
   "smtp.uncovered": "MX not covered: {hosts}",
-  "smtp.notes": "Further information",
   "smtp.cname": "alias of {target}",
   "smtp.banner": "Greeting",
   "smtp.cert.verified": "Verified (chain of trust and MX name)",
@@ -835,5 +832,6 @@
   "smtp.cause.budget": "Connections of the scan used up",
   "smtp.cause.sample": "Outside the tested sample",
   "smtp.cause.tool": "Error of the tool",
-  "smtp.readiness": "Readiness for enforce mode"
+  "smtp.readiness": "Readiness for enforce mode",
+  "smtp.preference": "preference {n}"
 }

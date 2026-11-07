@@ -14,7 +14,8 @@ Internet); one row per MX and address (name, preference, address and family, the
 reached with their reply codes, TLS, the certificate: verified, refused, or read without
 verification for the diagnosis, and the result or the exact cause of a measure not made: per address
 from the probe, per MX from ``silent_mx``, never the global cause of F05.08 on every server); the
-notes; the limits of the measure (addresses, connections, budget, deadline).
+limits of the measure (addresses, connections, budget, deadline). The notes of the evidence are not
+repeated: the text of every finding already ends with them (i18n.finding_summary).
 
 Every string from the network (banner, certificate names, verification messages) is data: it is
 returned as text, and the templates escape it (autoescape in both environments). Nothing here is
@@ -31,6 +32,9 @@ from ..core.network import Limits
 KEY = "mail.smtp_starttls"
 BUDGET = Limits().smtp_attempts
 FAMILIES = {4: "IPv4", 6: "IPv6"}
+# The colour of each state of readiness, from the badges of the statuses: confirmed, to fix, open.
+READINESS_BADGES = {"ready": "ok", "compatible": "ok", "to_fix": "warn", "unconfirmed": "error",
+                    "not_applicable": "na"}
 SHOWN_CHARS = 200  # a string from the network shown at most this long (B1 already bounds what it keeps)
 
 
@@ -46,7 +50,6 @@ def view(evidence: Mapping[str, Any] | None, t: Text) -> dict[str, Any] | None:
         return None
     return {"rule": evidence["rule"], "readiness": _readiness(evidence["readiness"], t),
             "rows": [row for mx in evidence.get("mx", []) for row in _rows(mx, evidence, t)],
-            "notes": [t(n["key"], **n.get("params", {})) for n in evidence.get("notes", [])],
             "limits": _limits(evidence, t), "probe_enabled": bool(evidence.get("probe_enabled"))}
 
 
@@ -57,7 +60,7 @@ def _readiness(readiness: Mapping[str, Any], t: Text) -> dict[str, Any]:
     if isinstance(policy, Mapping):
         shown = {"state": policy.get("state", ""), "label": t(f"{KEY}.policy.{policy.get('state', 'unreadable')}"),
                  "covered": list(policy.get("covered", [])), "uncovered": list(policy.get("uncovered", []))}
-    return {"state": state, "label": t(f"{KEY}.readiness.{state}"),
+    return {"state": state, "label": t(f"{KEY}.readiness.{state}"), "badge": READINESS_BADGES.get(state, "na"),
             "causes": [t(f"{KEY}.readiness.cause.{c}") for c in readiness.get("causes", [])],
             "policy": shown, "scope": t(f"{KEY}.readiness.scope")}
 

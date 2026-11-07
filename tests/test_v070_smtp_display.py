@@ -115,7 +115,7 @@ def test_the_statuses_of_the_check_and_their_table(instance, outcome, status, ru
     part = smtp_part(page)
     assert f'data-rule="{rule}"' in part and f'id="{CHECK}"' in page
     assert re.search(rf'id="{CHECK}".*?badge-{status}', page, re.S)
-    assert len(rows(page)) == 1 and rows(page)[0].startswith(f"{MX1} 10 {V4} IPv4")
+    assert len(rows(page)) == 1 and rows(page)[0].startswith(f"{MX1} priorité 10 {V4} IPv4")
     assert page.index('class="smtp"') < page.index('class="evidence"', page.index(f'id="{CHECK}"'))
 
 
@@ -158,9 +158,11 @@ def test_partial_ok_shows_the_untested_address_and_its_cause(instance):
     """F05.09, A2b, T03: the IPv4 address verified, the IPv6 one without route: two rows, the IPv6 address whole,
     its own cause, the coverage note; readiness unconfirmed."""
     page = instance().scan(world({MX1: {V4: "tls_verified", V6: "no_ipv6"}}))
-    assert [r.split(" ")[2] for r in rows(page)] == [V4, V6]
+    assert [r.split(" ")[3] for r in rows(page)] == [V4, V6]
     assert "Non joignable depuis ce réseau (aucune route)" in rows(page)[1]
-    assert "Mesure partielle" in smtp_part(page) and "Impossible à confirmer" in smtp_part(page)
+    assert "Impossible à confirmer" in smtp_part(page)
+    summary = page[page.index(f'id="{CHECK}"'):page.index('class="smtp"')]
+    assert "Mesure partielle" in summary and "1 adresse non testée" in summary  # the notes, once, in the text
 
 
 def test_a_refused_certificate_and_its_diagnostic_reading(instance):
@@ -180,8 +182,8 @@ def test_each_mx_shows_its_own_cause_from_silent_mx(instance):
     data = changed(world({MX2: {V4B: "timeout"}}), dns={f"{DOMAIN} MX": ["10 bad_name!.example.", f"20 {MX2}."]})
     page = instance().scan(data)
     invalid, timed_out = rows(page)
-    assert invalid.startswith("bad_name!.example 10") and "Nom de MX invalide : non testé" in invalid
-    assert timed_out.startswith(f"{MX2} 20 {V4B}") and "Port 25 inaccessible ou délai dépassé" in timed_out
+    assert invalid.startswith("bad_name!.example priorité 10") and "Nom de MX invalide : non testé" in invalid
+    assert timed_out.startswith(f"{MX2} priorité 20 {V4B}") and "Port 25 inaccessible ou délai dépassé" in timed_out
     assert "Nom de MX invalide" not in timed_out and "Port 25" not in invalid
 
 

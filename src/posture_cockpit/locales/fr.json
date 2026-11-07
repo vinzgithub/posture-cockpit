@@ -794,17 +794,14 @@
   "smtp.title": "Résultats par serveur et adresse",
   "smtp.caption": "Mesure SMTP sur le port 25, effectuée depuis cette instance, par serveur de messagerie (MX) et adresse.",
   "smtp.col.mx": "Serveur (MX)",
-  "smtp.col.preference": "Priorité",
   "smtp.col.address": "Adresse",
   "smtp.col.stage": "Étapes atteintes",
-  "smtp.col.tls": "TLS",
-  "smtp.col.certificate": "Certificat",
+  "smtp.col.certificate": "TLS et certificat",
   "smtp.col.result": "Résultat",
   "smtp.rule": "Ligne de décision : {rule}",
   "smtp.policy": "Politique MTA-STS évaluée : {state}",
   "smtp.covered": "MX couverts : {hosts}",
   "smtp.uncovered": "MX non couverts : {hosts}",
-  "smtp.notes": "Informations complémentaires",
   "smtp.cname": "alias de {target}",
   "smtp.banner": "Bannière",
   "smtp.cert.verified": "Vérifié (chaîne de confiance et nom du MX)",
@@ -835,5 +832,6 @@
   "smtp.cause.budget": "Connexions de l'analyse épuisées",
   "smtp.cause.sample": "Hors de l'échantillon testé",
   "smtp.cause.tool": "Erreur de l'outil",
-  "smtp.readiness": "Préparation au mode enforce"
+  "smtp.readiness": "Préparation au mode enforce",
+  "smtp.preference": "priorité {n}"
 }

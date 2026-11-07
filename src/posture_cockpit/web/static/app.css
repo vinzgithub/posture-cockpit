@@ -608,6 +608,10 @@ span.side-link-icon svg { width: 13px; height: 13px; }
 .smtp-title { font-size: 14px; margin: 12px 0 4px; }
 .smtp-table caption { text-align: left; caption-side: top; padding: 0 0 6px; }
 .smtp-table td, .smtp-table th { vertical-align: top; }
-.smtp-table .smtp-address { white-space: nowrap; }
-.smtp-table .smtp-banner, .smtp-table .smtp-cert, .smtp-table .smtp-name { overflow-wrap: anywhere; }
+.smtp-table { font-size: 13px; }
+.smtp-table td, .smtp-table th { overflow-wrap: break-word; padding: 8px; }
+.smtp-table td:nth-child(2) { width: 1%; }
+.smtp-table .smtp-address { white-space: nowrap; font-size: 12px; }
+.smtp-table .smtp-banner { font-size: 12px; }
+.smtp-table td:nth-child(4) { min-width: 11em; }
 .table-scroll:focus-visible { outline: 2px solid var(--accent, #2563eb); outline-offset: 2px; }

@@ -92,8 +92,10 @@ def test_the_smtp_table_on_a_desktop_in_french(details):
     assert "Non joignable depuis ce réseau (aucune route)" in rows.nth(1).inner_text()
     assert "Port 25 inaccessible ou délai dépassé" in rows.nth(2).inner_text()
     assert "Port 25" not in rows.nth(0).inner_text()
-    assert block.locator("caption").count() == 1 and block.locator("thead th[scope=col]").count() == 7
+    assert block.locator("caption").count() == 1 and block.locator("thead th[scope=col]").count() == 5
     assert block.locator("tbody th[scope=row]").count() == 3
+    region = block.locator(".table-scroll")
+    assert region.evaluate("e => e.scrollWidth <= e.clientWidth")  # on a desktop, the whole table is in view
     address = block.locator("code.smtp-address", has_text=V6)
     assert address.evaluate("e => e.getClientRects().length") == 1  # one line box: never cut
     smtp = page.locator("li#mail\\.smtp_starttls")
