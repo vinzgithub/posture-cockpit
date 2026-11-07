@@ -600,3 +600,14 @@ span.side-link-icon svg { width: 13px; height: 13px; }
   .pf-table td { border:0; padding:8px 0; }
   .pf-table td::before { content:attr(data-label); display:block; font-weight:700; color:var(--muted); font-size:.8rem; }
 }
+
+/* Version 0.7: the SMTP measure of a finding (details, rechecks, history). The table scrolls on its own
+   on a phone; the addresses, IPv6 included, are never cut; banners and names from the network wrap. */
+.smtp { margin: 8px 0; }
+.smtp-readiness p { margin: 4px 0; }
+.smtp-title { font-size: 14px; margin: 12px 0 4px; }
+.smtp-table caption { text-align: left; caption-side: top; padding: 0 0 6px; }
+.smtp-table td, .smtp-table th { vertical-align: top; }
+.smtp-table .smtp-address { white-space: nowrap; }
+.smtp-table .smtp-banner, .smtp-table .smtp-cert, .smtp-table .smtp-name { overflow-wrap: anywhere; }
+.table-scroll:focus-visible { outline: 2px solid var(--accent, #2563eb); outline-offset: 2px; }
