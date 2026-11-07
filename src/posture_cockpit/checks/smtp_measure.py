@@ -19,8 +19,9 @@ What it does, in three steps
 3. **Attempts.** Each selected address gets one verifying attempt, at most
    :data:`CONNECTIONS` at once. A certificate refused by verification may then be
    read once per MX, on the same address, only with an attempt left over by the
-   selection and time left (decision C): it never replaces the refusal, it is kept
-   beside it.
+   selection (decision C): it never replaces the refusal, it is kept beside it. A
+   reading the deadline cuts is said so (``reading_interrupted``), with what it
+   observed, never with a certificate it did not read.
 
 Time
 ----
@@ -86,7 +87,8 @@ class AddressProbe:
     address: str
     observations: list[SmtpObservation] = field(default_factory=list)  # in order: verify, then a reading
     planned: bool = False   # selected by the fair pass
-    running: bool = False   # an attempt is in progress (at the deadline: it was interrupted)
+    pending: str = ""       # the purpose of the attempt launched and not observed yet (at the end: interrupted)
+    interrupted: list[str] = field(default_factory=list)  # purposes of the attempts the deadline cut, unobserved
     cause: str = ""         # nothing observed: "budget" ("sample", "deadline"), "policy" ("probe_off",
     reason: str = ""        # "internal") or "tool" (a bug in the probe, said as such)
 
@@ -101,6 +103,17 @@ class AddressProbe:
     @property
     def reading(self) -> SmtpObservation | None:
         return next((o for o in self.observations if o.purpose == SmtpPurpose.READ_CERTIFICATE), None)
+
+    @property
+    def reading_interrupted(self) -> bool:
+        """The certificate reading launched after a refused verification was cut by the deadline (R4).
+
+        Either its own observation says so (refused before connecting or while waiting for a connection,
+        or a dialogue stopped at the deadline, with what it read and no certificate), or it gave none and
+        is listed in :attr:`interrupted`. The refused verification stays as observed; no certificate and no
+        TLS result stand for what was not read."""
+        reading = self.reading
+        return SmtpPurpose.READ_CERTIFICATE in self.interrupted or (reading is not None and _cut(reading))
 
 
 @dataclass
@@ -145,7 +158,11 @@ class ProbeResult:
 
         Three counts that are not one another (R2 of the review of PR-B2): ``budget_spent``, the attempts
         the network counted; ``consumed``, the observations that spent one; ``sockets``, those that opened
-        a socket. A refusal spends nothing; a machine without IPv6 spends one and opens no socket."""
+        a socket. A refusal spends nothing; a machine without IPv6 spends one and opens no socket.
+        ``interrupted``: the attempts the deadline cut before they gave an observation (R4), which may or
+        may not have been counted: ``consumed <= budget_spent <= consumed + interrupted``.
+        ``certificate_readings``: the readings observed; ``certificate_readings_interrupted``: the readings
+        the deadline cut, observed or not (:attr:`AddressProbe.reading_interrupted`)."""
         observations = self.observations
         return {
             "mx": len(self.mx),
@@ -157,7 +174,9 @@ class ProbeResult:
             "consumed": sum(o.consumed for o in observations),
             "sockets": sum(o.socket for o in observations),
             "dialogues": sum(o.dialogue is not None for o in observations),
+            "interrupted": sum(len(a.interrupted) for a in self.addresses),
             "certificate_readings": sum(o.purpose == SmtpPurpose.READ_CERTIFICATE for o in observations),
+            "certificate_readings_interrupted": sum(a.reading_interrupted for a in self.addresses),
             "discovery_complete": not self.discovery_error and all(m.discovery_complete for m in self.mx
                                                                    if m.valid and not m.cause),
             "deadline_reached": self.deadline_reached,
@@ -285,48 +304,56 @@ class _Run:
             first = await self._attempt(address, SmtpPurpose.VERIFY)
             refused = first.dialogue is not None and first.dialogue.reason is Reason.CERTIFICATE_REFUSED
             # Checked and taken with no pause in between: two refusals of one MX cannot both start a reading.
-            if (refused and self.spare > 0 and address.mx_name not in self.read
-                    and asyncio.get_running_loop().time() < self.deadline):
+            # With no time left it is launched all the same: the network refuses it (budget, deadline), and
+            # the reading is said interrupted rather than left out (R4 of the review of PR-B2).
+            if refused and self.spare > 0 and address.mx_name not in self.read:
                 self.read.add(address.mx_name)
                 self.spare -= 1
                 await self._attempt(address, SmtpPurpose.READ_CERTIFICATE)
         except Exception as e:  # a bug in one attempt must not stop the others; a cancellation goes through
-            address.running = False
+            address.pending = ""
             address.cause, address.reason = "tool", _shown(f"bug: {e.__class__.__name__} {e}")[:200]
 
     async def _attempt(self, address: AddressProbe, purpose: str) -> SmtpObservation:
+        address.pending = purpose  # from here on, an attempt the safety net stops is interrupted
         async with self.gate:
-            address.running = True
             observation = await self.ctx.net.smtp_attempt(address.mx_name, address.address, purpose,
                                                           deadline=self.deadline)
-            address.observations.append(observation)  # kept at once: a later timeout cannot take it away
-            address.running = False
-            return observation
+        address.observations.append(observation)  # kept at once: a later timeout cannot take it away
+        address.pending = ""
+        return observation
 
 
 def _settle(probe: ProbeResult) -> None:
-    """Why the addresses without an observation have none; an attempt still running was interrupted.
+    """Why the addresses without an observation have none; an attempt still pending was interrupted.
 
-    ``deadline_reached`` then says whether the deadline cut anything: the safety net, or an attempt that
-    stopped at the deadline by itself (before connecting, or during its dialogue)."""
+    An attempt the safety net stopped gave no observation: its purpose goes to ``interrupted`` (a
+    certificate reading among them leaves the refused verification as observed). ``deadline_reached``
+    then says whether the deadline cut anything: the safety net, or an attempt that stopped at the
+    deadline by itself (before connecting, while waiting for a connection, or during its dialogue)."""
     for address in probe.addresses:
+        if address.pending:
+            address.interrupted.append(address.pending)
+            address.pending = ""
         if address.observations or address.cause:
-            if address.running:  # a certificate reading interrupted: the verification stays as observed
-                address.running = False
             continue
         if not probe.enabled:
             address.cause, address.reason = "policy", "probe_off"
         elif probe.internal:
             address.cause, address.reason = "policy", "internal"
-        elif address.planned or address.running or probe.deadline_reached:
+        elif address.planned or address.interrupted or probe.deadline_reached:
             address.cause, address.reason = "budget", "deadline"
         else:
             address.cause, address.reason = "budget", "sample"
-        address.running = False
-    probe.deadline_reached = probe.deadline_reached or any(
-        a.reason == "deadline" for a in probe.addresses) or any(
-        o.reason == "deadline" or (o.dialogue is not None and o.dialogue.reason is Reason.DEADLINE)
-        for o in probe.observations)
+    probe.deadline_reached = (probe.deadline_reached or any(a.reason == "deadline" or a.interrupted
+                                                            for a in probe.addresses)
+                              or any(map(_cut, probe.observations)))
+
+
+def _cut(observation: SmtpObservation) -> bool:
+    """The deadline stopped this attempt: before connecting or a connection, or during its dialogue."""
+    return observation.reason == "deadline" or (observation.dialogue is not None
+                                                and observation.dialogue.reason is Reason.DEADLINE)
 
 
 def _rank(preference: int | None) -> tuple[bool, int]:

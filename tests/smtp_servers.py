@@ -109,11 +109,14 @@ class Record:
 
 
 @contextlib.asynccontextmanager
-async def smtp_server(script: Script, host: str = LOOPBACK, port: int = 0) -> AsyncIterator[tuple[Record, int]]:
+async def smtp_server(script: Script | Sequence[Script], host: str = LOOPBACK,
+                      port: int = 0) -> AsyncIterator[tuple[Record, int]]:
     """Starts a fake SMTP server playing ``script``; yields what it records and its port.
 
     ``host`` and ``port`` (version 0.7, for the network tests): several servers on several loopback
-    addresses (127.0.0.2, 127.0.0.3…) can share one port, as MX servers share port 25.
+    addresses (127.0.0.2, 127.0.0.3…) can share one port, as MX servers share port 25. A list of
+    scripts gives one per connection, in order, the last one repeated (a server that answers the
+    second connection otherwise than the first).
 
     Leaving the block waits for the connections to end, then fails the test if the client sent
     any command other than EHLO, STARTTLS and QUIT."""
@@ -128,8 +131,9 @@ async def smtp_server(script: Script, host: str = LOOPBACK, port: int = 0) -> As
         record.sessions.append(session)
         record.open += 1
         record.peak = max(record.peak, record.open)
+        played = script if isinstance(script, Script) else script[min(len(record.sessions), len(script)) - 1]
         try:
-            await _Play(script, session, reader, writer).run()
+            await _Play(played, session, reader, writer).run()
         except (ConnectionError, ssl.SSLError, asyncio.IncompleteReadError):
             pass  # the client left: what it did is in the session
         finally:

@@ -22,7 +22,7 @@ import pytest
 from local_servers import LOOPBACK, TestPki, dns_server
 from posture_cockpit.checks import smtp_measure
 from posture_cockpit.config import SMTP_CHECK_MARGIN
-from posture_cockpit.core import engine
+from posture_cockpit.core import engine, smtp
 from posture_cockpit.core.extension import CheckContext, Extension, SmtpSettings
 from posture_cockpit.core.fixture import FixtureNetwork
 from posture_cockpit.core.model import Status, info
@@ -106,6 +106,77 @@ def test_one_attempt_left_gives_one_reading_never_two_per_mx():
     assert readings[0] == f"smtp mx0.{DOMAIN} {read.address} read_certificate"
     assert read.verification.dialogue.reason is Reason.CERTIFICATE_REFUSED  # the refusal is kept beside it
     assert read.reading.dialogue.reason is Reason.TLS_UNVERIFIED and not read.reading.dialogue.certificate.trusted
+
+
+# ------------------------------------------------- a certificate reading the deadline cuts (R4 of the review of PR-B2)
+def test_a_reading_cut_by_the_deadline_keeps_the_refusal_and_is_said_interrupted():
+    """R4 of the review of PR-B2, decision C, F03, T03: a verification refuses the certificate, then the reading
+    on that address never answers and the safety net stops it at the deadline (CHECK_TIMEOUT = 4). The refusal is
+    kept whole (reason, verification code and message); the reading gave no observation and is listed as
+    interrupted: no certificate, no TLS result stands for it. One reading for the MX, on the refused address,
+    within the 16: the other refused address of that MX gets none. The four counts agree:
+    consumed <= budget_spent <= consumed + interrupted."""
+    refusing = {"verify": {"reason": "certificate_refused", "verify_code": 10,
+                           "verify_message": "certificate has expired"},
+                "read_certificate": "hang"}
+    probe, net, elapsed = measured(world((f"mx0.{DOMAIN}", 10, ["192.0.2.1", "192.0.2.2"], refusing)),
+                                   check_timeout=4)
+    first, second = probe.mx[0].addresses
+    assert [q for q in smtp_asked(net) if q.endswith("read_certificate")] == [
+        f"smtp mx0.{DOMAIN} 192.0.2.1 read_certificate"]
+    for address in (first, second):
+        refusal = address.verification.dialogue
+        assert (refusal.reason, refusal.verify_code, refusal.verify_message) == (
+            Reason.CERTIFICATE_REFUSED, 10, "certificate has expired")
+        assert refusal.certificate is None and refusal.tls_version == ""
+    assert (first.reading, first.interrupted, first.reading_interrupted, first.cause) == (
+        None, [SmtpPurpose.READ_CERTIFICATE], True, "")
+    assert (second.reading, second.interrupted, second.reading_interrupted) == (None, [], False)
+    assert first.pending == second.pending == ""
+    summary = probe.exhaustivity()
+    assert (summary["certificate_readings"], summary["certificate_readings_interrupted"], summary["interrupted"]) == (
+        0, 1, 1)
+    assert (summary["budget_spent"], summary["consumed"], summary["sockets"]) == (3, 2, 2) == (
+        net.smtp_spent(), 2, 2)
+    assert summary["consumed"] <= summary["budget_spent"] <= summary["consumed"] + summary["interrupted"]
+    assert probe.deadline_reached and elapsed < 2.0 + smtp_measure.SAFETY_SECONDS + 0.5
+
+
+def test_a_reading_stopped_at_the_deadline_by_itself_is_said_interrupted():
+    """R4, F03: a reading whose dialogue stops at the deadline (DEADLINE, during the negotiation) is kept as
+    observed, with no certificate and no TLS version, and said interrupted; the refusal stays beside it."""
+    refusing = {"verify": "certificate_refused", "read_certificate": "deadline@tls"}
+    probe, _, _ = measured(world((f"mx0.{DOMAIN}", 10, ["192.0.2.1"], refusing)))
+    address = probe.addresses[0]
+    assert address.verification.dialogue.reason is Reason.CERTIFICATE_REFUSED
+    reading = address.reading.dialogue
+    assert (reading.reason, reading.certificate, reading.tls_version) == (Reason.DEADLINE, None, "")
+    assert address.reading_interrupted and address.interrupted == []
+    assert probe.exhaustivity()["certificate_readings_interrupted"] == 1 and probe.deadline_reached
+
+
+def test_a_reading_with_no_time_left_is_refused_and_said_interrupted(monkeypatch):
+    """R4, decision C: a refusal that comes just after the deadline still launches its reading, which the network
+    refuses before any socket (budget, deadline: nothing spent); the reading is said interrupted, never left
+    out in silence."""
+
+    class LateRefusal(FixtureNetwork):
+        async def smtp_attempt(self, mx_name, address, purpose=SmtpPurpose.VERIFY, *, deadline):
+            observation = await super().smtp_attempt(mx_name, address, purpose, deadline=deadline)
+            if purpose == SmtpPurpose.VERIFY:  # the refusal comes just after the deadline
+                await asyncio.sleep(deadline - asyncio.get_running_loop().time() + 0.05)
+            return observation
+
+    net = LateRefusal(world((f"mx0.{DOMAIN}", 10, ["192.0.2.1"], {"verify": "certificate_refused",
+                                                                  "read_certificate": "tls_unverified"})),
+                      domain=DOMAIN, ehlo_name=EHLO)
+    probe = asyncio.run(smtp_measure.measure(context(net, check_timeout=4)))
+    address = probe.addresses[0]
+    assert address.verification.dialogue.reason is Reason.CERTIFICATE_REFUSED
+    reading = address.reading
+    assert (reading.cause, reading.reason, reading.dialogue, reading.socket, reading.consumed) == (
+        "budget", "deadline", None, False, False)
+    assert address.reading_interrupted and (net.smtp_spent(), probe.budget_spent) == (1, 1)
 
 
 def test_the_fair_pass_order():
@@ -306,6 +377,40 @@ def test_the_probe_decides_nothing():
 
 
 # ------------------------------------------------------------------ on the real network, through the engine (T03)
+def test_a_real_reading_blocked_until_the_deadline(tmp_path):
+    """R4 of the review of PR-B2, F03, R11: on the real network, the server presents a certificate of another
+    authority (refused: PKIX), then, on the reconnection for the reading, never greets. The refusal is kept
+    whole; the reading stops at the deadline by itself (DEADLINE at the greeting, no certificate, no TLS
+    version), and is said interrupted; the probe returns at its deadline (CHECK_TIMEOUT = 4: 2 s)."""
+    (tmp_path / "lab").mkdir()
+    (tmp_path / "other").mkdir()
+    pki, other = TestPki(tmp_path / "lab"), TestPki(tmp_path / "other", "Other CA")
+    mx = f"mx1.{DOMAIN}"
+
+    async def main():
+        zone = {DOMAIN: {"MX": [f"10 {mx}."]}, mx: {"A": ["127.0.0.2"]}}
+        scripts = [Script(tls=other.server_context(mx)), Script(banner=(SILENT,))]
+        async with dns_server(zone) as (_, dns_port), smtp_server(scripts, "127.0.0.2") as (record, port):
+            net = LabNetwork([LOOPBACK], timeout=2, dns_port=dns_port, smtp_port=port, pki=pki, domain=DOMAIN,
+                             ehlo_name=EHLO)
+            start = time.monotonic()
+            probe = await smtp_measure.measure(context(net, check_timeout=4))
+            return probe, time.monotonic() - start, record.connections, net.smtp_spent()
+
+    probe, elapsed, connections, spent = asyncio.run(main())
+    address = probe.addresses[0]
+    refusal = address.verification.dialogue
+    assert refusal.reason is Reason.CERTIFICATE_REFUSED and refusal.verify_code == 20  # unable to get local issuer
+    reading = address.reading.dialogue
+    assert (reading.reason, reading.stage, reading.certificate, reading.tls_version) == (
+        Reason.DEADLINE, smtp.Stage.BANNER, None, "")
+    assert address.reading_interrupted and address.interrupted == []
+    summary = probe.exhaustivity()
+    assert (summary["certificate_readings"], summary["certificate_readings_interrupted"]) == (1, 1)
+    assert (summary["budget_spent"], summary["consumed"], summary["sockets"], connections, spent) == (2, 2, 2, 2, 2)
+    assert probe.deadline_reached and 2.0 <= elapsed < 2.0 + smtp_measure.SAFETY_SECONDS
+
+
 def test_a_real_blocked_mx_keeps_the_fast_one_and_returns_before_the_engine(tmp_path):
     """T03 (CHECK_TIMEOUT = 4, a fast MX and a blocked one), F02: on the real network, through the engine, the
     fast MX's verified dialogue is kept, the blocked one carries deadline with what it had sent, and the check
