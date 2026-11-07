@@ -25,7 +25,8 @@ A DNS question that is not listed gets an empty answer. A certificate, TLS
 version or URL that is not listed raises :class:`~.network.Refused`, as a
 server with nothing listening would; the value ``"timeout"`` (for a URL, a
 certificate or a DNS question) raises :class:`~.errors.ConnectionTimedOut`, as
-LiveNetwork does. ``http_get(url, verify=True)`` raises
+LiveNetwork does. Version 0.7: ``"hang"`` for a DNS question answers nothing until
+the caller gives up (a question still in progress). ``http_get(url, verify=True)`` raises
 :class:`~.network.UntrustedCertificate` when the URL's host has a certificate
 listed with ``"trusted": false``, or whose dates do not cover ``now`` (expired, or
 not yet valid), as TLS verification does on the real network. Certificate dates are
@@ -60,7 +61,10 @@ any socket (:func:`~.network.smtp_target` and :class:`~.network.SmtpBudget` are
 shared): an MX the audited domain does not publish in the world's DNS, an address
 that MX does not have, an invalid MX name, an internal perimeter, no EHLO name, the
 16 attempts spent, a certificate reading without a refused certificate or twice for
-one MX. The world's addresses are documentation addresses, which the real rule
+one MX. As the real network, it only knows what this scan's DNS questions answered:
+an MX, or an address, whose question was never asked, is still in progress or
+failed refuses the attempt (``not_in_cache``), even when the world lists the answer.
+The world's addresses are documentation addresses, which the real rule
 would refuse: the rule is not applied, ``"policy"`` plays it. What one address
 answers is in an ``"smtp"`` section, by MX then address::
 
@@ -134,6 +138,10 @@ class FixtureNetwork:
                       for mx, by_address in data.get("smtp", {}).items()}
         self._smtp_budget = SmtpBudget(Limits().smtp_attempts)
         self._dns = {self._dns_key(*key.rsplit(" ", 1)): value for key, value in data.get("dns", {}).items()}
+        # Version 0.7: each DNS question this scan asked, as LiveNetwork's cache knows it (R3 of the review of
+        # PR-B2): absent, never asked; None, asked and not answered yet; the error it raised; or its answer,
+        # the first one. Only the last is known to an SMTP attempt (_recorded).
+        self._dns_seen: dict[str, DnsAnswer | Exception | None] = {}
         self._certificates = data.get("certificates", {})
         self._tls = data.get("tls", {})
         self._http = data.get("http", {})
@@ -155,6 +163,18 @@ class FixtureNetwork:
     async def dns(self, name: str, rtype: str) -> DnsAnswer:
         key = self._dns_key(name, rtype)
         self.asked.append(f"dns {key}")
+        self._dns_seen.setdefault(key, None)
+        try:
+            answer = await self._dns_answer(key)
+        except Exception as e:
+            if self._dns_seen[key] is None:
+                self._dns_seen[key] = e
+            raise
+        if self._dns_seen[key] is None:
+            self._dns_seen[key] = answer
+        return answer
+
+    async def _dns_answer(self, key: str) -> DnsAnswer:
         if key not in self._dns:
             return DnsAnswer(())
         records = self._dns[key]
@@ -162,6 +182,8 @@ class FixtureNetwork:
             return DnsAnswer((), exists=False)
         if records == "timeout":
             raise ConnectionTimedOut(f"DNS {key}: Timeout")
+        if records == "hang":  # version 0.7: no answer until the caller gives up
+            await asyncio.Event().wait()
         return DnsAnswer(tuple(records))
 
     async def certificate(self, host: str, port: int = 443) -> Certificate:
@@ -381,11 +403,12 @@ class FixtureNetwork:
 
     # ------------------------------------------------------------ SMTP (0.7)
     def _recorded(self, name: str, rtype: str) -> DnsAnswer | None:
-        """The world's DNS answer, as the scan saw it; None for a question that times out (nothing known)."""
-        records = self._dns.get(self._dns_key(name, rtype), [])
-        if records == "timeout":
-            return None
-        return DnsAnswer((), exists=False) if records is None else DnsAnswer(tuple(records))
+        """What this scan's DNS already answered, as LiveNetwork's cache gives it (``_cached_answer``).
+
+        None when the question was never asked, is not answered yet, or failed: nothing is known then,
+        whatever the world lists, and the SMTP attempt that depends on it is refused (not_in_cache)."""
+        seen = self._dns_seen.get(self._dns_key(name, rtype))
+        return seen if isinstance(seen, DnsAnswer) else None
 
     def _smtp_spec(self, mx_name: str, address: str, purpose: str) -> Any:
         spec = self._smtp.get(mx_name, {}).get(address)

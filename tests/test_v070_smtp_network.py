@@ -21,6 +21,7 @@ import asyncio
 import contextlib
 import errno
 import inspect
+import json
 import re
 import socket
 from ipaddress import ip_address, ip_network
@@ -33,8 +34,9 @@ from local_servers import LOOPBACK, TestPki, dns_server
 from posture_cockpit.config import Config
 from posture_cockpit.core import network, smtp
 from posture_cockpit.core.egress import SMTP_EGRESS, SMTP_PORT, DestinationBlocked, EgressPolicy
+from posture_cockpit.core.errors import ConnectionTimedOut
 from posture_cockpit.core.fixture import FixtureNetwork
-from posture_cockpit.core.network import Limits, LiveNetwork, SmtpObservation, SmtpPurpose
+from posture_cockpit.core.network import DnsAnswer, Limits, LiveNetwork, SmtpObservation, SmtpPurpose
 from posture_cockpit.core.registry import Registry
 from posture_cockpit.scanner import DEMO_DOMAIN, Scanner
 from posture_cockpit.storage.perimeters import Perimeter
@@ -380,6 +382,166 @@ def test_without_an_audited_domain_or_an_ehlo_name_nothing_goes(no_socket):
     refused(unbound, "policy", "not_bound")
     refused(off, "policy", "not_configured")
     refused(odd, "policy", "purpose")
+
+
+# ------------------------------------------- the recorded worlds know what the real network knows (R3, decision E)
+# The state of the domain's MX question, or of the MX's A question, when the attempt is asked.
+DNS_STATES = {
+    "mx_never_asked": ("policy", "not_in_cache"),
+    "mx_in_progress": ("policy", "not_in_cache"),
+    "mx_failed": ("policy", "not_in_cache"),
+    "mx_missing": ("policy", "not_published"),   # the domain exists and publishes no MX
+    "a_never_asked": ("policy", "not_in_cache"),  # the MX were read, not the addresses
+    "a_in_progress": ("policy", "not_in_cache"),
+    "a_failed": ("policy", "not_in_cache"),
+    "a_missing": ("policy", "not_published"),    # the MX exists and has no A record
+    "a_nxdomain": ("policy", "not_published"),   # the MX does not exist
+    "a_answered": smtp.Reason.STARTTLS_ABSENT,   # the attempt goes, and its dialogue is observed
+}
+
+
+def recorded_world(state: str) -> dict:
+    mx = {"mx_in_progress": "hang", "mx_failed": "timeout", "mx_missing": []}.get(state, [f"10 {MX}."])
+    dns: dict = {f"{DOMAIN} MX": mx}
+    if state != "a_missing":
+        dns[f"{MX} A"] = {"a_in_progress": "hang", "a_failed": "timeout", "a_nxdomain": None}.get(state, ["127.0.0.2"])
+    return {"dns": dns, "smtp": {MX: {"127.0.0.2": "starttls_absent"}}}
+
+
+def real_zone(state: str) -> dict:
+    """The same DNS on the local server: None is a question it never answers (in progress, then failed)."""
+    mx = {"mx_in_progress": None, "mx_failed": None, "mx_missing": []}.get(state, [f"10 {MX}."])
+    records: dict = {DOMAIN: {"MX": mx}}
+    if state != "a_nxdomain":
+        records[MX] = {} if state == "a_missing" else {
+            "A": None if state in ("a_in_progress", "a_failed") else ["127.0.0.2"]}
+    return records
+
+
+async def asked_then_attempted(net, state: str) -> SmtpObservation:
+    """Asks the questions ``state`` says, as the probe's discovery does, then the attempt on 127.0.0.2."""
+    waiting = None
+    questions = [] if state == "mx_never_asked" else [(DOMAIN, "MX")]
+    if state.startswith("a_") and state != "a_never_asked":
+        questions.append((MX, "A"))
+    for name, rtype in questions:
+        if state.endswith("in_progress") and (name, rtype) == questions[-1]:
+            waiting = asyncio.ensure_future(net.dns(name, rtype))
+            await asyncio.sleep(0.1)  # asked, and no answer comes
+            assert not waiting.done()
+        else:
+            await asyncio.gather(net.dns(name, rtype), return_exceptions=True)
+    try:
+        return await net.smtp_attempt(MX, "127.0.0.2", deadline=soon())
+    finally:
+        if waiting is not None:
+            waiting.cancel()
+            await asyncio.gather(waiting, return_exceptions=True)
+
+
+def outcome(observation: SmtpObservation) -> object:
+    if observation.dialogue is not None:
+        return observation.dialogue.reason
+    refused(observation, observation.cause, observation.reason)  # no socket, nothing spent
+    return observation.cause, observation.reason
+
+
+@pytest.mark.parametrize("state", list(DNS_STATES))
+def test_the_recorded_world_knows_what_the_real_network_knows(state):
+    """R3 of the review of PR-B2, decision E, S02: a recorded world refuses an SMTP attempt exactly as the real
+    network does, from what this scan's DNS questions answered, never from the world's data directly: an MX
+    question, or an address question, never asked, still in progress or failed refuses it (not_in_cache), an
+    answer without the MX or the address refuses it (not_published), the answer with them lets it go. Same
+    outcome on both, no connection for a refusal."""
+
+    async def recorded() -> tuple[SmtpObservation, list]:
+        net = FixtureNetwork(recorded_world(state), domain=DOMAIN, ehlo_name=EHLO)
+        return await asked_then_attempted(net, state), net.connections
+
+    async def real() -> tuple[SmtpObservation, int]:
+        async with dns_server(real_zone(state)) as (_, dns_port), lab_servers("127.0.0.2") as (servers, port):
+            net = LabNetwork([LOOPBACK], timeout=0.3 if state.endswith("failed") else 2, dns_port=dns_port,
+                             smtp_port=port, domain=DOMAIN, ehlo_name=EHLO)
+            try:
+                observation = await asked_then_attempted(net, state)
+            finally:
+                net.close()
+        return observation, servers[0].connections
+
+    (recorded_observation, recorded_connections), (real_observation, real_connections) = (
+        asyncio.run(recorded()), asyncio.run(real()))
+    assert outcome(recorded_observation) == outcome(real_observation) == DNS_STATES[state]
+    gone = DNS_STATES[state] is smtp.Reason.STARTTLS_ABSENT
+    assert (len(recorded_connections), real_connections) == ((1, 1) if gone else (0, 0))
+
+
+def test_a_recorded_attempt_before_the_discovery_is_refused_and_after_it_goes():
+    """R3, decision E: in a recorded world that lists every answer, the attempt is refused until the scan has
+    asked the MX question, then the address question (not_in_cache), and goes once both were answered; asking
+    again changes nothing (the first answer is the one known)."""
+
+    async def main() -> list[SmtpObservation]:
+        net = FixtureNetwork(recorded_world("a_answered"), domain=DOMAIN, ehlo_name=EHLO)
+        observations = [await net.smtp_attempt(MX, "127.0.0.2", deadline=soon())]
+        await net.dns(DOMAIN, "MX")
+        observations.append(await net.smtp_attempt(MX, "127.0.0.2", deadline=soon()))
+        await net.dns(MX, "AAAA")  # the other family answers nothing for this address
+        observations.append(await net.smtp_attempt(MX, "127.0.0.2", deadline=soon()))
+        await net.dns(MX, "A")
+        await net.dns(MX, "A")
+        observations.append(await net.smtp_attempt(MX, "127.0.0.2", deadline=soon()))
+        return observations
+
+    before_mx, before_a, other_family, after = asyncio.run(main())
+    refused(before_mx, "policy", "not_in_cache")
+    refused(before_a, "policy", "not_in_cache")
+    refused(other_family, "policy", "not_in_cache")
+    assert after.consumed and after.dialogue is not None and after.dialogue.reason is smtp.Reason.STARTTLS_ABSENT
+
+
+def historical_dns(records: dict, name: str, rtype: str) -> DnsAnswer:
+    """FixtureNetwork.dns() before R3, verbatim but for the logging: the reference for every other check."""
+    key = f"{name.lower().rstrip('.')} {rtype.upper()}"
+    if key not in records:
+        return DnsAnswer(())
+    value = records[key]
+    if value is None:
+        return DnsAnswer((), exists=False)
+    if value == "timeout":
+        raise ConnectionTimedOut(f"DNS {key}: Timeout")
+    return DnsAnswer(tuple(value))
+
+
+def test_the_recorded_dns_answers_every_other_check_as_before():
+    """R3 of the review of PR-B2: keeping what the scan asked changes nothing to the DNS answers of a recorded
+    world, for every check: the demo world and every kind of value (records, empty, NXDOMAIN, timeout, a question
+    not listed, names in another case or with the root's dot), asked once or again, give the answers and errors
+    of the code before, and every question is logged as before."""
+    demo = json.loads((SRC / "demo" / "menuiserie-dupont.example.json").read_text(encoding="utf-8"))
+    worlds = [demo["dns"], {"example.org TXT": ["v=spf1 -all"], "_dmarc.example.org TXT": [],
+                            "old.example.org A": None, "slow.example.org MX": "timeout",
+                            "Mixed.Example.ORG A": ["192.0.2.1"]}]
+
+    def answered(world: dict, net: FixtureNetwork, name: str, rtype: str) -> tuple:
+        try:
+            expected: object = historical_dns({FixtureNetwork._dns_key(*k.rsplit(" ", 1)): v for k, v in world.items()},
+                                              name, rtype)
+        except ConnectionTimedOut as e:
+            expected = ("timeout", str(e))
+        try:
+            got: object = asyncio.run(net.dns(name, rtype))
+        except ConnectionTimedOut as e:
+            got = ("timeout", str(e))
+        return expected, got
+
+    for world in worlds:
+        net = FixtureNetwork({"dns": world})
+        questions = [tuple(key.rsplit(" ", 1)) for key in world]
+        questions += [(name.upper() + ".", rtype.lower()) for name, rtype in questions] + [("absent.example", "A")]
+        for name, rtype in questions + questions:  # asked again: the same answer
+            expected, got = answered(world, net, name, rtype)
+            assert got == expected, (name, rtype)
+        assert net.asked == [f"dns {FixtureNetwork._dns_key(n, t)}" for n, t in questions + questions]
 
 
 # ------------------------------------------------------------------ budget and time (T03, T04, decision C)
