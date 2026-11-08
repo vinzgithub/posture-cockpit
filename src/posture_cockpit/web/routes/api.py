@@ -9,16 +9,48 @@ Authentication: ``Authorization: Bearer <key>``, with a key created on the
 settings page. A key has the rights of its owner: the domains of internal
 perimeters are only listed and scanned with an administrator's key.
 See docs/user/HOME_ASSISTANT.md.
+
+Version 0.7.0 adds two fields to each domain, and changes no other (P4 of PR-D). Both are read from the
+stored result of mail.smtp_starttls, never recomputed, never taken from the current configuration:
+
+``smtp_probe``, always an object::
+
+    {"scope": "on" | "off" | "internal" | "absent" | "unknown",
+     "status": "ok" | "warn" | "fail" | "na" | "error" | null,
+     "rule": "F05.01" … "F05.12" | null,
+     "mx": int | null, "addresses": int | null, "verified": int | null}
+
+``scope`` is the measurement scope of the history: "off" the probe was off (status "na", rule F05.01),
+"on" it measured, "internal" a scan of an internal perimeter (the check is not run there), "absent" a
+scan without the check (made before 0.7.0), "unknown" a result without its scope (an error of the
+engine, status "error", rule null). ``status`` is null only when the check is absent. ``mx``,
+``addresses`` and ``verified`` (addresses whose certificate was verified) are null unless the probe
+measured. ``mx`` counts every MX published, ``addresses`` every address of the MX measured; ``verified``
+is read from the evidence, which keeps every MX measured with all its addresses (R1 of the review of
+PR-D): the three are those of the measure, whatever MX the bounded evidence left out.
+
+``mail_enforce_readiness``, always an object, the indicator F06 as the check stored it::
+
+    {"state": "ready" | "compatible" | "to_fix" | "unconfirmed" | "not_applicable" | null,
+     "causes": [str, ...],
+     "policy": "enforce" | "testing" | "none" | "missing" | "invalid" | "unavailable" | "unreadable" | null}
+
+``state`` is null when the scan holds no readiness (check absent, internal perimeter, engine error);
+"unconfirmed" with the cause "probe_off" when the probe was off. ``policy`` is null when no policy
+was read (probe off, no MX). A readiness is measured from this instance: no guarantee of delivery
+from the Internet.
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
+from typing import Any
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from ...core import scoring
+from ...core.compare import SMTP_CHECK, measurement_scope
 from ...core.model import Finding, Status
 from ...scanner import InternalScansDisabled
 from ...security import token_hash
@@ -53,6 +85,27 @@ def _certificate_days(findings: Iterable[Finding]) -> int | None:
     return int(cert.outcome.params["days"])
 
 
+def _smtp(scan: Scan, current: list[Finding]) -> tuple[dict, dict]:
+    """``smtp_probe`` and ``mail_enforce_readiness`` (0.7.0, documented above), from the stored outcome."""
+    finding = next((f for f in current if f.check_id == SMTP_CHECK), None)
+    evidence: Mapping[str, Any] | None = finding.outcome.evidence if finding is not None else None
+    stored: Mapping[str, Any] = evidence or {}
+    rule = stored.get("rule")
+    counts = stored.get("exhaustivity") if isinstance(stored.get("exhaustivity"), Mapping) else None
+    addresses = [a for mx in stored.get("mx", []) for a in mx.get("addresses", [])]
+    probe = {"scope": measurement_scope(evidence, internal=bool(scan.perimeter)),
+             "status": finding.status.value if finding is not None else None,
+             "rule": rule if isinstance(rule, str) else None,
+             "mx": counts.get("mx") if counts else None, "addresses": counts.get("addresses") if counts else None,
+             "verified": sum(a.get("seen") == "verified" for a in addresses) if counts else None}
+    found = stored.get("readiness")
+    readiness: Mapping[str, Any] = found if isinstance(found, Mapping) else {}
+    policy = readiness.get("policy")
+    ready = {"state": readiness.get("state"), "causes": list(readiness.get("causes", [])),
+             "policy": policy.get("state") if isinstance(policy, Mapping) else None}
+    return probe, ready
+
+
 def _ratio(value: float | None) -> float | None:
     return None if value is None else round(value, 3)
 
@@ -65,6 +118,7 @@ def _summary(scan: Scan) -> dict:
     result = scan.assessment()
     evaluation = result.evaluation
     modern = any(f.family is not None for f in current)
+    smtp_probe, readiness = _smtp(scan, current)
     return {
         "domain": scan.domain,
         "score": result.score,
@@ -98,6 +152,9 @@ def _summary(scan: Scan) -> dict:
         # generation are compared.
         "via": scan.via,
         "engine": scan.engine,
+        # 0.7.0, added: the SMTP probe and the readiness for MTA-STS enforce (see the module).
+        "smtp_probe": smtp_probe,
+        "mail_enforce_readiness": readiness,
     }
 
 

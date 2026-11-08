@@ -84,6 +84,8 @@ API_FIELDS = {
     "certificate_days_left": (int, type(None)),
 }
 ADDED_IN_0_5_0 = {"via": (str, type(None)), "engine": (int, type(None))}
+# Version 0.7 (PR-D, P4): two objects added, every field above unchanged.
+ADDED_IN_0_7_0 = {"smtp_probe": dict, "mail_enforce_readiness": dict}
 
 
 @pytest.mark.parametrize("version", ["v0.3.0", "v0.4.0"])
@@ -94,9 +96,13 @@ def test_the_api_contract_is_the_one_of_0_4_0(tmp_path, version):
     scans = app.state.services.scans
     for row in scans.domains(internal=True):
         summary = _summary(scans.get(row["scan_id"]))
-        assert set(summary) == set(API_FIELDS) | set(ADDED_IN_0_5_0)
-        for name, kind in {**API_FIELDS, **ADDED_IN_0_5_0}.items():
+        assert set(summary) == set(API_FIELDS) | set(ADDED_IN_0_5_0) | set(ADDED_IN_0_7_0)
+        for name, kind in {**API_FIELDS, **ADDED_IN_0_5_0, **ADDED_IN_0_7_0}.items():
             assert isinstance(summary[name], kind), (name, summary[name])
+        # A scan made before 0.7.0 holds no SMTP check: absent, never "off" or "unknown".
+        assert summary["smtp_probe"] == {"scope": "absent", "status": None, "rule": None, "mx": None,
+                                         "addresses": None, "verified": None}
+        assert summary["mail_enforce_readiness"] == {"state": None, "causes": [], "policy": None}
         for ratio in ("coverage", "diagnostic_coverage"):
             assert summary[ratio] is None or summary[ratio] == round(summary[ratio], 3)
     app.state.services.db.close()

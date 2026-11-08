@@ -84,6 +84,9 @@ p { orphans: 3; widows: 3; }
 .checks tr { page-break-inside: avoid; }
 .checks td:first-child { width: 34%; }
 .checks td:nth-child(2) { width: 15%; }
+/* A text that names what the DNS published (an MX, an alias) breaks a word too long for its line rather
+   than run past the page (R2 of the review of PR-D); the widths above stay those of the columns. */
+.areas td:last-child, .checks td:nth-child(3), .improvements li { overflow-wrap: anywhere; }
 .pill { display: inline-block; padding: 1pt 6pt; border-radius: 8pt; font: 600 7.5pt "IBM Plex Sans"; white-space: nowrap; }
 .pill-ok { background: #E3EFE3; color: #24572D; }
 .pill-warn { background: #F6E8CC; color: #7A4B06; }
@@ -109,3 +112,22 @@ p { orphans: 3; widows: 3; }
 
 .masthead > div:first-child { flex: 1; min-width: 0; }
 .masthead .seal { flex: 0 0 100pt; width: 100pt; }
+
+/* Version 0.7: the SMTP measure of the MX in the annex. Rows never split across pages; addresses,
+   IPv6 included, are never cut: their column takes the width of the longest. */
+.smtp-annex { margin-top: 14pt; }
+.smtp-annex-title { font: 600 11pt "Newsreader"; margin: 0 0 4pt; break-after: avoid; page-break-after: avoid; }
+.smtp-readiness { font-size: 9pt; margin: 0 0 3pt; break-after: avoid; page-break-after: avoid; }
+.smtp-small { font-size: 7.5pt; color: #5A554B; margin: 0 0 3pt; }
+.smtp-rows { width: 100%; border-collapse: collapse; font-size: 7.5pt; margin-top: 4pt; }
+.smtp-rows th { text-align: left; font: 600 7pt "IBM Plex Sans"; color: #6B6559; padding: 3pt 4pt; border-bottom: 1pt solid #1C1B18; }
+.smtp-rows td { padding: 3pt 4pt; border-bottom: 0.4pt solid #CFC6B5; vertical-align: top; overflow-wrap: break-word; }
+.smtp-rows td:first-child { min-width: 9em; }  /* a word of ordinary length (a name, a cipher) is not cut... */
+/* ...unless it is a word longer than report/smtp.py's LONG_WORD (R2 of the review of PR-D): then it breaks
+   where it must, never past the page; so do the names a policy leaves out, in a paragraph. */
+.smtp-rows .smtp-long, .smtp-annex p.smtp-small { overflow-wrap: anywhere; }
+.smtp-rows td:nth-child(3), .smtp-rows td:nth-child(5) { min-width: 7em; }  /* none collapses */
+.smtp-rows td:nth-child(4) { min-width: 11em; }
+.smtp-rows tr { break-inside: avoid; page-break-inside: avoid; }
+.smtp-rows thead { display: table-header-group; }
+.smtp-rows td.smtp-address { font-family: "IBM Plex Mono", monospace; font-size: 7pt; white-space: nowrap; overflow-wrap: normal; }

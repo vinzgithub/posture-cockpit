@@ -16,6 +16,7 @@
         </p>
         {% if f.status.value == 'blocked' %}<p><a href="#web.https_redirect">{{ t('v04.blocked_by') }}</a></p>{% endif %}
         <p>{{ summary(f, scan.domain) }}</p>
+        {% if f.check_id == 'mail.smtp_starttls' %}{% set smtp = smtp_view(f) %}{% if smtp %}{% include "_smtp.html" %}{% endif %}{% endif %}
         {% if f.outcome.evidence %}
         <details>
           <summary>{{ t('details.evidence') }}</summary>

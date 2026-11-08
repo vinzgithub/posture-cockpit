@@ -133,6 +133,34 @@
       {% endfor %}
       </tbody>
     </table>
+    {% if smtp and smtp.probe_enabled %}
+    <!-- Version 0.7: the SMTP measure of the MX, as stored (report/smtp.py) -->
+    <div class="smtp-annex">
+      <h3 class="smtp-annex-title">{{ t('smtp.report_title') }}</h3>
+      <p class="smtp-readiness"><strong>{{ t('smtp.readiness') }} :</strong> {{ smtp.readiness.label }}{% if smtp.readiness.causes %} — {{ smtp.readiness.causes | join(' ') }}{% endif %}</p>
+      {% if smtp.readiness.policy %}<p class="smtp-small">{{ t('smtp.policy', state=smtp.readiness.policy.label) }}{% if smtp.readiness.policy.uncovered %} — {{ t('smtp.uncovered', hosts=smtp.readiness.policy.uncovered) }}{% endif %}</p>{% endif %}
+      <p class="smtp-small">{{ smtp.readiness.scope }}</p>
+      {% if smtp.rows %}
+      <table class="smtp-rows">
+        <thead><tr><th>{{ t('smtp.col.mx') }}</th><th>{{ t('smtp.col.address') }}</th><th>{{ t('smtp.col.stage') }}</th><th>{{ t('smtp.col.certificate') }}</th><th>{{ t('smtp.col.result') }}</th></tr></thead>
+        <tbody>
+        {% for row in smtp.rows %}
+        <tr>
+          <td><strong class="smtp-name{% if 'mx' in row.wrap %} smtp-long{% endif %}">{{ row.mx }}</strong>{% if row.preference is not none %}<br><span class="smtp-small">{{ t('smtp.preference', n=row.preference) }}</span>{% endif %}{% if row.cname %}<br><span class="smtp-small{% if 'cname' in row.wrap %} smtp-long{% endif %}">{{ t('smtp.cname', target=row.cname) }}</span>{% endif %}</td>
+          <td class="smtp-address">{{ row.address or '—' }}{% if row.family %}<br><span class="smtp-small">{{ row.family }}</span>{% endif %}</td>
+          <td>{{ row.stage or '—' }}{% if row.codes %}<br><span class="smtp-small">{{ row.codes }}</span>{% endif %}</td>
+          <td{% if 'certificate' in row.wrap %} class="smtp-long"{% endif %}>{% if row.tls %}{{ row.tls }}{% if row.certificate %}<br>{% endif %}{% endif %}{% for line in row.certificate %}{{ line }}{% if not loop.last %}<br>{% endif %}{% else %}{% if not row.tls %}—{% endif %}{% endfor %}</td>
+          <td>{{ row.result }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+      {% if smtp.omitted %}<p class="smtp-small">{{ t('smtp.omitted', n=smtp.omitted) }}</p>{% endif %}
+      {% if smtp.limits %}<p class="smtp-small">{{ smtp.limits }}</p>{% endif %}
+      <p class="smtp-small">{{ t('smtp.rule', rule=smtp.rule) }}</p>
+    </div>
+    {% endif %}
   </section>
 </body>
 </html>

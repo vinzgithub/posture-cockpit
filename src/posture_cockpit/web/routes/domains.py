@@ -298,15 +298,18 @@ async def history_page(request: Request, name: str, page: str = "1", user: Row =
     # Comparison of immutable observations; no old score is recalculated.
     # Unreadable historical values produce an explicit non-comparable state.
     comparison = None
+    scope_unknown = False
     try:
         recent = s.scans.latest_states(domain["id"])
         if recent:
-            comparison = compare(Snapshot.from_row(dict(recent[1])) if len(recent) > 1 else None,
-                                 Snapshot.from_row(dict(recent[0])))
+            states = [Snapshot.from_row(dict(row)) for row in recent[:2]]
+            comparison = compare(states[1] if len(states) > 1 else None, states[0])
+            # Version 0.7 (PR-D, P3): an unknown scope (an error of the engine) is said as such.
+            scope_unknown = len(states) > 1 and "unknown" in (states[0].measured, states[1].measured)
     except (ValueError, TypeError, KeyError):
         comparison = None
     return render(request, "history.html", domain=domain, history=rows, results=results,
-                  comparison=comparison,
+                  comparison=comparison, scope_unknown=scope_unknown,
                   address_results=address_results, unreadable=unreadable, page=number,
                   pages=pages, total=total, latest_id=s.scans.latest_id(domain["id"]),
                   full_coverage=scoring.FULL_COVERAGE)

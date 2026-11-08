@@ -32,6 +32,7 @@ from ..core.model import Effort, Finding, Status
 from ..i18n import Catalog, finding_summary, finding_verdict, fmt_date
 from ..storage import Scan
 from ..timezones import UTC, local, offset_label
+from .smtp import view as smtp_view
 
 REPORT_DIR = Path(__file__).parent
 _env = Environment(loader=FileSystemLoader(REPORT_DIR), autoescape=select_autoescape(["html"]))
@@ -167,6 +168,10 @@ def report_context(catalog: Catalog, lang: str, scan: Scan, author: str = "", tz
             "ref": catalog.text(lang, f"{f.check_id}.ref") if catalog.has(lang, f"{f.check_id}.ref") else "",
         })
 
+    # Version 0.7 (PR-D): the SMTP measure as stored, for the annex (report/smtp.py).
+    smtp_finding = next((f for f in findings if f.check_id == "mail.smtp_starttls"), None)
+    smtp = smtp_view(smtp_finding.outcome.evidence, t) if smtp_finding is not None else None
+
     started = local(scan.started_at, tz)
     generated = (now or datetime.now(UTC)).astimezone(tz)
     return {
@@ -183,7 +188,7 @@ def report_context(catalog: Catalog, lang: str, scan: Scan, author: str = "", tz
                       percent=result.coverage_percent),
         "perimeter": scan.perimeter,
         "diagnosis": diagnosis, "conclusion": conclusion, "prescriptions": prescriptions,
-        "improvements": improvements, "categories": categories, "annex": annex, "gaps": gaps,
+        "improvements": improvements, "categories": categories, "annex": annex, "gaps": gaps, "smtp": smtp,
         "checks_count": len(findings), "addresses": scan.addresses(), "plan": plan,
         "gap_groups": {cause: _same_reason([g for g in gaps if g["cause"] == cause])
                        for cause in ("network", "dependency", "tool", "policy", "budget")},
