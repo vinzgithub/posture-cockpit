@@ -149,7 +149,7 @@
           <td><strong class="smtp-name{% if 'mx' in row.wrap %} smtp-long{% endif %}">{{ row.mx }}</strong>{% if row.preference is not none %}<br><span class="smtp-small">{{ t('smtp.preference', n=row.preference) }}</span>{% endif %}{% if row.cname %}<br><span class="smtp-small{% if 'cname' in row.wrap %} smtp-long{% endif %}">{{ t('smtp.cname', target=row.cname) }}</span>{% endif %}</td>
           <td class="smtp-address">{{ row.address or '—' }}{% if row.family %}<br><span class="smtp-small">{{ row.family }}</span>{% endif %}</td>
           <td>{{ row.stage or '—' }}{% if row.codes %}<br><span class="smtp-small">{{ row.codes }}</span>{% endif %}</td>
-          <td{% if 'certificate' in row.wrap %} class="smtp-long"{% endif %}>{% if row.tls %}{{ row.tls }}{% if row.certificate %}<br>{% endif %}{% endif %}{% for line in row.certificate %}{{ line }}{% if not loop.last %}<br>{% endif %}{% else %}{% if not row.tls %}—{% endif %}{% endfor %}</td>
+          <td>{% if row.tls %}{{ row.tls }}{% if row.certificate %}<br>{% endif %}{% endif %}{% if row.certificate %}<span{% if 'certificate' in row.wrap %} class="smtp-long"{% endif %}>{% for line in row.certificate %}{{ line }}{% if not loop.last %}<br>{% endif %}{% endfor %}</span>{% elif not row.tls %}—{% endif %}</td>
           <td>{{ row.result }}</td>
         </tr>
         {% endfor %}
