@@ -8,10 +8,11 @@ reading progress together (three tasks), so that neither side waits for the othe
 is read in chunks and the process is killed as soon as it goes beyond ``max_output``, the standard error
 kept to its last :data:`ERROR_TAIL` bytes: nothing it writes can fill the memory of the server.
 
-One deadline covers everything: the start of Python, the import of WeasyPrint, the layout and the transfer.
-At the deadline, on a failure, or when the task is cancelled (the client went away, the application stops),
-the process and its group are killed and this function returns only once it is gone, even if it is cancelled
-again while it waits: the caller frees its place in the limiter (web/limits.py) after that, never before,
+One deadline, set before the process is started, covers everything: the start of the process, the start of
+Python, the import of WeasyPrint, the layout and the transfer. At the deadline, on a failure, or when the task
+is cancelled (the client went away, the application stops), the process and its group are killed and this
+function returns only once it is gone, even if it is cancelled again while it waits, and even while the
+process was starting: the caller frees its place in the limiter (web/limits.py) after that, never before,
 and once. :func:`stop_all` stops those still running when the application stops, by the same way.
 
 The process receives the HTML, its limits and an environment reduced to what it needs: no secret of the
@@ -55,8 +56,9 @@ EXIT_POLL = (0.001, 0.05)
 # Seconds allowed to read the pipes of a dead process to their end (see _gone).
 DRAIN_GRACE = 5.0
 
-# The reports running now, stopped when the application stops.
+# The reports running now, and the processes being started, stopped when the application stops.
 _running: set[_Job] = set()
+_starting: set[asyncio.Future[_Job]] = set()
 
 
 class ReportTimeout(Exception):
@@ -118,14 +120,35 @@ async def make_pdf(html: str, *, timeout: float, memory_mb: int, max_output: int
     """The PDF of ``html``, made by report/worker.py within ``timeout`` seconds and ``memory_mb`` MiB of
     address space. Raises ReportTimeout, ReportFailed or ReportUnavailable (WeasyPrint or one of its system
     libraries missing where the process runs); the process is gone when this function returns or raises, even
-    when its task is cancelled, again and again. ``command``: another program to run, for the tests."""
+    when its task is cancelled, again and again. ``command``: another program to run, for the tests.
+
+    One deadline, set before anything is started, covers the start of the process, the start of Python, the
+    import of WeasyPrint, the layout and the transfer. The start itself is never cancelled half-way: should
+    the deadline pass or a cancellation come while the process starts, this waits until it has started (or
+    failed to), then stops it like any other: never a process left unknown."""
+    deadline = asyncio.get_running_loop().time() + timeout
+    starting = asyncio.ensure_future(_start(command or worker_command(memory_mb, timeout), html.encode("utf-8"),
+                                            max_output))
+    _starting.add(starting)
+    starting.add_done_callback(_starting.discard)
     try:
-        job = await _start(command or worker_command(memory_mb, timeout), html.encode("utf-8"), max_output)
-    except OSError as failure:  # the program cannot be started at all
-        raise ReportFailed("start", str(failure)) from None
+        async with asyncio.timeout_at(deadline):
+            job = await asyncio.shield(starting)
+    except BaseException as interruption:  # the start failed, or the deadline or a cancellation came first
+        failure = _start_failure(starting)
+        if failure is not None and interruption is failure:  # the program cannot be started: nothing to stop
+            raise ReportFailed("start", str(failure)) from None
+        try:
+            await wait_out(starting)  # never cancelled: it ends with a process, or without one
+        finally:
+            if _start_failure(starting) is None and starting.done() and not starting.cancelled():
+                await _stop(starting.result())
+        if isinstance(interruption, TimeoutError):  # TimeoutError is an OSError: told apart above
+            raise ReportTimeout() from None
+        raise
     try:
         try:
-            async with asyncio.timeout(timeout):
+            async with asyncio.timeout_at(deadline):
                 await asyncio.gather(*job.tasks)
                 status = await _exited(job.process)
             pdf, error = job.reading.result(), job.errors.result()
@@ -149,9 +172,17 @@ async def make_pdf(html: str, *, timeout: float, memory_mb: int, max_output: int
     return pdf
 
 
+def _start_failure(starting: asyncio.Future[_Job]) -> BaseException | None:
+    """Why the start failed, once it is over (an OSError: the program cannot be run), or None."""
+    if not starting.done() or starting.cancelled():
+        return None
+    return starting.exception()
+
+
 async def _start(command: Sequence[str], html: bytes, max_output: int) -> _Job:
     """Starts the process, in a session (and a process group) of its own, and its job, known to stop_all as
-    soon as it exists."""
+    soon as it exists. Never cancelled (make_pdf shields it): asyncio kills a process whose start it cancels,
+    but would not wait for it."""
     process = await asyncio.create_subprocess_exec(
         *command, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
         env=worker_environment(), start_new_session=True)
@@ -273,9 +304,10 @@ async def wait_out(future: asyncio.Future[Any]) -> None:
 
 
 async def stop_all() -> None:
-    """Stops every report when the application stops, by the one way a job ends (:meth:`_Job.reap`): every
-    job is reaped, even if its tasks no longer progress or its pipes are full, and its make_pdf raises
-    ReportFailed("stopped")."""
+    """Stops every report when the application stops, by the one way a job ends (:meth:`_Job.reap`): the
+    processes still starting are waited for first, so that none is missed, then every job is reaped, even if
+    its tasks no longer progress or its pipes are full, and its make_pdf raises ReportFailed("stopped")."""
+    await asyncio.gather(*(wait_out(start) for start in list(_starting)), return_exceptions=True)
     stopping = list(_running)
     if stopping:
         log.warning("Stopping %d PDF report(s) in progress", len(stopping))
