@@ -60,10 +60,6 @@ def measured(world: dict, probe: bool = True) -> tuple[dict, object]:
     return captured["whole"], findings[CHECK]
 
 
-def by_name(evidence: dict) -> dict[str, dict]:
-    return {m["name"]: m for m in evidence.get("mx", [])}
-
-
 def attempted(address: dict) -> bool:
     return bool(address.get("observations") or address.get("interrupted"))
 
@@ -73,23 +69,36 @@ def certificates(mx: dict) -> list[dict]:
             if isinstance(o.get("dialogue"), dict) and isinstance(o["dialogue"].get("certificate"), dict)]
 
 
+def embedded(part: list[dict], whole: list[dict]) -> list[int]:
+    """The positions in ``whole`` of the MX of ``part``, matched in order by name: ``part`` is a part of
+    ``whole`` in its order (several invalid MX may carry the same name, each its own entry)."""
+    found, start = [], 0
+    for mx in part:
+        at = next(i for i in range(start, len(whole)) if whole[i]["name"] == mx["name"])
+        found.append(at)
+        start = at + 1
+    return found
+
+
 def add_up(whole: dict, kept: dict, named: str) -> None:
     """Every list of ``kept`` is a part of the same list of ``whole``, in its order, and what it left out is
-    counted exactly; every attempt is kept as it was; the counts are those of the measure."""
+    counted exactly; every attempt is kept as it was; the counts are those of the measure; sixteen MX at most,
+    and a silent MX listed once for each of its entries kept, never more."""
     assert size(kept) <= LIMIT_BYTES
     assert kept["rule"] == whole["rule"] and kept["readiness"]["state"] == whole["readiness"]["state"]
     assert kept["readiness"]["causes"] == whole["readiness"]["causes"]
     assert kept["exhaustivity"] == whole["exhaustivity"]
     names = [m["name"] for m in whole["mx"]]
     kept_names = [m["name"] for m in kept["mx"]]
-    assert kept_names == [n for n in names if n in set(kept_names)]  # the order of the probe
+    places = embedded(kept["mx"], whole["mx"])  # the order of the probe
+    assert len(kept_names) <= smtp_evidence.EVIDENCE_MX
     assert len(kept_names) + kept["mx_omitted"] == len(names)
     assert all(m["name"] in kept_names for m in whole["mx"] if m.get("valid", True) and not m.get("cause"))
     if named:
         assert named in kept_names
-    whole_mx = by_name(whole)
-    for mx in kept["mx"]:
-        found = whole_mx[mx["name"]]["addresses"]
+    for mx, at in zip(kept["mx"], places, strict=True):
+        origin = whole["mx"][at]
+        found = origin["addresses"]
         assert len(mx["addresses"]) + mx.get("addresses_omitted", 0) == len(found)
         assert [a["address"] for a in mx["addresses"]] == [a["address"] for a in found
                                                           if a["address"] in {k["address"] for k in mx["addresses"]}]
@@ -97,8 +106,8 @@ def add_up(whole: dict, kept: dict, named: str) -> None:
         assert [(a["address"], a["seen"], a.get("unmeasured")) for a in mx["addresses"] if attempted(a)] == [
             (a["address"], a["seen"], a.get("unmeasured")) for a in tried]
         assert all(a["seen"] == "unmeasured" for a in mx["addresses"] if not attempted(a))
-        assert len(mx.get("cname", [])) + mx.get("cname_omitted", 0) == len(whole_mx[mx["name"]].get("cname", []))
-        for cut, full in zip(certificates(mx), certificates(whole_mx[mx["name"]]), strict=True):
+        assert len(mx.get("cname", [])) + mx.get("cname_omitted", 0) == len(origin.get("cname", []))
+        for cut, full in zip(certificates(mx), certificates(origin), strict=True):
             assert len(cut["names"]) <= smtp_evidence.CERTIFICATE_NAMES
             assert len(cut["names"]) + cut.get("names_omitted", 0) == len(full["names"])
             if mx["name"] in full["names"]:
@@ -115,6 +124,8 @@ def add_up(whole: dict, kept: dict, named: str) -> None:
         assert len(kept["silent_mx"]) + kept.get("silent_mx_omitted", 0) == len(whole["silent_mx"])
         assert {s["name"]: s["cause"] for s in kept["silent_mx"]}.items() <= {
             s["name"]: s["cause"] for s in whole["silent_mx"]}.items()
+        listed = [s["name"] for s in kept["silent_mx"]]
+        assert all(listed.count(n) <= kept_names.count(n) for n in set(listed))
         if named:
             assert named in {s["name"] for s in kept["silent_mx"]}
     policy, full = (kept["readiness"].get("policy") or {}), (whole["readiness"].get("policy") or {})
