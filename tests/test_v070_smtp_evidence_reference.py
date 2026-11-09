@@ -40,6 +40,7 @@ def test_the_check_decides_as_recorded(name):
 
 @pytest.mark.parametrize("name", sorted(REFERENCE["scans"]))
 def test_the_score_the_statuses_and_the_scope_are_as_recorded(name):
-    """The scoring, the 21 checks and measurement_scope: the same as recorded for every fixed world."""
+    """F05, F06 downstream: the scoring, the 21 checks and measurement_scope, the same as recorded for every
+    fixed world."""
     world, probe = WORLDS[name]
     assert scored(world, probe) == REFERENCE["scans"][name]
