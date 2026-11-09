@@ -183,13 +183,16 @@ def test_the_deadline_kills_the_process():
 
 def test_the_pdf_is_read_within_its_limit_while_the_html_is_written():
     """S04 (corrective 3, review 1): a process that writes without end is killed once it passes the limit of
-    the PDF, at once, the PDF never held whole; 8 MiB of HTML written while the process answers 8 MiB and
-    writes 1 MiB of errors: no side waits for the other."""
+    the PDF, at once, the PDF never held whole, five times over: its pipe, left full when the reading stops, is
+    read to its end once it is killed (up to Python 3.11, waiting for a process with a full pipe never ends);
+    8 MiB of HTML written while the process answers 8 MiB and writes 1 MiB of errors: no side waits for the
+    other."""
     endless = script("import sys\nwhile True: sys.stdout.buffer.write(b'%PDF-' * 100000)")
-    started = time.monotonic()
-    with pytest.raises(jobs.ReportFailed) as failure:
-        make(command=endless, max_output=2 * 2**20)
-    assert failure.value.reason == "too_large" and time.monotonic() - started < 5 and jobs.running() == 0
+    for _ in range(5):
+        started = time.monotonic()
+        with pytest.raises(jobs.ReportFailed) as failure:
+            make(command=endless, max_output=2 * 2**20, timeout=20)
+        assert failure.value.reason == "too_large" and time.monotonic() - started < 5 and jobs.running() == 0
     echo = script("import sys\nsys.stdout.buffer.write(b'%PDF-')\nfor _ in range(128):\n"
                   "    sys.stderr.buffer.write(b'e' * 8192)\n    sys.stdout.buffer.write(sys.stdin.buffer.read(65536))")
     html = "h" * (8 * 2**20)

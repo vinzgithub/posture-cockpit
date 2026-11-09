@@ -111,7 +111,7 @@ async def make_pdf(html: str, *, timeout: float, memory_mb: int, max_output: int
         for task in tasks:  # a failure of one stops the others: the process is killed below
             task.cancel()
         try:
-            await _reap(process)
+            await _reap(process, tasks)
         finally:
             _running.discard(process)
     detail = error.decode("utf-8", "replace")
@@ -169,13 +169,32 @@ async def _tail(process: asyncio.subprocess.Process) -> bytes:
     return kept
 
 
-async def _reap(process: asyncio.subprocess.Process) -> None:
+async def _reap(process: asyncio.subprocess.Process, tasks: Sequence[asyncio.Future[Any]]) -> None:
     """Kills the process if it still runs and waits until it is gone, even if the task is cancelled again
     meanwhile; a cancellation received while waiting is raised once the process is gone."""
     if process.returncode is None:
         with contextlib.suppress(ProcessLookupError):
             process.kill()
-    await wait_out(asyncio.ensure_future(process.wait()))
+    await wait_out(asyncio.ensure_future(_gone(process, tasks)))
+
+
+async def _gone(process: asyncio.subprocess.Process, tasks: Sequence[asyncio.Future[Any]]) -> None:
+    """Returns once the process is gone. Up to Python 3.11, Process.wait() returns only when every pipe is
+    closed (base_subprocess, _call_connection_lost): a pipe left with unread bytes, its reading paused, would
+    keep it waiting for ever. So the tasks that read are let go, then each pipe is read to its end, which
+    comes as soon as the process is dead."""
+    await asyncio.gather(*tasks, return_exceptions=True)
+    if process.stdin is not None:
+        process.stdin.close()
+    await asyncio.gather(*(_drain(stream) for stream in (process.stdout, process.stderr) if stream is not None))
+    await process.wait()
+
+
+async def _drain(stream: asyncio.StreamReader) -> None:
+    """Reads ``stream`` to its end, keeping nothing."""
+    with contextlib.suppress(Exception):
+        while await stream.read(CHUNK):
+            pass
 
 
 async def wait_out(future: asyncio.Future[Any]) -> None:
@@ -194,11 +213,15 @@ async def wait_out(future: asyncio.Future[Any]) -> None:
 
 
 async def stop_all() -> None:
-    """Kills every process still running and waits until they are gone (the application stops)."""
+    """Kills every process still running and waits until they are gone (the application stops). Their own
+    make_pdf reads their pipes to the end and reaps them; this waits for that."""
     running = list(_running)
     if running:
         log.warning("Stopping %d PDF report(s) in progress", len(running))
-    await asyncio.gather(*(_reap(p) for p in running), return_exceptions=True)
+    for process in running:
+        with contextlib.suppress(ProcessLookupError):
+            process.kill()
+    await asyncio.gather(*(process.wait() for process in running), return_exceptions=True)
 
 
 def running() -> int:
