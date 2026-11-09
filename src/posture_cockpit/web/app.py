@@ -11,7 +11,7 @@ import logging
 from collections.abc import Callable
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.exceptions import HTTPException
@@ -164,16 +164,10 @@ def _add_error_pages(app: FastAPI) -> None:
 
     @app.exception_handler(CorruptScan)
     async def corrupt_scan(request: Request, exc: CorruptScan):
+        # The PDF of an unreadable scan is made by the routes of the report themselves (web/routes/report.py),
+        # in a process of its own and within the limits of the reports (0.7.0, corrective 3).
         if _wants_json(request):
             return JSONResponse({"error": "scan_unreadable", "scan_id": exc.scan_id}, status_code=409)
-        if request.url.path.endswith("/report.pdf"):
-            from ..report import ReportUnavailable, build_unreadable_pdf
-
-            try:
-                pdf = build_unreadable_pdf(request.app.state.services.catalog, deps.lang_of(request))
-                return Response(pdf, status_code=409, media_type="application/pdf")
-            except ReportUnavailable:
-                pass
         return deps.render(request, "error.html", status=409, message=deps.t(request, "error.scan_unreadable"))
 
     @app.exception_handler(deps.CsrfError)
