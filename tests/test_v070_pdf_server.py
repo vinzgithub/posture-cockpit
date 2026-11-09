@@ -196,8 +196,9 @@ def test_the_refusals_say_why(server):
 
 
 def test_a_person_who_goes_away_frees_the_report(server):
-    """S04 (corrective 3, A4): alice asks for the report, then goes away before it is ready: its process is
-    killed within a second and her place given back, so her next report is made."""
+    """S04 (corrective 3, A4; R1 of the review of PR #51): alice asks for the report, then goes away before it is
+    ready: its process is killed within a second and her place given back once it is gone (a few milliseconds
+    later: the application reads its exit, then its pipes), so her next report is made."""
     s = server(3000)
     alice = s.client("alice")
     cookie = "; ".join(f"{k}={v}" for k, v in alice.cookies.items())
@@ -209,8 +210,15 @@ def test_a_person_who_goes_away_frees_the_report(server):
     started = time.monotonic()
     until(lambda: not s.workers(), 5)
     print(f"\nprocess gone {(time.monotonic() - started) * 1000:.0f} ms after the client")
-    _, response = download(alice)
-    assert response.status_code == 200 and response.content.startswith(b"%PDF-")
+    while True:
+        asked = time.monotonic()
+        _, response = download(alice)
+        if response.content.startswith(b"%PDF-"):
+            break
+        assert "encore en cours" in response.text and asked - started < 1  # given back after it is gone
+        time.sleep(0.01)
+    print(f"place given back within {(asked - started) * 1000:.0f} ms after the client")
+    assert response.status_code == 200
 
 
 @pytest.mark.parametrize("sig", [signal.SIGTERM, signal.SIGKILL], ids=["SIGTERM", "SIGKILL"])

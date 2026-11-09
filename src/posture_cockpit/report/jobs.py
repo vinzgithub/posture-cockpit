@@ -10,9 +10,9 @@ kept to its last :data:`ERROR_TAIL` bytes: nothing it writes can fill the memory
 
 One deadline covers everything: the start of Python, the import of WeasyPrint, the layout and the transfer.
 At the deadline, on a failure, or when the task is cancelled (the client went away, the application stops),
-the process is killed and this function returns only once it is gone, even if it is cancelled again while
-it waits: the caller frees its place in the limiter (web/limits.py) after that, never before, and once.
-:func:`stop_all` kills those still running when the application stops.
+the process and its group are killed and this function returns only once it is gone, even if it is cancelled
+again while it waits: the caller frees its place in the limiter (web/limits.py) after that, never before,
+and once. :func:`stop_all` stops those still running when the application stops, by the same way.
 
 The process receives the HTML, its limits and an environment reduced to what it needs: no secret of the
 instance, no variable of its configuration. It is a hardening, not a sandbox (see report/worker.py).
@@ -24,6 +24,7 @@ import asyncio
 import contextlib
 import logging
 import os
+import signal
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -48,8 +49,14 @@ CPU_MARGIN = 5
 KEPT_ENVIRONMENT = ("PATH", "LANG", "LC_ALL", "LC_CTYPE", "HOME", "TMPDIR", "XDG_CACHE_HOME", "FONTCONFIG_PATH",
                     "FONTCONFIG_FILE", "LD_LIBRARY_PATH")
 
-# The processes running now, killed when the application stops.
-_running: set[asyncio.subprocess.Process] = set()
+# Seconds between two readings of the exit status of a process (see _exited): 1 ms at first, doubled each time
+# up to 50 ms, so that a process that has just been killed or has closed its pipes is seen gone at once.
+EXIT_POLL = (0.001, 0.05)
+# Seconds allowed to read the pipes of a dead process to their end (see _gone).
+DRAIN_GRACE = 5.0
+
+# The reports running now, stopped when the application stops.
+_running: set[_Job] = set()
 
 
 class ReportTimeout(Exception):
@@ -79,41 +86,58 @@ def worker_environment() -> dict[str, str]:
     return {**kept, "PYTHONPATH": package_parent, "PYTHONDONTWRITEBYTECODE": "1", "PYTHONUNBUFFERED": "1"}
 
 
+class _Job:
+    """A process of a report and the three tasks that write its HTML and read its PDF and its errors.
+
+    :meth:`reap` is the one way a job ends, whoever asks first (make_pdf, or stop_all when the application
+    stops): the tasks are stopped, the process and its group killed, and the same future, done once the process
+    is gone, is given to everyone who asks."""
+
+    def __init__(self, process: asyncio.subprocess.Process, html: bytes, max_output: int):
+        self.process = process
+        self.reading = asyncio.ensure_future(_read(process, max_output))
+        self.errors = asyncio.ensure_future(_tail(process))
+        self.writing = asyncio.ensure_future(_write(process, html))
+        self.tasks: tuple[asyncio.Future[Any], ...] = (self.reading, self.errors, self.writing)
+        for task in self.tasks:
+            task.add_done_callback(_retrieved)
+        self.stopped = False  # stopped by stop_all, not by its own make_pdf
+        self._reaped: asyncio.Future[None] | None = None
+
+    def reap(self) -> asyncio.Future[None]:
+        if self._reaped is None:
+            for task in self.tasks:
+                task.cancel()
+            _kill(self.process)
+            self._reaped = asyncio.ensure_future(_gone(self.process, self.tasks))
+        return self._reaped
+
+
 async def make_pdf(html: str, *, timeout: float, memory_mb: int, max_output: int = MAX_OUTPUT,
                    command: Sequence[str] | None = None) -> bytes:
     """The PDF of ``html``, made by report/worker.py within ``timeout`` seconds and ``memory_mb`` MiB of
     address space. Raises ReportTimeout, ReportFailed or ReportUnavailable (WeasyPrint or one of its system
     libraries missing where the process runs); the process is gone when this function returns or raises, even
-    when its task is cancelled. ``command``: another program to run, for the tests."""
+    when its task is cancelled, again and again. ``command``: another program to run, for the tests."""
     try:
-        process = await asyncio.create_subprocess_exec(
-            *(command or worker_command(memory_mb, timeout)), stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, env=worker_environment())
+        job = await _start(command or worker_command(memory_mb, timeout), html.encode("utf-8"), max_output)
     except OSError as failure:  # the program cannot be started at all
         raise ReportFailed("start", str(failure)) from None
-    _running.add(process)
-    # Writing the HTML, reading the PDF and the errors progress together: no side waits for the other.
-    reading = asyncio.ensure_future(_read(process, max_output))
-    errors = asyncio.ensure_future(_tail(process))
-    writing = asyncio.ensure_future(_write(process, html.encode("utf-8")))
-    tasks: tuple[asyncio.Future[Any], ...] = (reading, errors, writing)
-    for task in tasks:
-        task.add_done_callback(_retrieved)
     try:
         try:
             async with asyncio.timeout(timeout):
-                await asyncio.gather(*tasks)
-                status = await process.wait()
-            pdf, error = reading.result(), errors.result()
+                await asyncio.gather(*job.tasks)
+                status = await _exited(job.process)
+            pdf, error = job.reading.result(), job.errors.result()
         except TimeoutError:
             raise ReportTimeout() from None
+        except asyncio.CancelledError:
+            current = asyncio.current_task()
+            if job.stopped and not (current and current.cancelling()):  # its tasks stopped by stop_all
+                raise ReportFailed("stopped") from None
+            raise
     finally:
-        for task in tasks:  # a failure of one stops the others: the process is killed below
-            task.cancel()
-        try:
-            await _reap(process, tasks)
-        finally:
-            _running.discard(process)
+        await _stop(job)
     detail = error.decode("utf-8", "replace")
     if status == worker.UNAVAILABLE:
         raise ReportUnavailable(detail)
@@ -123,6 +147,35 @@ async def make_pdf(html: str, *, timeout: float, memory_mb: int, max_output: int
     if not pdf.startswith(b"%PDF-"):
         raise ReportFailed("empty", detail)
     return pdf
+
+
+async def _start(command: Sequence[str], html: bytes, max_output: int) -> _Job:
+    """Starts the process, in a session (and a process group) of its own, and its job, known to stop_all as
+    soon as it exists."""
+    process = await asyncio.create_subprocess_exec(
+        *command, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        env=worker_environment(), start_new_session=True)
+    job = _Job(process, html, max_output)
+    _running.add(job)
+    return job
+
+
+async def _stop(job: _Job) -> None:
+    """Reaps ``job`` and waits until its process is gone, even if cancelled meanwhile, then forgets it."""
+    try:
+        await wait_out(job.reap())
+    finally:
+        _running.discard(job)
+
+
+def _kill(process: asyncio.subprocess.Process) -> None:
+    """Kills the process and its group (anything it would have started), if it still runs."""
+    if process.returncode is not None:
+        return
+    with contextlib.suppress(ProcessLookupError, PermissionError):
+        os.killpg(process.pid, signal.SIGKILL)
+    with contextlib.suppress(ProcessLookupError):
+        process.kill()
 
 
 def _retrieved(task: asyncio.Future[Any]) -> None:
@@ -169,25 +222,32 @@ async def _tail(process: asyncio.subprocess.Process) -> bytes:
     return kept
 
 
-async def _reap(process: asyncio.subprocess.Process, tasks: Sequence[asyncio.Future[Any]]) -> None:
-    """Kills the process if it still runs and waits until it is gone, even if the task is cancelled again
-    meanwhile; a cancellation received while waiting is raised once the process is gone."""
-    if process.returncode is None:
-        with contextlib.suppress(ProcessLookupError):
-            process.kill()
-    await wait_out(asyncio.ensure_future(_gone(process, tasks)))
+async def _exited(process: asyncio.subprocess.Process) -> int:
+    """The exit status of the process, as soon as it exits, whatever its pipes: up to Python 3.11,
+    Process.wait() returns only once every pipe is closed (base_subprocess, _call_connection_lost), and a pipe
+    left with unread bytes, its reading paused, would keep it waiting for ever. The status itself is known at
+    once (the child watcher reaps the process); it is read again and again (:data:`EXIT_POLL`)."""
+    pause, longest = EXIT_POLL
+    while process.returncode is None:
+        await asyncio.sleep(pause)
+        pause = min(pause * 2, longest)
+    return process.returncode
 
 
 async def _gone(process: asyncio.subprocess.Process, tasks: Sequence[asyncio.Future[Any]]) -> None:
-    """Returns once the process is gone. Up to Python 3.11, Process.wait() returns only when every pipe is
-    closed (base_subprocess, _call_connection_lost): a pipe left with unread bytes, its reading paused, would
-    keep it waiting for ever. So the tasks that read are let go, then each pipe is read to its end, which
-    comes as soon as the process is dead."""
+    """Returns once the process is gone, without Process.wait() (see :func:`_exited`): the tasks that write
+    and read are let go (cancelled, they end at once, even those that no longer progress), the standard input
+    closed, the exit waited for, then each pipe read to its end, which comes as soon as the process and its
+    group are dead, :data:`DRAIN_GRACE` seconds at most (a pipe kept open elsewhere is left to the log)."""
     await asyncio.gather(*tasks, return_exceptions=True)
     if process.stdin is not None:
         process.stdin.close()
-    await asyncio.gather(*(_drain(stream) for stream in (process.stdout, process.stderr) if stream is not None))
-    await process.wait()
+    await _exited(process)
+    try:
+        async with asyncio.timeout(DRAIN_GRACE):
+            await asyncio.gather(*(_drain(stream) for stream in (process.stdout, process.stderr) if stream is not None))
+    except TimeoutError:
+        log.warning("A PDF report process exited with a pipe still open (pid %d)", process.pid)
 
 
 async def _drain(stream: asyncio.StreamReader) -> None:
@@ -213,15 +273,20 @@ async def wait_out(future: asyncio.Future[Any]) -> None:
 
 
 async def stop_all() -> None:
-    """Kills every process still running and waits until they are gone (the application stops). Their own
-    make_pdf reads their pipes to the end and reaps them; this waits for that."""
-    running = list(_running)
-    if running:
-        log.warning("Stopping %d PDF report(s) in progress", len(running))
-    for process in running:
-        with contextlib.suppress(ProcessLookupError):
-            process.kill()
-    await asyncio.gather(*(process.wait() for process in running), return_exceptions=True)
+    """Stops every report when the application stops, by the one way a job ends (:meth:`_Job.reap`): every
+    job is reaped, even if its tasks no longer progress or its pipes are full, and its make_pdf raises
+    ReportFailed("stopped")."""
+    stopping = list(_running)
+    if stopping:
+        log.warning("Stopping %d PDF report(s) in progress", len(stopping))
+    for job in stopping:
+        job.stopped = True
+    await asyncio.gather(*(wait_out(job.reap()) for job in stopping), return_exceptions=True)
+
+
+def pids() -> list[int]:
+    """The process ids of the reports running now (tests, log)."""
+    return [job.process.pid for job in _running]
 
 
 def running() -> int:

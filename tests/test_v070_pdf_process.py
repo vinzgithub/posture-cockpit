@@ -250,7 +250,7 @@ def test_a_cancelled_report_leaves_no_process(times):
     async def scenario():
         task = asyncio.ensure_future(jobs.make_pdf("x", timeout=30, memory_mb=1024, command=SLEEPER))
         await asyncio.sleep(0.5)
-        pid = next(iter(jobs._running)).pid
+        pid = jobs.pids()[0]
         for _ in range(times):
             task.cancel()
             await asyncio.sleep(0)
@@ -264,19 +264,19 @@ def test_a_cancelled_report_leaves_no_process(times):
 
 def test_the_stop_of_the_application_kills_the_reports():
     """R3 (corrective 3, review 2): stop_all kills every report in progress and waits until they are gone; the
-    reports end with a failure, never left behind."""
+    reports end with a failure (``stopped``), never left behind."""
     async def scenario():
         tasks = [asyncio.ensure_future(jobs.make_pdf("x", timeout=30, memory_mb=1024, command=SLEEPER))
                  for _ in range(2)]
         await asyncio.sleep(0.5)
-        pids = [p.pid for p in jobs._running]
+        pids = jobs.pids()
         await jobs.stop_all()
         outcomes = await asyncio.gather(*tasks, return_exceptions=True)
         return pids, outcomes
 
     pids, outcomes = asyncio.run(scenario())
     assert len(pids) == 2 and not any(alive(p) for p in pids) and jobs.running() == 0
-    assert all(isinstance(o, jobs.ReportFailed) and o.reason == "exit -9" for o in outcomes)
+    assert all(isinstance(o, jobs.ReportFailed) and o.reason == "stopped" for o in outcomes)
 
 
 # ------------------------------------------------------------------ the limiter
@@ -470,7 +470,7 @@ def test_a_person_who_goes_away_stops_the_report(signed_in, monkeypatch):
     async def slow(html, **options):
         task = asyncio.ensure_future(real(html, **{**options, "command": SLEEPER}))
         await asyncio.sleep(0.3)
-        pids.extend(p.pid for p in jobs._running)
+        pids.extend(jobs.pids())
         return await task
 
     real = jobs.make_pdf
