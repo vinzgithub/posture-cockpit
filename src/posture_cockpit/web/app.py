@@ -22,12 +22,13 @@ from ..config import Config, StartupError, prepare_data_dir, secret_key
 from ..core.network import Network
 from ..core.registry import Registry
 from ..i18n import Catalog
+from ..report import jobs
 from ..scanner import Scanner
 from ..security import LoginThrottle
 from ..storage import Accounts, AuditLog, CorruptScan, InstanceSettings, Perimeters, Scans, instance_lock, open_database
 from ..storage.schedules import Schedules
 from . import deps, first_run
-from .limits import ScanLimiter
+from .limits import ReportLimiter, ScanLimiter
 from .routes import account, admin, api, auth, dashboard, domains, events, mission_control, perimeters, report
 from .scheduler import Scheduler
 from .services import STATIC_DIR, TEMPLATES_DIR, Services
@@ -73,6 +74,7 @@ def create_app(config: Config | None = None, registry: Registry | None = None,
         scanner=Scanner(registry, config, disabled=settings.disabled_extensions, network_factory=network_factory),
         throttle=LoginThrottle(), account_throttle=LoginThrottle(max_failures=10, lock_seconds=900),
         scan_limiter=ScanLimiter(config.max_concurrent_scans, config.scans_per_hour),
+        report_limiter=ReportLimiter(config.max_concurrent_reports),
         templates=Jinja2Templates(directory=TEMPLATES_DIR),
         schedules=Schedules(db, config.timezone),
     )
@@ -85,6 +87,8 @@ def create_app(config: Config | None = None, registry: Registry | None = None,
     if app.state.scheduler is not None:
         app.router.on_startup.append(app.state.scheduler.start)
         app.router.on_shutdown.append(app.state.scheduler.stop)
+    # The PDF reports still being laid out (report/jobs.py): their processes are killed when it stops.
+    app.router.on_shutdown.append(jobs.stop_all)
     app.router.on_shutdown.append(folder_lock.release)
     # While no account exists, /setup asks for a one-time code written to the log (first_run.py).
     app.state.setup_code = None

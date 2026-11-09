@@ -30,6 +30,15 @@ SMTP_CHECK_MARGIN = 2.0
 # hyphen, 63 characters at most (check_host_name).
 _HOST_LABEL = re.compile(r"(?!-)[a-z0-9-]{1,63}(?<!-)")
 MAX_HOST_NAME = 253
+# Version 0.7.0, corrective 3: PDF reports, each laid out in a process of its own (report/jobs.py). The
+# default and the bounds of each setting (whole numbers): reports at the same time on the instance, seconds
+# allowed to each from the start of its process to the last byte, MiB of address space of its process
+# (RLIMIT_AS: virtual memory, not the memory really used; the heaviest report measured peaks at 300 MiB).
+REPORT_SETTINGS = {
+    "MAX_CONCURRENT_REPORTS": (2, 1, 8),
+    "REPORT_TIMEOUT": (60, 10, 600),
+    "REPORT_MEMORY_MB": (1024, 256, 8192),
+}
 
 
 class StartupError(RuntimeError):
@@ -84,9 +93,17 @@ class Config:
     # Name sent in EHLO by the SMTP probe: POSTURE_COCKPIT_SMTP_EHLO_NAME, required when the probe is
     # on. There is no default on purpose (see check_smtp_settings).
     smtp_ehlo_name: str | None = None
+    # PDF reports (0.7.0, corrective 3, see REPORT_SETTINGS): POSTURE_COCKPIT_MAX_CONCURRENT_REPORTS,
+    # POSTURE_COCKPIT_REPORT_TIMEOUT, POSTURE_COCKPIT_REPORT_MEMORY_MB.
+    max_concurrent_reports: int = REPORT_SETTINGS["MAX_CONCURRENT_REPORTS"][0]
+    report_timeout: int = REPORT_SETTINGS["REPORT_TIMEOUT"][0]
+    report_memory_mb: int = REPORT_SETTINGS["REPORT_MEMORY_MB"][0]
 
     def __post_init__(self) -> None:
         check_cookie_name(self.session_cookie, secure=self.cookie_secure)
+        for name, value in (("MAX_CONCURRENT_REPORTS", self.max_concurrent_reports),
+                            ("REPORT_TIMEOUT", self.report_timeout), ("REPORT_MEMORY_MB", self.report_memory_mb)):
+            check_report_setting(name, value)
         if self.setup_code and len(normalize_setup_code(self.setup_code)) < MIN_SETUP_CODE:
             raise ValueError(f"POSTURE_COCKPIT_SETUP_CODE: at least {MIN_SETUP_CODE} letters or digits")
         self.smtp_ehlo_name = check_smtp_settings(self.smtp_probe, self.smtp_ehlo_name, self.check_timeout)
@@ -118,6 +135,9 @@ class Config:
             # Blank counts as absent, as for every variable; otherwise the value is kept exactly as
             # written, control characters included, so that check_smtp_settings can refuse them.
             smtp_ehlo_name=_env("SMTP_EHLO_NAME", "") or None,
+            max_concurrent_reports=parse_report_setting("MAX_CONCURRENT_REPORTS"),
+            report_timeout=parse_report_setting("REPORT_TIMEOUT"),
+            report_memory_mb=parse_report_setting("REPORT_MEMORY_MB"),
         )
         check_dkim_selectors(_env("DKIM_SELECTORS", ""))
         return config
@@ -145,6 +165,25 @@ def check_dkim_selectors(value: str) -> None:
         dkim_selectors(value)
     except ValueError as e:
         raise ValueError(f"POSTURE_COCKPIT_DKIM_SELECTORS: {e}") from None
+
+
+def parse_report_setting(name: str) -> int:
+    """A setting of the PDF reports (REPORT_SETTINGS): a whole number within its bounds, or its default when
+    the variable is absent or blank. Anything else stops the start, naming the variable and its bounds,
+    rather than being corrected silently."""
+    default, low, high = REPORT_SETTINGS[name]
+    value = _env(name, str(default)).strip()
+    if not re.fullmatch(r"[0-9]{1,9}", value):
+        raise ValueError(f"{ENV_PREFIX}{name}: {value!r} is not a whole number; write one from {low} to {high}")
+    return check_report_setting(name, int(value))
+
+
+def check_report_setting(name: str, value: int) -> int:
+    """Raises ValueError, naming the variable and its bounds, when ``value`` is out of them (REPORT_SETTINGS)."""
+    _, low, high = REPORT_SETTINGS[name]
+    if isinstance(value, bool) or not isinstance(value, int) or not low <= value <= high:
+        raise ValueError(f"{ENV_PREFIX}{name}: {value!r} is out of bounds; write a whole number from {low} to {high}")
+    return value
 
 
 def parse_smtp_probe(value: str) -> bool:

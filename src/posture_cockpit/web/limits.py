@@ -1,6 +1,6 @@
 # Copyright © 2026 Vincent Fournet
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
-"""How many scans may run: at once on the instance, and per account each hour.
+"""How many scans may run: at once on the instance, and per account each hour; how many PDF reports.
 
 A scan opens dozens of connections; without a limit, one account (or one
 leaked API key) could keep the server busy, or use it to hammer a third
@@ -71,6 +71,55 @@ class ScanLimiter:
             if not released:
                 released = True
                 self._running -= 1
+        return release
+
+    @property
+    def running(self) -> int:
+        return self._running
+
+
+# PDF reports (version 0.7.0, corrective 3): each is laid out in a process of its own (report/jobs.py),
+# a few at once on the instance and one at a time for an account. A report over the limit is refused at
+# once, never queued: the page says so and the person tries again in a moment.
+REPORTS_PER_ACCOUNT = 1
+
+
+class TooManyReports(Exception):
+    """``reason``: ``"busy"`` (the instance makes its maximum of reports) or ``"account"`` (this account
+    already waits for one)."""
+
+    def __init__(self, reason: str):
+        self.reason = reason
+        super().__init__(reason)
+
+
+class ReportLimiter:
+    def __init__(self, concurrent: int = 2, per_account: int = REPORTS_PER_ACCOUNT):
+        self.concurrent = concurrent
+        self.per_account = per_account
+        self._running = 0
+        self._by_account: dict[str, int] = {}
+
+    def take(self, who: str) -> Callable[[], None]:
+        """Takes a place for one report of ``who`` and returns the function that gives it back: called
+        once the process of the report is gone (report/jobs.py), any further call does nothing. Raises
+        TooManyReports, without taking anything."""
+        if self._by_account.get(who, 0) >= self.per_account:
+            raise TooManyReports("account")
+        if self._running >= self.concurrent:
+            raise TooManyReports("busy")
+        self._running += 1
+        self._by_account[who] = self._by_account.get(who, 0) + 1
+        released = False
+
+        def release() -> None:
+            nonlocal released
+            if not released:
+                released = True
+                self._running -= 1
+                self._by_account[who] -= 1
+                if not self._by_account[who]:
+                    del self._by_account[who]
         return release
 
     @property
