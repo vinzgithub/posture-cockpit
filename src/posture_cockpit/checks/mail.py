@@ -50,7 +50,7 @@ from ..core import (
 )
 from ..core.egress import parse_address
 from ..core.network import mx_record
-from . import LOCALES
+from . import LOCALES, mail_evidence
 from .records import (
     Dmarc,
     MtaStsPolicy,
@@ -136,7 +136,13 @@ def _tags_text(errors: tuple[tuple[str, str], ...]) -> str:
 # --------------------------------------------------------------------- MX
 @extension.check("mx", category="mail", weight=1, internal=False)
 async def mx(ctx: CheckContext) -> Outcome:
-    """Where the domain's mail goes. Information, unless a server cannot be reached by name."""
+    """Where the domain's mail goes. Information, unless a server cannot be reached by name.
+
+    Decided on every MX; what is stored and shown of it is bounded (mail_evidence.py, correction 4)."""
+    return mail_evidence.bounded("mail.mx", await _mx(ctx))
+
+
+async def _mx(ctx: CheckContext) -> Outcome:
     records = list((await ctx.net.dns(ctx.domain, "MX")).records)
     hosts = await _mx_hosts(ctx)
     evidence: dict[str, object] = {"mx": records}
@@ -529,7 +535,14 @@ async def _mta_sts_reading(ctx: CheckContext) -> MtaStsReading:
 
 @extension.check("mta_sts", category="mail", weight=3, internal=False)
 async def mta_sts(ctx: CheckContext) -> Outcome:
-    """MTA-STS makes the servers that deliver mail to the domain insist on encryption."""
+    """MTA-STS makes the servers that deliver mail to the domain insist on encryption.
+
+    Decided on every MX and pattern; what is stored and shown of it is bounded (mail_evidence.py,
+    correction 4)."""
+    return mail_evidence.bounded("mail.mta_sts", await _mta_sts(ctx))
+
+
+async def _mta_sts(ctx: CheckContext) -> Outcome:
     mx_hosts = await _mx_hosts(ctx)
     if not mx_hosts:
         return na("mail.no_inbound")
