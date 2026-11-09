@@ -1,7 +1,9 @@
 {# Copyright © 2026 Vincent Fournet · SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 -#}
 {# mail.smtp_starttls, read progressively (version 0.7, PR-D): the summary and its notes come before (the
    text of the finding); then the readiness for enforce, apart from the verdict; one row per MX and
-   address; how many MX the evidence left out; the limits of the measure; the JSON of the evidence follows in _findings.html. ``smtp`` is
+   address; how many MX the evidence left out, and the addresses (correction 2 of 0.7.0: what the bounded
+   evidence left out, from its exact counts, and how it was reduced); the limits of the measure; the JSON of
+   the evidence follows in _findings.html. ``smtp`` is
    report/smtp.py's view of the stored evidence: never a new decision. Everything from the network is
    text, escaped here like everything else, never marked safe; the view bounds it for the eye, the
    JSON keeps it whole. #}
@@ -40,7 +42,10 @@
   </table>
   </div>
   {% endif %}
-  {% if smtp.omitted %}<p class="small muted smtp-omitted">{{ t('smtp.omitted', n=smtp.omitted) }}</p>{% endif %}
+  {% if smtp.omitted %}<p class="small muted smtp-omitted">{{ t('smtp.omitted_core' if smtp.core else 'smtp.omitted', n=smtp.omitted) }}</p>{% endif %}
+  {% if smtp.counts %}<p class="small muted smtp-counts">{{ smtp.counts }}</p>{% endif %}
+  {% if smtp.reduced %}<p class="small muted smtp-reduced">{{ smtp.reduced }}</p>{% endif %}
+  {% if smtp.display %}<p class="small muted smtp-display">{{ smtp.display }}</p>{% endif %}
   {% if smtp.limits %}<p class="small muted">{{ smtp.limits }}</p>{% endif %}
   <p class="small muted">{{ t('smtp.rule', rule=smtp.rule) }}</p>
 </div>

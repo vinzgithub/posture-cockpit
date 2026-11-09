@@ -156,7 +156,10 @@
         </tbody>
       </table>
       {% endif %}
-      {% if smtp.omitted %}<p class="smtp-small">{{ t('smtp.omitted', n=smtp.omitted) }}</p>{% endif %}
+      {% if smtp.omitted %}<p class="smtp-small">{{ t('smtp.omitted_core' if smtp.core else 'smtp.omitted', n=smtp.omitted) }}</p>{% endif %}
+      {% if smtp.counts %}<p class="smtp-small smtp-counts">{{ smtp.counts }}</p>{% endif %}
+      {% if smtp.reduced %}<p class="smtp-small smtp-reduced">{{ smtp.reduced }}</p>{% endif %}
+      {% if smtp.display %}<p class="smtp-small smtp-display">{{ smtp.display }}</p>{% endif %}
       {% if smtp.limits %}<p class="smtp-small">{{ smtp.limits }}</p>{% endif %}
       <p class="smtp-small">{{ t('smtp.rule', rule=smtp.rule) }}</p>
     </div>

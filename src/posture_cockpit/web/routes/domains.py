@@ -12,6 +12,7 @@ tasks and DNS hosts without reloading, copy buttons, spinner while scanning).
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from datetime import UTC, datetime
 
@@ -21,7 +22,7 @@ from starlette.datastructures import FormData
 from starlette.exceptions import HTTPException
 
 from ...core import providers, schedule_time, scoring
-from ...core.compare import Snapshot, compare
+from ...core.compare import SMTP_CHECK, Snapshot, compare
 from ...core.engine import normalize_domain
 from ...core.model import Finding, Status
 from ...core.network import NetworkError
@@ -325,6 +326,26 @@ async def history_detail(request: Request, name: str, scan_id: str, user: Row = 
     return render(request, "history_detail.html", domain=domain, scan=scan, categories=_by_category(scan),
                   summary=_summary(request), result=scan.assessment(), registry=s.registry,
                   rechecks=scan.rechecks, newest=newest, full_coverage=scoring.FULL_COVERAGE)
+
+
+@router.get("/{name}/history/{scan_id}/evidence/{check_id}")
+async def stored_evidence(request: Request, name: str, scan_id: str, check_id: str,
+                          user: Row = Depends(require_user)):
+    """The evidence of mail.smtp_starttls of one stored analysis, as the database keeps it, as a JSON file
+    (version 0.7.0, correction 2, A7): an evidence stored before the bounding is shown bounded, this gives it
+    whole, never rewritten; the recheck when there is one, as the pages show it. The domain and the scan are
+    checked like every page of the history; any other check, scan or domain is a 404."""
+    s = services(request)
+    domain = visible_domain(request, name, user)
+    scan = stored_scan(request, domain, scan_id)
+    evidence = s.scans.stored_evidence(scan.id, check_id) if check_id == SMTP_CHECK else None
+    if evidence is None:
+        raise HTTPException(404)
+    if domain["perimeter_id"] is not None:
+        audit(request, "evidence.internal", user=user, target=name, perimeter=domain["perimeter"], scan=scan.id)
+    filename = f"posture-{name}-scan-{scan.id}-{check_id}.json"
+    return Response(json.dumps(evidence), media_type="application/json",
+                    headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
 
 @router.post("/{name}/delete")

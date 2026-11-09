@@ -26,8 +26,10 @@ scan without the check (made before 0.7.0), "unknown" a result without its scope
 engine, status "error", rule null). ``status`` is null only when the check is absent. ``mx``,
 ``addresses`` and ``verified`` (addresses whose certificate was verified) are null unless the probe
 measured. ``mx`` counts every MX published, ``addresses`` every address of the MX measured; ``verified``
-is read from the evidence, which keeps every MX measured with all its addresses (R1 of the review of
-PR-D): the three are those of the measure, whatever MX the bounded evidence left out.
+is the count the measure recorded (``counts.addresses.verified`` of the evidence, correction 2 of
+0.7.0), whatever the bounded evidence left out; for a scan stored before it, the addresses of the
+evidence, which kept every MX measured with all its addresses (R1 of the review of PR-D). The three are
+those of the measure.
 
 ``mail_enforce_readiness``, always an object, the indicator F06 as the check stored it::
 
@@ -92,18 +94,26 @@ def _smtp(scan: Scan, current: list[Finding]) -> tuple[dict, dict]:
     stored: Mapping[str, Any] = evidence or {}
     rule = stored.get("rule")
     counts = stored.get("exhaustivity") if isinstance(stored.get("exhaustivity"), Mapping) else None
-    addresses = [a for mx in stored.get("mx", []) for a in mx.get("addresses", [])]
     probe = {"scope": measurement_scope(evidence, internal=bool(scan.perimeter)),
              "status": finding.status.value if finding is not None else None,
              "rule": rule if isinstance(rule, str) else None,
              "mx": counts.get("mx") if counts else None, "addresses": counts.get("addresses") if counts else None,
-             "verified": sum(a.get("seen") == "verified" for a in addresses) if counts else None}
+             "verified": _verified(stored) if counts else None}
     found = stored.get("readiness")
     readiness: Mapping[str, Any] = found if isinstance(found, Mapping) else {}
     policy = readiness.get("policy")
     ready = {"state": readiness.get("state"), "causes": list(readiness.get("causes", [])),
              "policy": policy.get("state") if isinstance(policy, Mapping) else None}
     return probe, ready
+
+
+def _verified(evidence: Mapping[str, Any]) -> int:
+    """The addresses whose certificate was verified: as the measure counted them (correction 2 of 0.7.0),
+    else, for an evidence stored before, its addresses (every address of every MX measured)."""
+    recorded = (evidence.get("counts") or {}).get("addresses")
+    if isinstance(recorded, Mapping) and isinstance(recorded.get("verified"), int):
+        return int(recorded["verified"])
+    return sum(a.get("seen") == "verified" for mx in evidence.get("mx", []) for a in mx.get("addresses", []))
 
 
 def _ratio(value: float | None) -> float | None:

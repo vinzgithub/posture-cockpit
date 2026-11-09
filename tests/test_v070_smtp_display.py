@@ -399,7 +399,9 @@ def test_r1_a_valid_mx_after_sixteen_invalid_names_is_kept_and_shown(instance):
     """R1 of the review of PR-D, F05.08, F01, arbitration 3: the valid MX, measured and verified, is in the stored
     evidence, its row in the details and in the PDF; the evidence stays at EVIDENCE_MX entries and says how many
     MX it left out, which the page and the PDF say too; each invalid MX keeps its own cause; the verdict is the
-    one the review settled (ERROR, F05.08, the first invalid MX named, sixteen without a conclusion)."""
+    one the review settled (ERROR, F05.08, the first invalid MX named, sixteen without a conclusion). Since the
+    bounding (correction 2 of 0.7.0), ``silent_mx`` lists the silent MX the evidence kept, the one named first,
+    and counts the others (``silent_mx_omitted``)."""
     from posture_cockpit.checks.smtp_verdict import EVIDENCE_MX
 
     i = instance()
@@ -409,7 +411,8 @@ def test_r1_a_valid_mx_after_sixteen_invalid_names_is_kept_and_shown(instance):
     evidence = finding.outcome.evidence
     assert (finding.status.value, evidence["rule"], finding.outcome.summary, dict(finding.outcome.params)) == (
         "error", "F05.08", f"{CHECK}.unmeasured.invalid_name", {"host": INVALID[0], "n": 16})
-    assert [s["name"] for s in evidence["silent_mx"]] == INVALID and evidence["readiness"]["state"] == "to_fix"
+    assert [s["name"] for s in evidence["silent_mx"]] == INVALID[:15] and evidence["silent_mx_omitted"] == 1
+    assert evidence["readiness"]["state"] == "to_fix"
     names = [m["name"] for m in evidence["mx"]]
     assert len(names) == EVIDENCE_MX and names == [*INVALID[:15], MX1] and evidence["mx_omitted"] == 1
     kept = next(m for m in evidence["mx"] if m["name"] == MX1)
@@ -481,7 +484,7 @@ def test_r2_long_and_hostile_names_are_bounded_escaped_text(instance):
     """R2 of the review of PR-D, F05.12, S05: names from the DNS are shown bounded (SHOWN_CHARS each, two aliases
     of an MX and eight names of a policy at most, then how many more), as escaped text, never markup; only a word
     longer than LONG_WORD may break (smtp-long), a host name of ordinary length never; the JSON after the block
-    keeps every value whole."""
+    keeps what the evidence stored, bounded (correction 2 of 0.7.0: four aliases, the others counted)."""
     from posture_cockpit.report.smtp import LONG_WORD, SHOWN_CHARS
 
     page = instance().scan(long_names())
@@ -496,7 +499,8 @@ def test_r2_long_and_hostile_names_are_bounded_escaped_text(instance):
     assert "MX non couverts" in part and "et 4 autres" in part  # twelve left out, eight shown
     evidence = json.loads(markup.unescape(re.search(
         rf'id="{re.escape(CHECK)}".*?<pre class="evidence">(.*?)</pre>', page, re.S).group(1)))
-    assert evidence["mx"][1]["name"] == HOSTILE_MX[:255] and len(evidence["mx"][0]["cname"]) == 10
+    assert evidence["mx"][1]["name"] == HOSTILE_MX[:255] and len(evidence["mx"][0]["cname"]) == 4
+    assert evidence["mx"][0]["cname_omitted"] == 6
     assert len(evidence["readiness"]["policy"]["uncovered"]) == 12
 
 
