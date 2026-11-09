@@ -12,8 +12,11 @@ bounded, and the number of what it left out is kept beside it (``*_omitted``), e
 
 - the MX (A2): every MX selected for the measure with all it showed; the MX the message names (F05.08
   names one without a conclusion); one MX for each other cause of a measure not made (an invalid name,
-  beyond the sample); then the others in their order, up to :data:`EVIDENCE_MX`. They are listed in the
-  order of the probe (preference, then name), and ``silent_mx`` keeps the silent MX listed;
+  beyond the sample); then the others in their order, up to :data:`EVIDENCE_MX` entries at every stage.
+  They are listed in the order of the probe (preference, then name), and ``silent_mx`` keeps the entries
+  of the silent MX listed. The discovery keeps every invalid record, so several entries may carry one
+  name: each is one MX, the one named is kept once (its first entry), and ``silent_mx`` matches them
+  entry by entry, never by name alone (R1 of the review of PR #50);
 - the addresses of an MX: every address attempted, with its observations, then :data:`EXTRA_ADDRESSES`
   not attempted (A3), never shown as measured: their ``seen`` stays ``unmeasured`` with its cause;
 - the names of a certificate (:data:`CERTIFICATE_NAMES`, the MX name first when it is one of them), the
@@ -116,6 +119,7 @@ def _limits(evidence: Evidence, named: str) -> bool:
     left = len(all_mx) - len(keep)
     evidence["mx_omitted"] = int(evidence.get("mx_omitted", 0)) + left
     cut |= left > 0
+    cut |= _keep_silent(evidence, all_mx, set(keep))
     kept_names = {m.get("name") for m in evidence["mx"]}
     for mx in evidence["mx"]:
         cut |= _addresses(mx, EXTRA_ADDRESSES)
@@ -125,13 +129,6 @@ def _limits(evidence: Evidence, named: str) -> bool:
                 certificate = (observation.get("dialogue") or {}).get("certificate")
                 if isinstance(certificate, dict):
                     cut |= _certificate(certificate, str(mx.get("name", "")), CERTIFICATE_NAMES, TEXT)
-    if isinstance(evidence.get("silent_mx"), list):
-        silent = evidence["silent_mx"]
-        evidence["silent_mx"] = [s for s in silent if s.get("name") in kept_names]
-        left = len(silent) - len(evidence["silent_mx"]) + int(evidence.get("silent_mx_omitted", 0))
-        if left:
-            evidence["silent_mx_omitted"] = left
-            cut = True
     policy = (evidence.get("readiness") or {}).get("policy")
     if isinstance(policy, dict):
         cut |= _policy(policy, kept_names, POLICY_NAMES)
@@ -187,23 +184,73 @@ def _cause(mx: Mapping[str, Any], causes: Mapping[Any, Any]) -> str:
     return "sample" if mx.get("reason") == "sample" else str(mx.get("cause") or "other")
 
 
-def _selected(all_mx: list[dict[str, Any]], named: str, causes: Mapping[Any, Any]) -> list[int]:
-    """The positions of the MX kept (A2), in the order of the probe."""
-    measured = [i for i, m in enumerate(all_mx) if m.get("valid", True) and not m.get("cause")]
-    chosen = set(measured)
-    chosen |= {i for i, m in enumerate(all_mx) if named and m.get("name") == named}
+def _measured(mx: Mapping[str, Any]) -> bool:
+    """An MX selected for the measure: a valid name, within the sample (MAX_MX at most, each name once)."""
+    return bool(mx.get("valid", True)) and not mx.get("cause")
+
+
+def _named_at(found: list[dict[str, Any]], named: str) -> int | None:
+    """The position of the MX the message names, once: its first entry. The discovery keeps every invalid
+    record, so several MX may carry the same name (each its own entry, the same cause); decide() names the
+    first silent MX of the most specific cause, which is the first of its name."""
+    return next((i for i, m in enumerate(found) if named and m.get("name") == named), None)
+
+
+def _needed(found: list[dict[str, Any]], named: str, causes: Mapping[Any, Any]) -> list[int]:
+    """The positions of the MX the evidence needs, in their priority (A2): every MX selected for the measure,
+    the MX named (one entry), then the first MX of each other cause of a measure not made."""
+    order = [i for i, m in enumerate(found) if _measured(m)]
+    at = _named_at(found, named)
+    if at is not None and at not in order:
+        order.append(at)
+    taken = set(order)
     seen_causes: set[str] = set()
-    for i, mx in enumerate(all_mx):  # one MX for each cause of a measure not made
-        if i not in measured:
+    for i, mx in enumerate(found):
+        if not _measured(mx):
             cause = _cause(mx, causes)
             if cause not in seen_causes:
                 seen_causes.add(cause)
-                chosen.add(i)
-    for i in range(len(all_mx)):  # then the others, in their order, within the room left
-        if len(chosen) >= EVIDENCE_MX:
-            break
-        chosen.add(i)
-    return sorted(chosen)
+                if i not in taken:
+                    order.append(i)
+                    taken.add(i)
+    return order
+
+
+def _selected(all_mx: list[dict[str, Any]], named: str, causes: Mapping[Any, Any]) -> list[int]:
+    """The positions of the MX kept (A2), :data:`EVIDENCE_MX` at most, in the order of the probe: those the
+    evidence needs first, then the others in their order, within the room left."""
+    order = _needed(all_mx, named, causes)
+    taken = set(order)
+    order += [i for i in range(len(all_mx)) if i not in taken]
+    return sorted(order[:EVIDENCE_MX])
+
+
+def _keep_silent(evidence: Evidence, found: list[dict[str, Any]], keep: set[int]) -> bool:
+    """``silent_mx`` restricted to the MX kept: ``found`` is ``mx`` before, ``keep`` the positions kept in it.
+    ``silent_mx`` lists the silent MX of the probe in its order, one entry for each, as ``mx`` does; several
+    MX may carry the same name, so the k-th entry of a name is the k-th MX of that name in ``found``, never
+    every MX of it (an older evidence, which kept fewer MX, leaves the others without one: left out). True
+    when any entry is left out, counted exactly in ``silent_mx_omitted``."""
+    silent = evidence.get("silent_mx")
+    if not isinstance(silent, list):
+        return False
+    places: dict[Any, list[int]] = {}
+    for i, mx in enumerate(found):
+        places.setdefault(mx.get("name"), []).append(i)
+    seen: dict[Any, int] = {}
+    kept = []
+    for entry in silent:
+        name = entry.get("name") if isinstance(entry, Mapping) else None
+        k = seen.get(name, 0)
+        seen[name] = k + 1
+        where = places.get(name, [])
+        if k < len(where) and where[k] in keep:
+            kept.append(entry)
+    left = len(silent) - len(kept)
+    evidence["silent_mx"] = kept
+    if left:
+        evidence["silent_mx_omitted"] = int(evidence.get("silent_mx_omitted", 0)) + left
+    return left > 0
 
 
 def _addresses(mx: dict[str, Any], extra: int) -> bool:
@@ -312,24 +359,12 @@ def _extras(evidence: Evidence, named: str) -> None:
 
 def _mx(evidence: Evidence, named: str) -> None:
     """The MX kept for their order only go: those the measure, the message or a cause need stay."""
-    causes = _silent_causes(evidence)
     found = evidence.get("mx", [])
-    measured = {i for i, m in enumerate(found) if m.get("valid", True) and not m.get("cause")}
-    needed = set(measured) | {i for i, m in enumerate(found) if named and m.get("name") == named}
-    seen_causes: set[str] = set()
-    for i, mx in enumerate(found):
-        if i not in measured and _cause(mx, causes) not in seen_causes:
-            seen_causes.add(_cause(mx, causes))
-            needed.add(i)
-    evidence["mx"] = [found[i] for i in sorted(needed)]
+    needed = sorted(_needed(found, named, _silent_causes(evidence))[:EVIDENCE_MX])
+    evidence["mx"] = [found[i] for i in needed]
     evidence["mx_omitted"] = int(evidence.get("mx_omitted", 0)) + len(found) - len(needed)
+    _keep_silent(evidence, found, set(needed))
     kept = {m.get("name") for m in evidence["mx"]}
-    if isinstance(evidence.get("silent_mx"), list):
-        silent = evidence["silent_mx"]
-        evidence["silent_mx"] = [s for s in silent if s.get("name") in kept]
-        left = len(silent) - len(evidence["silent_mx"])
-        if left:
-            evidence["silent_mx_omitted"] = int(evidence.get("silent_mx_omitted", 0)) + left
     policy = (evidence.get("readiness") or {}).get("policy")
     if isinstance(policy, dict):
         _policy(policy, kept, POLICY_NAMES // 4)
@@ -441,6 +476,8 @@ def _core(evidence: Evidence, named: str) -> None:
     """The core only: the verdict as recorded, the readiness, the exhaustive and omitted counts, the MX the
     message names with its cause."""
     found_mx = evidence.get("mx", [])
+    at = _named_at(found_mx, named)
+    _keep_silent(evidence, found_mx, set() if at is None else {at})
     silent = evidence.get("silent_mx")
     readiness = evidence.get("readiness") or {}
     policy = readiness.get("policy")
@@ -450,11 +487,11 @@ def _core(evidence: Evidence, named: str) -> None:
                          {k: v for k, v in policy.items() if not isinstance(v, list)}}
     kept["mx"] = [{"name": m.get("name"), "preference": m.get("preference"), "valid": m.get("valid"),
                    "addresses_omitted": len(m.get("addresses", [])) + int(m.get("addresses_omitted", 0))}
-                  for m in found_mx if m.get("name") == named]
+                  for m in ([] if at is None else [found_mx[at]])]
     kept["mx_omitted"] = int(evidence.get("mx_omitted", 0)) + len(found_mx) - len(kept["mx"])
-    if isinstance(silent, list):
-        kept["silent_mx"] = [s for s in silent if s.get("name") == named]
-        kept["silent_mx_omitted"] = int(evidence.get("silent_mx_omitted", 0)) + len(silent) - len(kept["silent_mx"])
+    if isinstance(silent, list):  # the entry of the MX named, its cause; the others counted
+        kept["silent_mx"] = silent
+        kept["silent_mx_omitted"] = int(evidence.get("silent_mx_omitted", 0))
     if isinstance(evidence.get("discovery_error"), str):
         kept["discovery_error"], _ = _text(evidence["discovery_error"], SHORT)
     notes = [{"key": n.get("key"), "params": {k: v for k, v in (n.get("params") or {}).items()
