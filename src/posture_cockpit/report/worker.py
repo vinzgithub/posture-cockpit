@@ -4,16 +4,19 @@
 
 The application never runs WeasyPrint itself: WeasyPrint is synchronous, and in the one event loop of
 the instance a report of 117 pages held every page, the API, /healthz and the scans in progress for
-six seconds. report/jobs.py starts ``python -m posture_cockpit.report.worker MEMORY_MB CPU_SECONDS``,
+six seconds. report/jobs.py starts ``python -m posture_cockpit.report.worker MEMORY_MB CPU_SECONDS PARENT``,
 writes the HTML of the report to its standard input and reads the PDF on its standard output.
 
-Before anything else this process bounds its address space (``RLIMIT_AS``, MEMORY_MB) and its processor
-time (``RLIMIT_CPU``, a second guard behind the deadline report/jobs.py enforces): a document beyond
-them stops this process, never the server. On Linux it also asks to be killed if the application stops
-without killing it (``PR_SET_PDEATHSIG``): it never outlives the server. It reads at most
-:data:`MAX_INPUT` bytes, imports WeasyPrint and lays the PDF out. WeasyPrint may fetch the files of the
-report only (:func:`local_files`): report.css and the fonts it declares, by their canonical path under
-:data:`REPORT_DIR`, links resolved; nothing else of the machine, nothing from the network.
+Before anything else, on Linux, this process asks to be killed when the application stops
+(``PR_SET_PDEATHSIG``), then checks that the application, PARENT, is still its parent: had it stopped while
+this process was starting, before the request, nobody would ever send that signal, so this process stops at
+once (:data:`PARENT_GONE`). Should the request fail (prctl refused, not Linux), it says so on its standard
+error and goes on, still bounded below. It then bounds its address space (``RLIMIT_AS``, MEMORY_MB) and its
+processor time (``RLIMIT_CPU``, a second guard behind the deadline report/jobs.py enforces): a document beyond
+them stops this process, never the server. It reads at most :data:`MAX_INPUT` bytes, imports WeasyPrint and
+lays the PDF out. WeasyPrint may fetch the files of the report only (:func:`local_files`): report.css and the
+fonts it declares, by their canonical path under :data:`REPORT_DIR`, links resolved; nothing else of the
+machine, nothing from the network.
 
 This is a hardening, not a sandbox: the process runs as the user of the application and the system would
 let it read what the application reads (the database in /data). It receives the HTML and an environment
@@ -22,14 +25,18 @@ reduced to what it needs, and fetches nothing it was not given.
 The exit status says what happened; report/jobs.py reads it: 0, the PDF is on the standard output;
 :data:`UNAVAILABLE`, WeasyPrint or one of its system libraries is missing (the message of
 error.pdf_unavailable); :data:`TOO_LARGE`, the HTML is beyond :data:`MAX_INPUT`; :data:`NO_MEMORY`, the
-address space was exhausted; anything else, a failure, its message on the standard error.
+address space was exhausted; :data:`PARENT_GONE`, the application was gone before this process started its
+work; anything else, a failure, its message on the standard error.
 """
 
 from __future__ import annotations
 
 import mimetypes
+import os
 import resource
+import signal
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlsplit
@@ -44,6 +51,11 @@ MAX_INPUT = 32 * 2**20
 UNAVAILABLE = 3
 TOO_LARGE = 4
 NO_MEMORY = 5
+PARENT_GONE = 6
+# The option of prctl(2) that sets the signal sent to this process when its parent dies (linux/prctl.h).
+PR_SET_PDEATHSIG = 1
+# How the notice of a refused request begins, on the standard error: report/jobs.py writes it to the log.
+NOT_KILLED = "Not killed with the application"
 
 
 def report_file(url: str, root: Path = REPORT_DIR) -> Path:
@@ -73,18 +85,32 @@ def local_files(root: Path = REPORT_DIR) -> Any:
     return LocalFiles(allowed_protocols={"file"}, allow_redirects=False)
 
 
-def die_with_parent() -> None:
-    """Linux: the system kills this process when the application that started it stops (prctl
-    PR_SET_PDEATHSIG, SIGKILL). Elsewhere, or if the call fails, the limit of processor time remains."""
-    if not sys.platform.startswith("linux"):
-        return
-    try:
-        import ctypes
-        import signal
+def die_with_parent(prctl: Callable[..., int] | None = None) -> str:
+    """Asks the system to kill this process (SIGKILL) when the application that started it stops: prctl
+    PR_SET_PDEATHSIG, on Linux. Returns "" once the request is accepted, else why it is not: not Linux, no
+    prctl in the C library, or its error (the result of prctl checked, errno read). ``prctl``: another
+    function, for the tests. The caller then checks that its parent is still the application."""
+    if prctl is None:
+        if not sys.platform.startswith("linux"):
+            return f"not Linux ({sys.platform})"
+        try:
+            import ctypes
 
-        ctypes.CDLL(None, use_errno=True).prctl(1, signal.SIGKILL)  # 1: PR_SET_PDEATHSIG
-    except (OSError, AttributeError):
-        return
+            libc = ctypes.CDLL(None, use_errno=True)
+            call = libc.prctl
+            call.argtypes = [ctypes.c_int, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_ulong]
+            call.restype = ctypes.c_int
+        except (OSError, AttributeError) as error:
+            return f"prctl unavailable: {error}"
+
+        def prctl(option: int, value: int, *rest: int) -> int:
+            result = int(call(option, value, *rest))
+            return -ctypes.get_errno() if result != 0 else 0
+
+    result = prctl(PR_SET_PDEATHSIG, signal.SIGKILL, 0, 0, 0)
+    if result != 0:
+        return f"prctl(PR_SET_PDEATHSIG) failed: {os.strerror(-result) if result < 0 else result}"
+    return ""
 
 
 def bound(memory_mb: int, cpu_seconds: int) -> None:
@@ -94,8 +120,15 @@ def bound(memory_mb: int, cpu_seconds: int) -> None:
 
 
 def main(argv: list[str]) -> int:
-    memory_mb, cpu_seconds = int(argv[0]), int(argv[1])
-    die_with_parent()
+    memory_mb, cpu_seconds, parent = int(argv[0]), int(argv[1]), int(argv[2])
+    refused = die_with_parent()
+    # After the request, never before: if the application stopped while this process was starting, it is no
+    # longer its parent (the system gave it another), and the signal will never come.
+    if os.getppid() != parent:
+        return PARENT_GONE
+    if refused:  # still bounded: its processor time, the deadline, and its pipes, closed with the application
+        print(f"{NOT_KILLED} ({refused}): bounded by its processor time and deadline only.", file=sys.stderr,
+              flush=True)
     bound(memory_mb, cpu_seconds)
     try:
         html = sys.stdin.buffer.read(MAX_INPUT + 1)

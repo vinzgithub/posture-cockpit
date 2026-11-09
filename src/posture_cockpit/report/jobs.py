@@ -76,8 +76,10 @@ class ReportFailed(Exception):
 
 
 def worker_command(memory_mb: int, timeout: float) -> list[str]:
-    """The command of report/worker.py, with the Python of the application."""
-    return [sys.executable, "-m", "posture_cockpit.report.worker", str(memory_mb), str(int(timeout) + CPU_MARGIN)]
+    """The command of report/worker.py, with the Python of the application: its limits, and the process id of
+    the application, which the process checks is still its parent once it asked to die with it."""
+    return [sys.executable, "-m", "posture_cockpit.report.worker", str(memory_mb), str(int(timeout) + CPU_MARGIN),
+            str(os.getpid())]
 
 
 def worker_environment() -> dict[str, str]:
@@ -162,10 +164,13 @@ async def make_pdf(html: str, *, timeout: float, memory_mb: int, max_output: int
     finally:
         await _stop(job)
     detail = error.decode("utf-8", "replace")
+    for notice in (line for line in detail.splitlines() if line.startswith(worker.NOT_KILLED)):
+        log.warning("PDF report process %d: %s", job.process.pid, notice)  # prctl refused (report/worker.py)
     if status == worker.UNAVAILABLE:
         raise ReportUnavailable(detail)
     if status != 0:
-        reason = {worker.NO_MEMORY: "no_memory", worker.TOO_LARGE: "input_too_large"}.get(status, f"exit {status}")
+        reason = {worker.NO_MEMORY: "no_memory", worker.TOO_LARGE: "input_too_large",
+                  worker.PARENT_GONE: "parent_gone"}.get(status, f"exit {status}")
         raise ReportFailed(reason, detail)
     if not pdf.startswith(b"%PDF-"):
         raise ReportFailed("empty", detail)

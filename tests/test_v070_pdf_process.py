@@ -212,13 +212,13 @@ def test_the_errors_are_kept_to_their_end():
 def test_the_exit_statuses_of_the_process():
     """S04 (corrective 3): WeasyPrint missing gives ReportUnavailable (error.pdf_unavailable, as before); HTML
     beyond its limit, too little memory, an empty answer: ReportFailed, each with its reason."""
-    blocked = script("import sys, runpy\nsys.modules['weasyprint'] = None\n"
-                     "sys.argv = ['worker', '1024', '60']\nrunpy.run_module('posture_cockpit.report.worker', "
-                     "run_name='__main__')")
+    blocked = script("import os, sys, runpy\nsys.modules['weasyprint'] = None\n"
+                     "sys.argv = ['worker', '1024', '60', str(os.getppid())]\n"
+                     "runpy.run_module('posture_cockpit.report.worker', run_name='__main__')")
     with pytest.raises(ReportUnavailable, match="WeasyPrint unavailable"):
         make(command=blocked)
-    small = script("import sys\nimport posture_cockpit.report.worker as w\nw.MAX_INPUT = 10\n"
-                   "sys.exit(w.main(['1024', '60']))")
+    small = script("import os, sys\nimport posture_cockpit.report.worker as w\nw.MAX_INPUT = 10\n"
+                   "sys.exit(w.main(['1024', '60', str(os.getppid())]))")
     with pytest.raises(jobs.ReportFailed, match="input_too_large"):
         make("x" * 100, command=small)
     with pytest.raises(jobs.ReportFailed) as failure:
