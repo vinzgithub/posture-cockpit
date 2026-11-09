@@ -72,6 +72,18 @@ jobs:
             posture-cockpit:ci -c 'pip install --quiet --user "pytest>=8" "pyyaml>=6" && python -m pytest -q -rs -p no:cacheprovider' \
             | tee "$RUNNER_TEMP/pytest.log"
           echo "::notice title=Tests inside the image::$(tail -1 "$RUNNER_TEMP/pytest.log")"
+      # Version 0.7.0, corrective 3: the PDF reports, each in a process of its own, in the image run with the
+      # protections of compose.yaml (read-only system, /tmp in memory, no capability, no-new-privileges,
+      # uid 10001): the event loop never held, the limits, the processes stopped, the same pages as before.
+      - name: PDF reports in a separate process, in the hardened container
+        run: |
+          set -o pipefail
+          docker run --rm --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges \
+            --user 10001:10001 -e HOME=/tmp -e XDG_CACHE_HOME=/tmp/cache -v "$PWD:/checks:ro" -w /checks \
+            --entrypoint sh posture-cockpit:ci -c 'pip install --quiet --user "pytest>=8" "pyyaml>=6" && \
+              python -m pytest -q -rA -p no:cacheprovider tests/test_v070_pdf_process.py tests/test_v070_pdf_server.py' \
+            | tee "$RUNNER_TEMP/pdf.log"
+          echo "::notice title=PDF in the hardened container::$(grep -E '^reports ' "$RUNNER_TEMP/pdf.log" | tail -1)"
 
   # Instances made by the released v0.3.0 (schema 3) and v0.4.0 (schema 4), rebuilt from their tag,
   # and by the official image of v0.4.1 (schema 4, pinned by its digest), then updated to this
