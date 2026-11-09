@@ -621,7 +621,7 @@ def test_the_original_is_given_to_those_who_see_the_scan_only(instance):
     scan_id = s.scans.latest_id(s.scans.domain(DOMAIN)["id"])
     base = f"/domains/{DOMAIN}/history"
     assert i.client.get(f"{base}/{scan_id}/evidence/{CHECK}").status_code == 200  # a new evidence too
-    for path in (f"{base}/{scan_id}/evidence/mail.mx", f"{base}/{scan_id + 1}/evidence/{CHECK}",
+    for path in (f"{base}/{scan_id}/evidence/mail.spf", f"{base}/{scan_id + 1}/evidence/{CHECK}",
                  f"{base}/0/evidence/{CHECK}", f"{base}/abc/evidence/{CHECK}",
                  f"/domains/other.example/history/{scan_id}/evidence/{CHECK}"):
         assert i.client.get(path).status_code == 404, path

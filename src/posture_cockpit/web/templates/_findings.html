@@ -2,7 +2,8 @@
 {# The checks of one scan by category, with the raw values they saw: details.html and history_detail.html.
    Needs: scan, categories, rechecks, summary (the wording of a finding). The evidence of mail.smtp_starttls
    stored before it was bounded (correction 2 of 0.7.0) and beyond its limit is shown bounded (storage/scans.py),
-   never whole: its original, unchanged, is a link away (routes/domains.py, evidence). #}
+   never whole: its original, unchanged, is a link away (routes/domains.py, evidence). So is the evidence of
+   mail.mx and mail.mta_sts stored before correction 4 with lists beyond their bounds (mail_evidence.py). #}
 {% from "_macros.html" import status_icon %}
 {% for category, findings in categories.items() %}
 <section class="panel details" aria-labelledby="cat-{{ category }}">
@@ -22,7 +23,7 @@
         {% if f.outcome.evidence %}
         <details>
           <summary>{{ t('details.evidence') }}</summary>
-          {% set original = f.outcome.evidence.get('bounds', {}) if f.check_id == 'mail.smtp_starttls' else {} %}
+          {% set original = f.outcome.evidence.get('bounds', {}) if f.check_id in ('mail.smtp_starttls', 'mail.mx', 'mail.mta_sts') else {} %}
           {% if original is mapping and original.get('source') == 'display' %}
           <p class="small muted evidence-original"><a href="/domains/{{ scan.domain | urlencode }}/history/{{ scan.id }}/evidence/{{ f.check_id }}" download>{{ t('details.evidence_original', kib='%.0f' % ((original.get('original_bytes') or 0) / 1024)) }}</a></p>
           {% endif %}
