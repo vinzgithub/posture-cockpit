@@ -19,6 +19,13 @@ limits of the measure (addresses, connections, budget, deadline), and how many M
 notes of the evidence are not repeated: the text of every finding already ends with them
 (i18n.finding_summary).
 
+The evidence is bounded when it is stored (checks/smtp_evidence.py, correction 2 of 0.7.0): what it left
+out is said where it was, from its exact counts, never shown as measured: a row per MX for the addresses
+left out, "and N others" for the aliases, the names of a certificate and of a policy; the addresses
+discovered, attempted, conclusive, listed and left out; the stage of reduction when the lists alone did not
+fit (``bounds``); and, for a scan stored before, its evidence bounded only to be shown, the original kept
+whole (storage/scans.py).
+
 Every string from the network (MX names, aliases, banner, certificate names, verification messages, the
 names a policy covers) is data: it is returned as text, bounded for the eye (:data:`SHOWN_CHARS`, and
 :data:`SHOWN_NAMES` names in a list, then how many more), and the templates escape it (autoescape in both
@@ -56,11 +63,15 @@ def _bounded(value: Any) -> str:
     return text if len(text) <= SHOWN_CHARS else text[:SHOWN_CHARS] + "…"
 
 
-def _names(names: Iterable[Any], t: Text, most: int = SHOWN_NAMES) -> str:
-    """Names from the network as one bounded line: each bounded, ``most`` at most, then how many more."""
+def _names(names: Iterable[Any], t: Text, most: int = SHOWN_NAMES, omitted: Any = 0) -> str:
+    """Names from the network as one bounded line: each bounded, ``most`` at most, then how many more,
+    those the evidence left out (``omitted``, its exact count) included."""
     shown = [_bounded(n) for n in names]
+    more = max(len(shown) - most, 0) + int(omitted or 0)
+    if not shown:
+        return t("smtp.names_omitted", n=more) if more else ""
     line = ", ".join(shown[:most])
-    return line + (" " + t("smtp.more", n=len(shown) - most) if len(shown) > most else "")
+    return line + (" " + t("smtp.more", n=more) if more else "")
 
 
 def _long(text: str) -> bool:
@@ -78,10 +89,43 @@ def view(evidence: Mapping[str, Any] | None, t: Text) -> dict[str, Any] | None:
     """The SMTP part of a finding, ready to show; None when the evidence holds no structured result."""
     if not isinstance(evidence, Mapping) or "rule" not in evidence or "readiness" not in evidence:
         return None
+    found = evidence.get("bounds")
+    bounds: Mapping[str, Any] = found if isinstance(found, Mapping) else {}
     return {"rule": evidence["rule"], "readiness": _readiness(evidence["readiness"], t),
             "rows": [row for mx in evidence.get("mx", []) for row in _rows(mx, evidence, t)],
             "limits": _limits(evidence, t), "omitted": int(evidence.get("mx_omitted") or 0),
+            "core": bounds.get("stage") == "core", "counts": _counts(evidence, t),
+            "reduced": _reduced(bounds, t), "display": _display(bounds, t),
             "probe_enabled": bool(evidence.get("probe_enabled"))}
+
+
+def _kib(n: Any) -> str:
+    return f"{int(n or 0) / 1024:.0f}"
+
+
+def _counts(evidence: Mapping[str, Any], t: Text) -> str:
+    """The addresses discovered, attempted, conclusive, listed and left out (A5), when any was left out."""
+    counts = (evidence.get("counts") or {}).get("addresses")
+    if not isinstance(counts, Mapping) or not int(counts.get("omitted") or 0):
+        return ""
+    return t("smtp.counts", **{k: int(counts.get(k) or 0) for k in ("discovered", "attempted", "conclusive",
+                                                                      "represented", "omitted")})
+
+
+def _reduced(bounds: Mapping[str, Any], t: Text) -> str:
+    """The stage of reduction (A4) when the bounded lists alone did not fit, and a core still beyond."""
+    stage = bounds.get("stage")
+    if not stage or stage == "limits":
+        return ""
+    text = t("smtp.reduced", kib=_kib(bounds.get("limit_bytes")), stage=t(f"smtp.stage.{stage}"))
+    return text + (" " + t("smtp.over_limit") if bounds.get("within_limit") is False else "")
+
+
+def _display(bounds: Mapping[str, Any], t: Text) -> str:
+    """An evidence stored before the bounding, bounded only to be shown (A7): its size, the original kept."""
+    if bounds.get("source") != "display":
+        return ""
+    return t("smtp.display_bounded", kib=_kib(bounds.get("original_bytes")), limit=_kib(bounds.get("limit_bytes")))
 
 
 def _readiness(readiness: Mapping[str, Any], t: Text) -> dict[str, Any]:
@@ -90,18 +134,23 @@ def _readiness(readiness: Mapping[str, Any], t: Text) -> dict[str, Any]:
     shown = None
     if isinstance(policy, Mapping):
         shown = {"state": policy.get("state", ""), "label": t(f"{KEY}.policy.{policy.get('state', 'unreadable')}"),
-                 "covered": _names(policy.get("covered", []), t), "uncovered": _names(policy.get("uncovered", []), t)}
+                 "covered": _names(policy.get("covered", []), t, omitted=policy.get("covered_omitted")),
+                 "uncovered": _names(policy.get("uncovered", []), t, omitted=policy.get("uncovered_omitted"))}
     return {"state": state, "label": t(f"{KEY}.readiness.{state}"), "badge": READINESS_BADGES.get(state, "na"),
             "causes": [t(f"{KEY}.readiness.cause.{c}") for c in readiness.get("causes", [])],
             "policy": shown, "scope": t(f"{KEY}.readiness.scope")}
 
 
+def _listed_cause(mx: Mapping[str, Any], evidence: Mapping[str, Any]) -> str:
+    return str(next((s["cause"] for s in evidence.get("silent_mx", []) if s.get("name") == mx.get("name")), "") or "")
+
+
 def _mx_cause(mx: Mapping[str, Any], evidence: Mapping[str, Any]) -> str:
     """The cause proper to this MX: from ``silent_mx`` (F05.08) when the verdict listed it, else from what
     the MX itself shows (an invalid name, beyond the sample, the DNS, no address)."""
-    listed = next((s["cause"] for s in evidence.get("silent_mx", []) if s.get("name") == mx.get("name")), None)
+    listed = _listed_cause(mx, evidence)
     if listed:
-        return str(listed)
+        return listed
     if not mx.get("valid", True):
         return "invalid_name"
     if mx.get("reason") == "sample":
@@ -111,13 +160,19 @@ def _mx_cause(mx: Mapping[str, Any], evidence: Mapping[str, Any]) -> str:
 
 def _rows(mx: Mapping[str, Any], evidence: Mapping[str, Any], t: Text) -> list[dict[str, Any]]:
     base = {"mx": _bounded(mx.get("name", "")), "preference": mx.get("preference"),
-            "cname": _names(mx.get("cname", []), t, SHOWN_ALIASES)}
+            "cname": _names(mx.get("cname", []), t, SHOWN_ALIASES, omitted=mx.get("cname_omitted"))}
+    empty = {"address": "", "family": "", "stage": "", "codes": "", "banner": "", "tls": "", "certificate": []}
     addresses = mx.get("addresses", [])
-    if not addresses:
+    left = int(mx.get("addresses_omitted") or 0)
+    rows = [_wrap({**base, **_address(a, t)}) for a in addresses]
+    if not addresses and (_listed_cause(mx, evidence) or not left):
         cause = _mx_cause(mx, evidence)
-        return [_wrap({**base, "address": "", "family": "", "stage": "", "codes": "", "banner": "", "tls": "",
-                       "certificate": [], "result": t(f"smtp.cause.{cause}"), "kind": "unmeasured", "cause": cause})]
-    return [_wrap({**base, **_address(a, t)}) for a in addresses]
+        rows.append(_wrap({**base, **empty, "result": t(f"smtp.cause.{cause}"), "kind": "unmeasured", "cause": cause}))
+    if left:  # the addresses the evidence left out: never attempted, unless it was reduced to its core
+        core = (evidence.get("bounds") or {}).get("stage") == "core"
+        rows.append(_wrap({**base, **empty, "result": t("smtp.addresses_omitted" if core else "smtp.addresses_untried",
+                                                         n=left), "kind": "left_out", "cause": ""}))
+    return rows
 
 
 def _address(address: Mapping[str, Any], t: Text) -> dict[str, Any]:
@@ -166,10 +221,28 @@ def _certificate(seen: str, dialogue: Mapping[str, Any] | None, reading: Mapping
 
 
 def _certificate_lines(certificate: Mapping[str, Any], t: Text) -> list[str]:
-    names = ", ".join(str(n) for n in certificate.get("names", [])) or certificate.get("subject", "")
-    return [t("smtp.cert.names", names=_bounded(names)),
+    return [t("smtp.cert.names", names=_certificate_names(certificate, t)),
             t("smtp.cert.issuer", issuer=_bounded(certificate.get("issuer", ""))),
             t("smtp.cert.until", date=str(certificate.get("not_after", ""))[:10])]
+
+
+def _certificate_names(certificate: Mapping[str, Any], t: Text) -> str:
+    """The names of a certificate in :data:`SHOWN_CHARS` characters: whole names while they fit (the first
+    bounded when it alone is longer), then how many more, those the evidence left out included."""
+    names = [str(n) for n in certificate.get("names", [])]
+    left = int(certificate.get("names_omitted") or 0)
+    if not names:
+        subject = _bounded(certificate.get("subject", ""))
+        if not left:
+            return subject
+        return f"{subject} {t('smtp.more', n=left)}" if subject else t("smtp.names_omitted", n=left)
+    shown = [_bounded(names[0])]
+    for name in names[1:]:
+        if len(", ".join([*shown, name])) > SHOWN_CHARS:
+            break
+        shown.append(name)
+    more = len(names) - len(shown) + left
+    return ", ".join(shown) + (" " + t("smtp.more", n=more) if more else "")
 
 
 def _limits(evidence: Mapping[str, Any], t: Text) -> str:

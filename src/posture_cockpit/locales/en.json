@@ -835,5 +835,19 @@
   "smtp.readiness": "Readiness for enforce mode",
   "smtp.preference": "preference {n}",
   "smtp.omitted": "{n:other published MX is|other published MX are} not listed in this table nor kept in the evidence: invalid names or beyond the sample, never contacted. Every MX measured is listed.",
-  "smtp.more": "and {n:other|others}"
+  "smtp.more": "and {n:other|others}",
+  "smtp.names_omitted": "{n:name not listed|names not listed}",
+  "smtp.counts": "Addresses: {discovered} discovered, {attempted} attempted of which {conclusive} with a conclusive result, {represented} listed in this table, {omitted} left out.",
+  "smtp.addresses_untried": "{n:published address, never attempted, is|published addresses, never attempted, are} not listed in this table.",
+  "smtp.addresses_omitted": "{n:published address is|published addresses are} not listed in this table.",
+  "smtp.omitted_core": "{n:published MX is|published MX are} not listed in this table nor kept in the evidence, reduced to its core to fit within its size limit; the counts of the measure stay exact.",
+  "smtp.reduced": "Evidence reduced to fit within the limit of {kib} KiB: {stage}. The verdict, its causes and the counts stay exact; what was removed is counted, never shown as measured.",
+  "smtp.stage.extras": "only the addresses attempted are kept",
+  "smtp.stage.mx": "only the addresses attempted and the MX measured, named or standing for a cause are kept",
+  "smtp.stage.diagnostics": "the optional diagnostics (whole replies, EHLO keywords, most certificate names) are removed too",
+  "smtp.stage.observations": "the attempts without a conclusive result keep only their stage and cause",
+  "smtp.stage.essentials": "only the facts that decided are kept for each address",
+  "smtp.stage.core": "only the verdict, its causes, the counts and the MX named are kept",
+  "smtp.over_limit": "Even so, it exceeds this limit: it is kept whole rather than lose the verdict or its counts.",
+  "smtp.display_bounded": "Evidence stored before the evidence was bounded ({kib} KiB): it is shown here bounded to {limit} KiB, and kept unchanged."
 }
