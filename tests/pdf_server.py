@@ -8,7 +8,10 @@ tests/test_v070_pdf_server.py starts it as a separate process, as an instance ru
 
 It builds the application with recorded answers (core/fixture.py), three accounts (vincent, the
 administrator, alice and bob), and scans two domains: example.org, whose MX record lists MX_COUNT
-names (3,000 gives the heaviest report measured, 117 pages), and light.example, a usual one. It serves
+names (3,000 gave the heaviest report measured, 117 pages), and light.example, a usual one. Since
+correction 4 of v0.7.0 bounds the lists of the MX checks, their report is short: a ballast of these names
+(:data:`BALLAST` paragraphs) is added to the HTML of the reports of example.org, so that they stay as heavy
+as they were (about 115 pages for 3,000 MX, laid out for seconds), for the tests of the load. It serves
 on a free port of 127.0.0.1 and writes the port to FOLDER/port and its process id to FOLDER/pid. When
 it stops (SIGTERM, at the end of its shutdown: uvicorn then ends the process by that signal), it writes to
 FOLDER/modules whether WeasyPrint was ever imported in its own process: the reports are laid out in
@@ -22,7 +25,9 @@ import json
 import os
 import socket
 import sys
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 HERE = Path(__file__).resolve().parent
 sys.path[:0] = [str(HERE.parent / "src"), str(HERE)]
@@ -35,12 +40,14 @@ from posture_cockpit.core.fixture import FixtureNetwork  # noqa: E402
 from posture_cockpit.security import hash_password  # noqa: E402
 from posture_cockpit.web import first_run  # noqa: E402
 from posture_cockpit.web.app import create_app  # noqa: E402
+from posture_cockpit.web.routes import report as routes  # noqa: E402
 from posture_cockpit.web.scanning import scan_and_save  # noqa: E402
 from smtp_reference import build  # noqa: E402
 from worlds import DOMAIN, healthy  # noqa: E402
 
 LIGHT = "light.example"
 MX1 = "mx.example.net"
+BALLAST = 7  # paragraphs of the MX names added to the reports of example.org (about 115 pages for 3,000)
 
 
 def worlds(mx_count: int) -> dict[str, dict]:
@@ -51,8 +58,22 @@ def worlds(mx_count: int) -> dict[str, dict]:
     return {DOMAIN: heavy, LIGHT: json.loads(json.dumps(healthy()).replace(DOMAIN, LIGHT))}
 
 
+def heavy(render: Callable[..., str], mx_count: int) -> Callable[..., str]:
+    """``render`` (render_html), the reports of example.org made as heavy as before correction 4."""
+    names = ", ".join(f"a{i}.example.org" for i in range(mx_count))
+
+    def render_html(catalog: Any, lang: str, scan: Any, *args: Any, **options: Any) -> str:
+        html = render(catalog, lang, scan, *args, **options)
+        if scan.domain != DOMAIN:
+            return html
+        return html.replace("</body>", f"<p>{names}</p>" * BALLAST + "</body>")
+
+    return render_html
+
+
 def main(folder: Path, mx_count: int) -> None:
     known = worlds(mx_count)
+    routes.render_html = heavy(routes.render_html, mx_count)
 
     def network(domain: str) -> FixtureNetwork:
         return FixtureNetwork(known.get(domain, {"dns": {f"{domain} SOA": None}}))

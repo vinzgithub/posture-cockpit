@@ -4,7 +4,8 @@
 
 tests/pdf_server.py runs an instance as a separate process, as in production: one uvicorn worker, one event
 loop. example.org lists 3,000 MX names: its report, 117 pages, held that loop for six seconds before this
-correction. What is checked here, from outside, as a person or a monitor sees it:
+correction (since correction 4, the server adds these names to its HTML, so that it stays as heavy: see
+tests/pdf_server.py). What is checked here, from outside, as a person or a monitor sees it:
 
 - two reports at once (alice and bob): /healthz keeps answering at once, all along; a third person and a
   second report of the same person are refused at once, without a process; a recheck runs as usual; once
