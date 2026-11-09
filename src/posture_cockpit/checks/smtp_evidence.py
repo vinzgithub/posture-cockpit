@@ -19,7 +19,8 @@ bounded, and the number of what it left out is kept beside it (``*_omitted``), e
   entry by entry, never by name alone (R1 of the review of PR #50);
 - the addresses of an MX: every address attempted, with its observations, then :data:`EXTRA_ADDRESSES`
   not attempted (A3), never shown as measured: their ``seen`` stays ``unmeasured`` with its cause;
-- the names of a certificate (:data:`CERTIFICATE_NAMES`, the MX name first when it is one of them), the
+- the names of a certificate (:data:`CERTIFICATE_NAMES`, the MX name first when it is one of them: one
+  occurrence moved, a repeated name kept and counted like any other, R2 of the review of PR #50), the
   names and patterns of the policy (:data:`POLICY_NAMES`, the MX kept first), the aliases of an MX, the
   items of a list in a note (:data:`NOTE_ITEMS`, then "…", the count of the note staying exact).
 
@@ -281,10 +282,14 @@ def _text(value: Any, most: int) -> tuple[Any, bool]:
 
 
 def _certificate(certificate: dict[str, Any], mx_name: str, most: int, chars: int) -> bool:
-    """The names of a certificate: the MX name first when it is one of them, then the others in their order."""
+    """The names of a certificate: the MX name first when it is one of them (its first occurrence, moved; any
+    other occurrence stays where it was), then the others in their order; kept and omitted add up to them."""
     cut = False
     names = [str(n) for n in certificate.get("names", [])]
-    ordered = ([mx_name] if mx_name in names else []) + [n for n in names if n != mx_name or mx_name not in names]
+    ordered = names
+    if mx_name in names:
+        at = names.index(mx_name)
+        ordered = [names[at], *names[:at], *names[at + 1:]]
     if len(ordered) > most:
         certificate["names_omitted"] = int(certificate.get("names_omitted", 0)) + len(ordered) - most
         cut = True
