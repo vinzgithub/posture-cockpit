@@ -50,8 +50,9 @@ alias), RFC 5321 §5.1.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from dataclasses import dataclass
+import functools
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass, replace
 from datetime import datetime
 from enum import StrEnum
 from typing import Any
@@ -59,6 +60,7 @@ from typing import Any
 from ..core import Effort, Outcome, Remedy, fail, na, not_evaluated, ok, warn
 from ..core.network import SmtpObservation
 from ..core.smtp import Attempt, Reason, Reply
+from . import smtp_evidence
 from .records import MtaStsPolicy, mx_matches
 from .smtp_measure import AddressProbe, MxProbe, ProbeResult
 from .tls import EXPIRY_CRITICAL_DAYS, EXPIRY_WARNING_DAYS
@@ -218,6 +220,25 @@ def _expiring(addresses: list[AddressProbe], now: datetime) -> list[tuple[int, A
 
 
 # ---------------------------------------------------------------- the verdict: matrix F05, top to bottom
+Decide = Callable[["ProbeResult | None", "PolicyView | None", datetime], Outcome]
+
+
+def _stored(verdict: Decide) -> Decide:
+    """The outcome of :func:`decide` with the evidence that is stored (correction 2): bounded by
+    smtp_evidence.bound once every part of it, ``silent_mx`` included, is assembled, keeping the MX the
+    message names. The status, the message, its parameters, the remedy and the signals are untouched: the
+    bounding shapes what is kept, never what is decided."""
+
+    @functools.wraps(verdict)
+    def stored(probe: ProbeResult | None, policy: PolicyView | None, now: datetime) -> Outcome:
+        outcome = verdict(probe, policy, now)
+        named = str(outcome.params.get("host", ""))
+        return replace(outcome, evidence=smtp_evidence.bound(outcome.evidence, named=named))
+
+    return stored
+
+
+@_stored
 def decide(probe: ProbeResult | None, policy: PolicyView | None, now: datetime) -> Outcome:
     """The verdict of mail.smtp_starttls. ``probe`` is None when the probe is off (nothing was asked);
     ``policy`` is None when no policy was read (probe off, or no MX)."""
@@ -384,18 +405,18 @@ def _notes(probe: ProbeResult) -> list[dict[str, Any]]:
         if seen(address) is Seen.UNMEASURED:
             untested.setdefault(unmeasured(address), []).append(address.address)
     for cause in sorted(untested, key=CAUSE_ORDER.index):
-        notes.append({"key": f"{KEY}.note.untested.{cause}", "params": {
-            "addresses": ", ".join(untested[cause]), "n": len(untested[cause])}})
+        notes.append({"key": f"{KEY}.note.untested.{cause}",
+                      "params": _listed("addresses", untested[cause], n=len(untested[cause]))})
     beyond = [m.name for m in probe.mx if m.reason == "sample"]
     if beyond:  # F05.11: never ready on a sample
-        notes.append({"key": f"{KEY}.note.sample", "params": {"hosts": ", ".join(beyond), "n": len(beyond)}})
+        notes.append({"key": f"{KEY}.note.sample", "params": _listed("hosts", beyond, n=len(beyond))})
     incomplete = [m.name for m in probe.mx if m.valid and m.reason != "sample"
                   and (m.dns_errors or not m.discovery_complete)]
     if incomplete:  # F05.11
-        notes.append({"key": f"{KEY}.note.dns_incomplete", "params": {"hosts": ", ".join(incomplete)}})
+        notes.append({"key": f"{KEY}.note.dns_incomplete", "params": _listed("hosts", incomplete)})
     for mx in probe.mx:
         if mx.cname:  # F05.12: a publication anomaly, never a TLS failure; the MX name stays the TLS name
-            notes.append({"key": f"{KEY}.note.cname", "params": {"host": mx.name, "target": ", ".join(mx.cname)}})
+            notes.append({"key": f"{KEY}.note.cname", "params": {"host": mx.name, **_listed("target", list(mx.cname))}})
     for address in probe.addresses:
         if seen(address) is Seen.CERTIFICATE_REFUSED and address.reading is None and not address.reading_interrupted:
             # F03: no reading of the certificate (budget or one already made for this MX): what the
@@ -408,35 +429,35 @@ def _notes(probe: ProbeResult) -> list[dict[str, Any]]:
     return notes
 
 
-EVIDENCE_MX = 16  # MX kept in the evidence: every MX resolved (MAX_MX at most), then others: bounds the stored JSON
+def _listed(key: str, items: list[str], **params: int) -> dict[str, Any]:
+    """The parameters of a note listing ``items``: NOTE_ITEMS of them then "…", how many were left out
+    (``omitted``), and the exact counts given (``n``), which the text says."""
+    text, left = smtp_evidence.listed(items)
+    return {key: text, **params, **({"omitted": left} if left else {})}
 
 
-def _kept(probe: ProbeResult) -> list[MxProbe]:
-    """The MX kept in the evidence, in the order of the probe (preference, then name).
-
-    Every MX the probe resolved, with all its addresses and observations: those are the measures, and
-    the verdict rests on them (R1 of the review of PR-D: a valid MX after many invalid names is kept).
-    In the room left up to EVIDENCE_MX, the MX never resolved nor contacted (an invalid name, beyond the
-    sample), in that order too. The resolved MX are MAX_MX at most, fewer than EVIDENCE_MX: the list is
-    bounded whatever the DNS publishes; ``mx_omitted`` says how many were left out."""
-    resolved = [i for i, m in enumerate(probe.mx) if m.valid and not m.cause]
-    others = [i for i, m in enumerate(probe.mx) if not (m.valid and not m.cause)]
-    kept = sorted(resolved + others[:max(EVIDENCE_MX - len(resolved), 0)])
-    return [probe.mx[i] for i in kept]
+EVIDENCE_MX = smtp_evidence.EVIDENCE_MX  # MX kept in the stored evidence beyond those the measure needs
 
 
 def _evidence(probe: ProbeResult | None, rule: str, ready: dict[str, Any],
               notes: list[dict[str, Any]]) -> dict[str, Any]:
-    """The structured proof (§5): bounded, without a secret, the same keys on every line of F05. The
-    policy as it was evaluated is in ``readiness`` (F06), with the state and its causes."""
+    """The structured proof (§5), whole: without a secret, the same keys on every line of F05; the policy
+    as it was evaluated is in ``readiness`` (F06). Every MX and every address is in it, with the exact
+    counts of the addresses (``counts``, A5 of correction 2); what is stored of it is bounded once the
+    outcome is assembled (:func:`_stored`, smtp_evidence.bound)."""
     evidence: dict[str, Any] = {"rule": rule, "probe_enabled": probe is not None and probe.enabled,
                                 "perspective": PERSPECTIVE, "readiness": ready}
     if probe is not None:
-        kept = _kept(probe)
+        shown = [seen(a) for a in probe.addresses]
         evidence.update({
             "deadline": probe.deadline, "deadline_reached": probe.deadline_reached,
             "exhaustivity": probe.exhaustivity(), "null_mx": probe.null_mx,
-            "mx": [_mx(m) for m in kept], "mx_omitted": len(probe.mx) - len(kept)})
+            "counts": {"addresses": {
+                "discovered": len(shown),
+                "attempted": sum(bool(a.observations or a.interrupted) for a in probe.addresses),
+                "conclusive": sum(s is not Seen.UNMEASURED for s in shown),
+                **{s.value: shown.count(s) for s in Seen}}},
+            "mx": [_mx(m) for m in probe.mx]})
         if probe.discovery_error:
             evidence["discovery_error"] = probe.discovery_error
     if notes:
