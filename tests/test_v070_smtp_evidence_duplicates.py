@@ -22,7 +22,7 @@ from posture_cockpit.report import render_html
 from posture_cockpit.web.routes.api import _summary
 from smtp_reference import CHECK, build, certificate
 from test_v070_smtp_display import Instance, rows, smtp_part
-from test_v070_smtp_evidence_bounds import add_up, certificates, descend, measured, stored
+from test_v070_smtp_evidence_bounds import add_up, certificates, descend, measured, rich, stored
 from worlds import DOMAIN, scan_smtp
 
 MX1 = "mx.example.net"
@@ -117,6 +117,30 @@ def test_r1_every_stage_keeps_sixteen_entries_at_most_down_to_the_core():
     assert core["silent_mx"] == [{"name": BAD, "cause": "invalid_name"}]
     assert (core["mx_omitted"], core["silent_mx_omitted"], core["rule"]) == (1000, 999, "F05.08")
     assert core["readiness"]["state"] == whole["readiness"]["state"]
+
+
+def test_r1_every_stage_with_a_thousand_duplicates_beside_a_measured_mx():
+    """F05.06, F03, R1 (review of PR #50): the world where every stage has something to take, its 200 invalid
+    names replaced by a thousand records of one name at a thousand preferences: the seven stages are reached
+    in their order, each keeping sixteen entries at most, the duplicated name once from the stage of the MX
+    on, the omissions exact, the verdict as decide() gives it."""
+    world = rich([(i + 2, BAD) for i in range(1000)])
+    whole, finding = measured(world)
+    assert verdict(finding) == verdict(whole_verdict(world)) and finding.outcome.params["host"] == MX1
+    add_up(whole, finding.outcome.evidence, MX1)
+    found = descend(whole, MX1)
+    assert [e["bounds"]["stage"] for e in found] == list(STAGES)
+    for evidence in found:
+        names = [m["name"] for m in evidence["mx"]]
+        assert len(names) <= EVIDENCE_MX and len(names) + evidence["mx_omitted"] == len(whole["mx"]) == 1041
+        # Up to the stage of the MX: the eight MX measured (MX1, far0 to far6), BAD and far7 for their causes,
+        # then six more entries of BAD in their order; from it, BAD once for its cause; the core, MX1 only.
+        stage = STAGES.index(evidence["bounds"]["stage"])
+        assert names.count(BAD) == (7 if stage < STAGES.index("mx") else 0 if stage == len(STAGES) - 1 else 1)
+        assert size(evidence) <= evidence["bounds"]["limit_bytes"]
+    far = [f"far{n}.example.net" for n in range(8)]
+    assert [m["name"] for m in found[STAGES.index("mx")]["mx"]] == [MX1, BAD, *far]
+    assert [m["name"] for m in found[-1]["mx"]] == [MX1]
 
 
 def test_r1_duplicates_at_several_preferences():

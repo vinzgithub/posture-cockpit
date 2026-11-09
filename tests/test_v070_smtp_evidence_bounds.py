@@ -211,10 +211,10 @@ def test_the_limits_of_each_list():
 
 
 # ------------------------------------------------------------------ the stages beyond the limits (A4)
-def rich() -> dict:
+def rich(invalid: list[tuple[int, str]] | None = None) -> dict:
     """One MX measured: 4,000 addresses, seven verified with a certificate of 41 long names, four refused (one
-    read for the diagnosis, with as many names), four silent; 200 invalid MX, 40 beyond the sample; a policy
-    covering 41 MX; ten aliases. Each stage beyond the limits has something to take from it."""
+    read for the diagnosis, with as many names), four silent; 200 invalid MX (or ``invalid``), 40 beyond the
+    sample; a policy covering 41 MX; ten aliases. Each stage beyond the limits has something to take from it."""
     names = [MX1] + [f"n{i:02d}." + "a" * 60 + "." + "b" * 60 + "." + "c" * 60 + ".example" for i in range(40)]
     refused = {"verify": {"reason": "certificate_refused", "verify_code": 62, "verify_message": "Hostname mismatch"},
                "read_certificate": {"reason": "tls_unverified", "certificate": {"names": names}}}
@@ -222,7 +222,7 @@ def rich() -> dict:
     outcomes = {**{v4(i): certificate(60, names) for i in range(7)}, **{v4(i): refused for i in range(7, 11)},
                 **{v4(i): "timeout" for i in range(11, 15)}}
     far = [f"far{i}.example.net" for i in range(40)]
-    invalid = [(i + 2, f"x{i}_.example") for i in range(200)]
+    invalid = invalid if invalid is not None else [(i + 2, f"x{i}_.example") for i in range(200)]
     return build([(1, MX1), *invalid, *((300 + i, f) for i, f in enumerate(far))],
                  {MX1: found}, {MX1: outcomes}, policy="testing", covered=[MX1, *far],
                  **{f"{MX1} CNAME": [f"alias{i}.example.org." for i in range(10)]})
