@@ -15,6 +15,11 @@ report of an internal perimeter is marked for restricted distribution.
 The HTML is rendered with Jinja (report.html, report.css) and turned into PDF
 by WeasyPrint. WeasyPrint needs the Pango library; when it is missing the rest
 of the application keeps working and only this report is unavailable.
+
+The web application never runs WeasyPrint itself (version 0.7.0, corrective 3):
+it renders the HTML here and has report/worker.py lay the PDF out in a process
+of its own (report/jobs.py). build_pdf and build_unreadable_pdf make the same
+PDF in the calling process, for the tests and the commands.
 """
 
 from __future__ import annotations
@@ -222,14 +227,18 @@ def build_pdf(catalog: Catalog, lang: str, scan: Scan, author: str = "", tz: tzi
     return HTML(string=html, base_url=str(REPORT_DIR)).write_pdf()
 
 
-def build_unreadable_pdf(catalog: Catalog, lang: str) -> bytes:
-    """A localized error document; never render untrusted stored outcomes as a report."""
+def unreadable_html(catalog: Catalog, lang: str) -> str:
+    """The HTML of the localized error document of an unreadable scan: never its stored outcomes."""
     from html import escape
 
+    message = escape(catalog.text(lang, "error.scan_unreadable"))
+    return f'<html lang="{escape(lang)}"><meta charset="utf-8"><body><p>{message}</p></body></html>'
+
+
+def build_unreadable_pdf(catalog: Catalog, lang: str) -> bytes:
+    """A localized error document; never render untrusted stored outcomes as a report."""
     try:
         from weasyprint import HTML
     except (ImportError, OSError) as error:
         raise ReportUnavailable(str(error)) from error
-    message = escape(catalog.text(lang, "error.scan_unreadable"))
-    html = f'<html lang="{escape(lang)}"><meta charset="utf-8"><body><p>{message}</p></body></html>'
-    return HTML(string=html).write_pdf()
+    return HTML(string=unreadable_html(catalog, lang)).write_pdf()

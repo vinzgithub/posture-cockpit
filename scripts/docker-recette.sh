@@ -191,6 +191,10 @@ install_recette() {  # install_recette IMAGE VERSION
   status=$(curl -sS -o "$WORK/report.pdf" -w '%{http_code}' -b "$WORK/$fresh/cookies" "$(url "$fresh" /domains/menuiserie-dupont.example/report.pdf)")
   if [ "$status" != 200 ] || [ "$(head -c 5 "$WORK/report.pdf")" != "%PDF-" ]; then fail "PDF report: $status"; fi
   ok "PDF report generated in the image"
+  # 0.7.0, corrective 3: the report is laid out in a process of its own, gone once the PDF is sent.
+  in_container "$fresh" python -c 'import pathlib, sys; name = b"posture_cockpit.report." + b"worker"; sys.exit(any(name in p.read_bytes() for p in pathlib.Path("/proc").glob("[0-9]*/cmdline")))' \
+    || fail "a process of a PDF report is still running"
+  ok "no process of a PDF report left in the container"
   expect_output "schema $schema (up to date), 1 account(s), 1 domain(s), 1 scan(s)" in_container "$fresh" posture-cockpit info
   ok "posture-cockpit info"
 

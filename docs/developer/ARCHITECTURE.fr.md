@@ -50,7 +50,7 @@ Ce document est la carte du code : où se trouve quoi, comment une analyse circu
 | `web/views.py` | Transforme une analyse en ce qu'affiche la page du plan (textes, gains, étapes) |
 | `web/routes/` | Un module par zone : `auth`, `account`, `admin`, `perimeters`, `domains`, `report`, `api` |
 | `web/templates/`, `web/static/` | Gabarits Jinja, une feuille de style, un petit script, les polices |
-| `report/` | Le rapport PDF : contexte, gabarit, style et polices |
+| `report/` | Le rapport PDF : contexte, gabarit, style et polices ; `worker.py` le met en page dans un processus à part, `jobs.py` lance ce processus depuis le web (0.7.0 : jamais WeasyPrint dans la boucle d'événements) |
 | `locales/` | Les textes de l'interface et du rapport (`fr.json`, `en.json`) |
 | `demo/` | Les réponses enregistrées du domaine de démonstration |
 | `cli.py` | `posture-cockpit scan`, `extensions`, outils de secours des comptes, `backup`, `check-backup`, `restore`, `info` |
