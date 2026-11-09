@@ -50,7 +50,7 @@ This document is the map of the code: where things are, how a scan flows, and ho
 | `web/views.py` | Turns a scan into what the plan page shows (texts, gains, steps) |
 | `web/routes/` | One module per area: `auth`, `account`, `admin`, `perimeters`, `domains`, `report`, `api` |
 | `web/templates/`, `web/static/` | Jinja templates, one stylesheet, one small script, the fonts |
-| `report/` | The PDF report: context, template, style and fonts |
+| `report/` | The PDF report: context, template, style and fonts; `worker.py` lays it out in a process of its own, `jobs.py` starts that process from the web (0.7.0: never WeasyPrint in the event loop) |
 | `locales/` | Texts of the interface and the report (`fr.json`, `en.json`) |
 | `demo/` | Recorded answers of the demo domain |
 | `cli.py` | `posture-cockpit scan`, `extensions`, account rescue tools, `backup`, `check-backup`, `restore`, `info` |

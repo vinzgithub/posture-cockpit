@@ -92,6 +92,9 @@ Avec Docker, ces réglages se mettent dans le fichier `.env` (`NOM=valeur`, voir
 | `POSTURE_COCKPIT_INTERNAL_SCANS` | `false` | `true` pour permettre aux administrateurs de créer des périmètres internes |
 | `POSTURE_COCKPIT_MAX_CONCURRENT_SCANS` | `4` | Analyses simultanées sur l'instance |
 | `POSTURE_COCKPIT_SCANS_PER_HOUR` | `30` | Analyses par compte et par heure (une revérification n'en consomme pas) |
+| `POSTURE_COCKPIT_MAX_CONCURRENT_REPORTS` | `2` | Rapports PDF créés en même temps sur l'instance, de 1 à 8 ; un seul à la fois par compte. Un rapport au-delà est refusé aussitôt, avec un message |
+| `POSTURE_COCKPIT_REPORT_TIMEOUT` | `60` | Secondes accordées à chaque rapport PDF, de 10 à 600, du démarrage de son processus au dernier octet ; au-delà, il est arrêté, avec un message |
+| `POSTURE_COCKPIT_REPORT_MEMORY_MB` | `1024` | Espace d'adressage du processus de chaque rapport PDF, en Mio, de 256 à 8192 (`RLIMIT_AS` : mémoire virtuelle, pas la mémoire réellement utilisée, environ 110 Mio pour le rapport le plus lourd) |
 | `POSTURE_COCKPIT_TIMEZONE` | `TZ`, sinon UTC | Fuseau des pages et des rapports PDF (nom IANA, par exemple `Europe/Paris`). La base et l'API restent en UTC |
 | `POSTURE_COCKPIT_SESSION_COOKIE` | `posture_cockpit` | Nom du cookie de session : à changer pour une deuxième instance à la même adresse (ci-dessous) |
 | `FORWARDED_ALLOW_IPS` | – | Adresse du proxy inverse, pour que les essais limités comptent la vraie adresse du client |
@@ -318,6 +321,8 @@ POSTURE_COCKPIT_DATA_DIR=/var/lib/posture-cockpit \
 ```
 
 Sans Pango, tout fonctionne sauf le rapport PDF, qui affiche un message.
+
+Chaque rapport PDF est mis en page dans un processus à part, lancé par l'application avec son propre Python (`python -m posture_cockpit.report.worker`) : les pages, l'API et `/healthz` continuent de répondre pendant sa création. Ses limites sont `POSTURE_COCKPIT_MAX_CONCURRENT_REPORTS`, `POSTURE_COCKPIT_REPORT_TIMEOUT` et `POSTURE_COCKPIT_REPORT_MEMORY_MB` (tableau ci-dessus) ; une valeur hors bornes ou qui n'est pas un nombre entier empêche le démarrage, avec sa raison. Le processus reçoit le HTML du rapport et ne lit que sa feuille de style et ses polices, jamais le réseau ; il tourne sous l'utilisateur de l'application (un durcissement, pas un bac à sable). Avec Docker, rien à changer : il fonctionne avec `read_only`, `cap_drop: ALL` et `no-new-privileges`. La mémoire du conteneur n'est pas limitée par `compose.yaml` ; ajoutez une limite (`mem_limit`) si votre hôte en a besoin.
 
 ## Secours
 

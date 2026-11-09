@@ -92,6 +92,9 @@ With Docker, these settings go in the `.env` file (`NAME=value`, see above).
 | `POSTURE_COCKPIT_INTERNAL_SCANS` | `false` | `true` to let administrators create internal perimeters |
 | `POSTURE_COCKPIT_MAX_CONCURRENT_SCANS` | `4` | Scans running at the same time on the instance |
 | `POSTURE_COCKPIT_SCANS_PER_HOUR` | `30` | Scans per account and per hour (checking one fix again does not count) |
+| `POSTURE_COCKPIT_MAX_CONCURRENT_REPORTS` | `2` | PDF reports made at the same time on the instance, from 1 to 8; one at a time per account. A report over the limit is refused at once, with a message |
+| `POSTURE_COCKPIT_REPORT_TIMEOUT` | `60` | Seconds allowed to each PDF report, from 10 to 600, from the start of its process to the last byte; beyond, it is stopped, with a message |
+| `POSTURE_COCKPIT_REPORT_MEMORY_MB` | `1024` | Address space of the process of each PDF report, in MiB, from 256 to 8192 (`RLIMIT_AS`: virtual memory, not the memory really used, about 110 MiB for the heaviest report) |
 | `POSTURE_COCKPIT_TIMEZONE` | `TZ`, else UTC | Time zone of pages and PDF reports (IANA name, e.g. `Europe/Paris`). The database and the API stay in UTC |
 | `POSTURE_COCKPIT_SESSION_COOKIE` | `posture_cockpit` | Name of the session cookie: change it for a second instance at the same address (below) |
 | `FORWARDED_ALLOW_IPS` | – | Address of the reverse proxy, so the attempt limit counts the real client address |
@@ -318,6 +321,8 @@ POSTURE_COCKPIT_DATA_DIR=/var/lib/posture-cockpit \
 ```
 
 Without Pango, everything works except the PDF report, which shows a message.
+
+Each PDF report is laid out in a process of its own, started by the application with its own Python (`python -m posture_cockpit.report.worker`): the pages, the API and `/healthz` keep answering while it is made. Its limits are `POSTURE_COCKPIT_MAX_CONCURRENT_REPORTS`, `POSTURE_COCKPIT_REPORT_TIMEOUT` and `POSTURE_COCKPIT_REPORT_MEMORY_MB` (table above); a value out of bounds or not a whole number stops the start, with its reason. The process receives the HTML of the report and reads only its stylesheet and fonts, never the network; it runs as the user of the application (a hardening, not a sandbox). With Docker nothing is to be changed: it works with `read_only`, `cap_drop: ALL` and `no-new-privileges`. The memory of the container is not limited by `compose.yaml`; add a limit (`mem_limit`) if your host needs one.
 
 ## Rescue
 
