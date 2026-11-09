@@ -33,6 +33,7 @@ from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import Any
 
+from ..checks import smtp_evidence
 from ..core import generation, scoring
 from ..core.compare import SMTP_CHECK, measurement_scope
 from ..core.engine import ScanResult
@@ -106,7 +107,19 @@ def _stored_finding(check_id: str, category: str, weight: int, status: str, payl
         raise ValueError("non-finite floor")
     if family.get("name") == "https" and family.get("role") == "root" and check_id != HTTPS_ROOT_CHECK:
         raise ValueError("false HTTPS root")
+    if check_id == SMTP_CHECK and len(payload) > smtp_evidence.LIMIT_BYTES and isinstance(data.get("evidence"), dict):
+        data["evidence"] = _shown_smtp(data["evidence"], data.get("params") or {})
     return Finding.from_stored(check_id, category, weight, status, data)
+
+
+def _shown_smtp(evidence: dict[str, Any], params: dict[str, Any]) -> dict[str, Any]:
+    """An evidence of mail.smtp_starttls stored before it was bounded (correction 2 of v0.7.0) and beyond
+    the limit, bounded to be read (details, PDF, API, history, rechecks), never rewritten: the database
+    keeps it as it was, and :meth:`Scans.stored_evidence` gives it whole. An evidence within the limit, or
+    bounded when it was made, is read as stored."""
+    if "bounds" in evidence or smtp_evidence.size(evidence) <= smtp_evidence.LIMIT_BYTES:
+        return evidence
+    return smtp_evidence.bound(evidence, named=str(params.get("host", "")), original=True)
 
 
 def _finding(row: Row) -> Finding:
@@ -197,6 +210,16 @@ class Scans:
     def latest(self, domain_id: int) -> Scan | None:
         scan_id = self.latest_id(domain_id)
         return self.get(scan_id) if scan_id else None
+
+    def stored_evidence(self, scan_id: int, check_id: str) -> dict[str, Any] | None:
+        """The evidence of a finding as the database keeps it, never bounded nor rewritten: its recheck when
+        there is one, as the pages show the finding (correction 2 of v0.7.0, A7). None when there is none."""
+        row = (self.db.one("SELECT outcome FROM rechecks WHERE scan_id=? AND check_id=?", (scan_id, check_id))
+               or self.db.one("SELECT outcome FROM findings WHERE scan_id=? AND check_id=?", (scan_id, check_id)))
+        if row is None:
+            return None
+        evidence = json.loads(row["outcome"]).get("evidence")
+        return evidence if isinstance(evidence, dict) else None
 
     def latest_id(self, domain_id: int) -> int | None:
         """The number of the latest scan of a domain: the one the plan of fixes shows."""
