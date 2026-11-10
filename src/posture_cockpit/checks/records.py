@@ -313,12 +313,18 @@ def parse_mta_sts_policy(body: str) -> MtaStsPolicy:
     else:
         errors.append("max_age")
     mx = tuple(p.lower().rstrip(".") for p in fields.get("mx", []))
-    hostname = r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+"
-    if (mode in ("enforce", "testing") and not mx) or any(
-        not re.fullmatch(r"(?:\*\.)?" + hostname, pattern) for pattern in mx
-    ):
+    if (mode in ("enforce", "testing") and not mx) or not all(mx_pattern_ok(pattern) for pattern in mx):
         errors.append("mx")
     return MtaStsPolicy(mode, mx, max_age, tuple(errors))
+
+
+_HOSTNAME = r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+"
+
+
+def mx_pattern_ok(pattern: str) -> bool:
+    """A pattern of the "mx" field as the policy reads it (lower case, no root's dot): a host name, or
+    ``*.`` and a host name (§3.2). Version 0.7.0, correction 4: the evidence keeps the invalid ones first."""
+    return bool(re.fullmatch(r"(?:\*\.)?" + _HOSTNAME, pattern))
 
 
 def mx_matches(pattern: str, host: str) -> bool:

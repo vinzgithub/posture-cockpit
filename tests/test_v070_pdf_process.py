@@ -77,11 +77,14 @@ def make(html: str = "<p>x</p>", **options) -> bytes:
 
 
 def alive(pid: int) -> bool:
+    """Whether a process exists and is not a zombie. A process reaped while its state is read is gone too: /proc
+    then raises (ProcessLookupError, an OSError), as in the hardened container, whose first process reaps the
+    orphans at once."""
     try:
         os.kill(pid, 0)
-    except ProcessLookupError:
+        return Path(f"/proc/{pid}/stat").read_text().split()[2] != "Z"
+    except OSError:
         return False
-    return Path(f"/proc/{pid}/stat").exists() and Path(f"/proc/{pid}/stat").read_text().split()[2] != "Z"
 
 
 def script(code: str) -> list[str]:

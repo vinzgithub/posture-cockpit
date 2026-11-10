@@ -33,7 +33,7 @@ from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import Any
 
-from ..checks import smtp_evidence
+from ..checks import mail_evidence, smtp_evidence
 from ..core import generation, scoring
 from ..core.compare import SMTP_CHECK, measurement_scope
 from ..core.engine import ScanResult
@@ -109,6 +109,8 @@ def _stored_finding(check_id: str, category: str, weight: int, status: str, payl
         raise ValueError("false HTTPS root")
     if check_id == SMTP_CHECK and len(payload) > smtp_evidence.LIMIT_BYTES and isinstance(data.get("evidence"), dict):
         data["evidence"] = _shown_smtp(data["evidence"], data.get("params") or {})
+    if check_id in mail_evidence.CHECKS:
+        mail_evidence.shown(check_id, data)  # stored before correction 4: bounded to be shown, never rewritten
     return Finding.from_stored(check_id, category, weight, status, data)
 
 

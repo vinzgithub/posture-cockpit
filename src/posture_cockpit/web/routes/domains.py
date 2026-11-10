@@ -21,6 +21,7 @@ from fastapi.responses import Response
 from starlette.datastructures import FormData
 from starlette.exceptions import HTTPException
 
+from ...checks.mail_evidence import CHECKS as MAIL_BOUNDED
 from ...core import providers, schedule_time, scoring
 from ...core.compare import SMTP_CHECK, Snapshot, compare
 from ...core.engine import normalize_domain
@@ -53,6 +54,8 @@ from ..views import plan_view
 
 router = APIRouter(prefix="/domains")
 HISTORY_PAGE_SIZE = 20  # the default of Scans.history_page
+# The checks whose evidence of an older scan is shown bounded, and downloaded whole (A7; correction 4).
+ORIGINAL_EVIDENCE = (SMTP_CHECK, *MAIL_BOUNDED)
 
 
 def list_page(request: Request, user: Row, status: int = 200, **context):
@@ -331,14 +334,15 @@ async def history_detail(request: Request, name: str, scan_id: str, user: Row = 
 @router.get("/{name}/history/{scan_id}/evidence/{check_id}")
 async def stored_evidence(request: Request, name: str, scan_id: str, check_id: str,
                           user: Row = Depends(require_user)):
-    """The evidence of mail.smtp_starttls of one stored analysis, as the database keeps it, as a JSON file
-    (version 0.7.0, correction 2, A7): an evidence stored before the bounding is shown bounded, this gives it
-    whole, never rewritten; the recheck when there is one, as the pages show it. The domain and the scan are
-    checked like every page of the history; any other check, scan or domain is a 404."""
+    """The evidence of mail.smtp_starttls, mail.mx or mail.mta_sts (:data:`ORIGINAL_EVIDENCE`) of one stored
+    analysis, as the database keeps it, as a JSON file (version 0.7.0, correction 2, A7; correction 4 for
+    the last two): an evidence stored before the bounding is shown bounded, this gives it whole, never
+    rewritten; the recheck when there is one, as the pages show it. The domain and the scan are checked like
+    every page of the history; any other check, scan or domain is a 404."""
     s = services(request)
     domain = visible_domain(request, name, user)
     scan = stored_scan(request, domain, scan_id)
-    evidence = s.scans.stored_evidence(scan.id, check_id) if check_id == SMTP_CHECK else None
+    evidence = s.scans.stored_evidence(scan.id, check_id) if check_id in ORIGINAL_EVIDENCE else None
     if evidence is None:
         raise HTTPException(404)
     if domain["perimeter_id"] is not None:

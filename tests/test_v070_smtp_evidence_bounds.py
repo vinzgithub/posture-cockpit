@@ -621,7 +621,7 @@ def test_the_original_is_given_to_those_who_see_the_scan_only(instance):
     scan_id = s.scans.latest_id(s.scans.domain(DOMAIN)["id"])
     base = f"/domains/{DOMAIN}/history"
     assert i.client.get(f"{base}/{scan_id}/evidence/{CHECK}").status_code == 200  # a new evidence too
-    for path in (f"{base}/{scan_id}/evidence/mail.mx", f"{base}/{scan_id + 1}/evidence/{CHECK}",
+    for path in (f"{base}/{scan_id}/evidence/mail.spf", f"{base}/{scan_id + 1}/evidence/{CHECK}",
                  f"{base}/0/evidence/{CHECK}", f"{base}/abc/evidence/{CHECK}",
                  f"/domains/other.example/history/{scan_id}/evidence/{CHECK}"):
         assert i.client.get(path).status_code == 404, path
@@ -675,11 +675,18 @@ def hostile_mx(names: list[str], covered: int) -> dict:
     ("3,000 hostile MX of 250 characters: beyond what a DNS answer holds", lambda: hostile_mx(
         [(f"<b>x{i:04d}</b>" + "h" * 250)[:250] + ".example" for i in range(3000)], 1000), 1588941, 262187),
 ])
-def test_the_evidence_of_mail_mx_and_mail_mta_sts_is_measured_and_left_as_it_was(name, data, mx, mta_sts):
-    """F01, Q05 (correction 2, A6): mail.mx and mail.mta_sts are not bounded by this correction: their evidence
-    is the size it was on 0042c80 (measured there, byte for byte), up to 137 KiB and 61 KiB for the most a DNS
-    answer can publish, 1.5 MiB for lists no DNS answer can carry; the SMTP evidence of the same world stays
-    within its limit."""
+def test_the_evidence_of_mail_mx_and_mail_mta_sts_measured_here_is_bounded_since_correction_4(
+        name, data, mx, mta_sts, monkeypatch):
+    """F01, Q05 (correction 2, A6): mail.mx and mail.mta_sts were not bounded by correction 2: unbounded, their
+    evidence is the size it was on 0042c80 (measured there, byte for byte), up to 137 KiB and 61 KiB for the
+    most a DNS answer can publish, 1.5 MiB for lists no DNS answer can carry. Correction 4 bounds them
+    (checks/mail_evidence.py): each is now within the limit, as the SMTP evidence of the same world."""
+    from posture_cockpit.checks import mail_evidence
+
     findings, _ = scan_smtp(data())
     sizes = {k: size(findings[k].outcome.evidence) for k in ("mail.mx", "mail.mta_sts", CHECK)}
-    assert (sizes["mail.mx"], sizes["mail.mta_sts"]) == (mx, mta_sts) and sizes[CHECK] <= LIMIT_BYTES
+    assert max(sizes.values()) <= LIMIT_BYTES
+    monkeypatch.setattr(mail_evidence, "bounded", lambda check_id, outcome: outcome)
+    findings, _ = scan_smtp(data())
+    assert (size(findings["mail.mx"].outcome.evidence), size(findings["mail.mta_sts"].outcome.evidence)) == (
+        mx, mta_sts)
