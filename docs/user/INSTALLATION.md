@@ -65,7 +65,8 @@ An empty line (`NAME=`) keeps the default. Every setting of the application (`PO
 The server must be able to reach the Internet:
 
 - **DNS** (port 53 UDP and TCP) to its resolvers, or those of `POSTURE_COCKPIT_NAMESERVERS`;
-- **HTTPS and HTTP** (ports 443 and 80) to the domains scanned.
+- **HTTPS and HTTP** (ports 443 and 80) to the domains scanned;
+- **SMTP** (TCP port 25) to the mail servers of the domains scanned, **only when the SMTP probe is on** (`POSTURE_COCKPIT_SMTP_PROBE=on`, off by default; see [SMTP_STARTTLS.md](SMTP_STARTTLS.md)). Many Internet providers and hosting companies block outgoing port 25: the probe is then of no use.
 
 A filtering resolver (ad blocker, corporate DNS) may return empty answers: Posture Cockpit then refuses the scan rather than reporting missing records by mistake. Give it public resolvers, for instance `POSTURE_COCKPIT_NAMESERVERS=9.9.9.9,1.1.1.1` in the `.env`.
 
@@ -73,7 +74,7 @@ A filtering resolver (ad blocker, corporate DNS) may return empty answers: Postu
 
 Scans do **not** go through an HTTP proxy: the `HTTP_PROXY` and `HTTPS_PROXY` variables are ignored, because a proxy would connect in Posture Cockpit's place, out of reach of its egress rule. The server must therefore reach ports 80 and 443 directly.
 
-**Egress rule.** In Internet mode, Posture Cockpit only connects to public addresses, on ports 80 and 443. A domain that points to a private address (10.x, 192.168.x, ::1…) is not contacted: the checks concerned are "not evaluated", with the reason. Link-local, multicast and reserved addresses and the cloud metadata services (169.254.169.254…) are never contacted, whatever the mode. Details in [SECURITY.md](../../SECURITY.md).
+**Egress rule.** In Internet mode, Posture Cockpit only connects to public addresses, on ports 80 and 443, and on port 25 for the SMTP probe when it is on (never in an internal perimeter). A domain that points to a private address (10.x, 192.168.x, ::1…) is not contacted: the checks concerned are "not evaluated", with the reason. Link-local, multicast and reserved addresses and the cloud metadata services (169.254.169.254…) are never contacted, whatever the mode. Details in [SECURITY.md](../../SECURITY.md).
 
 ## Settings
 
@@ -84,7 +85,9 @@ With Docker, these settings go in the `.env` file (`NAME=value`, see above).
 | `POSTURE_COCKPIT_DATA_DIR` | `/data` (image) | Folder of the SQLite database and the session key |
 | `POSTURE_COCKPIT_NAMESERVERS` | the system's | DNS resolvers, comma-separated |
 | `POSTURE_COCKPIT_DKIM_SELECTORS` | empty | Additional DKIM selectors (comma-separated labels, without domain suffix). Usual selectors remain checked; 30 selectors maximum overall. An invalid value stops the start, with its reason. |
-| `POSTURE_COCKPIT_CHECK_TIMEOUT` | `15` | Seconds allowed to each check |
+| `POSTURE_COCKPIT_CHECK_TIMEOUT` | `15` | Seconds allowed to each check. With the SMTP probe on: above 2 s; the probe has `min(12 s, value − 2 s)` |
+| `POSTURE_COCKPIT_SMTP_PROBE` | `off` | `on` to test STARTTLS and the certificates of the mail servers on port 25 (check `mail.smtp_starttls`, see [SMTP_STARTTLS.md](SMTP_STARTTLS.md)). Only `on` and `off` are accepted; any other value prevents startup. Needs outgoing port 25 |
+| `POSTURE_COCKPIT_SMTP_EHLO_NAME` | – | Name the probe gives in `EHLO`: a fully qualified DNS name you control (`probe.my-domain.com`). **Required with `POSTURE_COCKPIT_SMTP_PROBE=on`**, no default; an invalid name (space, control character, non-ASCII, a single label, an IP address) prevents startup |
 | `POSTURE_COCKPIT_COOKIE_SECURE` | `false` | `true` when the application is served over HTTPS |
 | `POSTURE_COCKPIT_DEFAULT_LOCALE` | `fr` | Language of the pages before sign-in |
 | `POSTURE_COCKPIT_SESSION_MAX_AGE` | `604800` | Session length in seconds (7 days) |
@@ -211,6 +214,13 @@ docker compose exec posture-cockpit posture-cockpit info
 
 Docker downloads the new image and recreates the container on the same volume. At start, the database is upgraded automatically. Your `.env` is left as it is; if it sets `POSTURE_COCKPIT_IMAGE`, change it to the new version.
 
+**From 0.6.x to 0.7.0**:
+
+- **The database does not change** (schema 5, as since 0.5.0): no migration, hence no automatic backup at start. The backup of step 1 is yours: keep it off the server.
+- **The SMTP probe stays off** until you set `POSTURE_COCKPIT_SMTP_PROBE=on`: scans contact nothing more than in 0.6.1. The new check `mail.smtp_starttls` is then "not applicable" and does not count in the score (see [SMTP_STARTTLS.md](SMTP_STARTTLS.md)).
+- **The judging rules change** (generation 5, see [SCORING.md](SCORING.md#version-07-smtp-check-and-generation-5)). Scans made with 0.6.x stay in the history with their scores of the time, but are not compared with those of 0.7.0: the history and Mission Control say so ("different or unknown evaluation engine"), and conclude nothing about the domain. Comparisons resume between two 0.7.0 scans.
+- **PDF reports are made by a separate process**, bounded by `POSTURE_COCKPIT_MAX_CONCURRENT_REPORTS`, `POSTURE_COCKPIT_REPORT_TIMEOUT` and `POSTURE_COCKPIT_REPORT_MEMORY_MB` (see [Settings](#settings)); the defaults suit.
+
 **When the schema changes** (0.5.0: from schema 4 to 5), the application first writes a complete backup — database and session key — to `/data/backups/posture-cockpit-before-schema5-<date>.tar.gz`. It then reads it back and compares it with the database: schema, accounts, domains, scans, session key. It needs free space of twice the database; before updating, `posture-cockpit info` says how much. If any of this fails, nothing is migrated and the application does not start: the message says why (table below), and the database is left as it was. The account commands (`reset-password`, …) do the same when they find a database to migrate. Afterwards, `info` shows that backup:
 
 ```
@@ -332,6 +342,8 @@ docker compose exec posture-cockpit posture-cockpit disable-totp <username>   # 
 docker compose exec posture-cockpit posture-cockpit make-admin <username>
 ```
 
-### Returning between schema-5 versions (v0.5.0, v0.6.0 and v0.6.1)
+### Returning between schema-5 versions (v0.5.0 to v0.7.0)
 
 Before changing images: verify a backup outside the volume, disable scheduling and stop the instance cleanly. Schema 5 is unchanged: a pinned official older image can reuse the current volume without restoring an earlier backup. Data created after the upgrade must remain available. v0.5.0 shows its older projections, including DMARC, while observed scores remain unchanged. Test on an isolated copy; never run two instances concurrently on that volume. Returning to schema 4 still requires a separate restore procedure.
+
+**From 0.7.0 to 0.6.1**: put back the `compose.yaml` of 0.6.1 (and `POSTURE_COCKPIT_IMAGE` in the `.env`, if it is set), then restart. The settings of 0.7.0 (`POSTURE_COCKPIT_SMTP_PROBE`, `POSTURE_COCKPIT_SMTP_EHLO_NAME` and the three settings of PDF reports) have no effect in 0.6.1. 0.6.1 reads the scans made with 0.7.0, pages and history included: the round trip 0.6.1 → 0.7.0 → 0.6.1 → 0.7.0 on the same volume is checked in CI from the official image of 0.6.1, pinned by its digest. The scans of 0.7.0 keep their generation 5: 0.6.1 does not compare them with its own.

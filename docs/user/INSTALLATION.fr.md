@@ -65,7 +65,8 @@ Une ligne laissée vide (`NOM=`) garde la valeur par défaut. Tous les réglages
 Le serveur doit pouvoir sortir vers Internet :
 
 - **DNS** (port 53 UDP et TCP) vers ses résolveurs, ou ceux de `POSTURE_COCKPIT_NAMESERVERS` ;
-- **HTTPS et HTTP** (ports 443 et 80) vers les domaines analysés.
+- **HTTPS et HTTP** (ports 443 et 80) vers les domaines analysés ;
+- **SMTP** (port 25 TCP) vers les serveurs de messagerie des domaines analysés, **seulement si la sonde SMTP est activée** (`POSTURE_COCKPIT_SMTP_PROBE=on`, désactivée par défaut ; voir [SMTP_STARTTLS.fr.md](SMTP_STARTTLS.fr.md)). Beaucoup de fournisseurs d'accès et d'hébergeurs bloquent le port 25 sortant : la sonde ne sert alors à rien.
 
 Un résolveur qui filtre (bloqueur de publicités, DNS d'entreprise) peut renvoyer des réponses vides : Posture Cockpit refuse alors l'analyse plutôt que de signaler à tort des enregistrements manquants. Donnez-lui des résolveurs publics, par exemple `POSTURE_COCKPIT_NAMESERVERS=9.9.9.9,1.1.1.1` dans le `.env`.
 
@@ -73,7 +74,7 @@ Un résolveur qui filtre (bloqueur de publicités, DNS d'entreprise) peut renvoy
 
 Les analyses ne passent **pas** par un proxy HTTP : les variables `HTTP_PROXY` et `HTTPS_PROXY` sont ignorées, car un proxy se connecterait à la place de Posture Cockpit, hors de portée de sa règle de sortie. Le serveur doit donc joindre directement les ports 80 et 443.
 
-**Règle de sortie.** En mode Internet, Posture Cockpit ne se connecte qu'à des adresses publiques, sur les ports 80 et 443. Un domaine qui pointe vers une adresse privée (10.x, 192.168.x, ::1…) n'est pas contacté : les contrôles concernés sont « non évalués », avec la raison. Les adresses lien-local, multidiffusion, réservées et les services de métadonnées des clouds (169.254.169.254…) ne sont jamais contactés, quel que soit le mode. Détails dans [SECURITY.md](../../SECURITY.md).
+**Règle de sortie.** En mode Internet, Posture Cockpit ne se connecte qu'à des adresses publiques, sur les ports 80 et 443, et sur le port 25 pour la sonde SMTP quand elle est activée (jamais dans un périmètre interne). Un domaine qui pointe vers une adresse privée (10.x, 192.168.x, ::1…) n'est pas contacté : les contrôles concernés sont « non évalués », avec la raison. Les adresses lien-local, multidiffusion, réservées et les services de métadonnées des clouds (169.254.169.254…) ne sont jamais contactés, quel que soit le mode. Détails dans [SECURITY.md](../../SECURITY.md).
 
 ## Réglages
 
@@ -84,7 +85,9 @@ Avec Docker, ces réglages se mettent dans le fichier `.env` (`NOM=valeur`, voir
 | `POSTURE_COCKPIT_DATA_DIR` | `/data` (image) | Dossier de la base SQLite et de la clé de session |
 | `POSTURE_COCKPIT_NAMESERVERS` | ceux du système | Résolveurs DNS, séparés par des virgules |
 | `POSTURE_COCKPIT_DKIM_SELECTORS` | vide | Sélecteurs DKIM supplémentaires (séparés par des virgules, sans nom de domaine). Les sélecteurs usuels restent vérifiés ; limite totale : 30 sélecteurs. Une valeur invalide empêche le démarrage, avec sa raison. |
-| `POSTURE_COCKPIT_CHECK_TIMEOUT` | `15` | Secondes accordées à chaque contrôle |
+| `POSTURE_COCKPIT_CHECK_TIMEOUT` | `15` | Secondes accordées à chaque contrôle. Avec la sonde SMTP activée : supérieur à 2 s ; la sonde dispose de `min(12 s, valeur − 2 s)` |
+| `POSTURE_COCKPIT_SMTP_PROBE` | `off` | `on` pour tester STARTTLS et les certificats des serveurs de messagerie sur le port 25 (contrôle `mail.smtp_starttls`, voir [SMTP_STARTTLS.fr.md](SMTP_STARTTLS.fr.md)). Seules `on` et `off` sont acceptées ; une autre valeur empêche le démarrage. Exige le port 25 sortant |
+| `POSTURE_COCKPIT_SMTP_EHLO_NAME` | – | Nom présenté par la sonde dans `EHLO` : un nom DNS complet que vous contrôlez (`sonde.mon-domaine.fr`). **Obligatoire avec `POSTURE_COCKPIT_SMTP_PROBE=on`**, sans valeur par défaut ; un nom invalide (espace, caractère de contrôle, non-ASCII, un seul libellé, adresse IP) empêche le démarrage |
 | `POSTURE_COCKPIT_COOKIE_SECURE` | `false` | `true` quand l'application est servie en HTTPS |
 | `POSTURE_COCKPIT_DEFAULT_LOCALE` | `fr` | Langue des pages avant la connexion |
 | `POSTURE_COCKPIT_SESSION_MAX_AGE` | `604800` | Durée de la session, en secondes (7 jours) |
@@ -211,6 +214,13 @@ docker compose exec posture-cockpit posture-cockpit info
 
 Docker télécharge la nouvelle image et recrée le conteneur sur le même volume. Au démarrage, la base est mise à niveau automatiquement. Votre `.env` n'est pas touché ; s'il fixe `POSTURE_COCKPIT_IMAGE`, passez-le à la nouvelle version.
 
+**Passage de la 0.6.x à la 0.7.0** :
+
+- **La base ne change pas** (schéma 5, comme depuis la 0.5.0) : aucune migration, donc aucune sauvegarde automatique au démarrage. Celle de l'étape 1 est la vôtre : gardez-la hors du serveur.
+- **La sonde SMTP reste désactivée** tant que vous ne réglez pas `POSTURE_COCKPIT_SMTP_PROBE=on` : les analyses ne contactent rien de plus qu'en 0.6.1. Le nouveau contrôle `mail.smtp_starttls` est alors « non applicable » et ne compte pas dans la note (voir [SMTP_STARTTLS.fr.md](SMTP_STARTTLS.fr.md)).
+- **Les règles de jugement changent** (génération 5, voir [SCORING.fr.md](SCORING.fr.md#version-07--contrôle-smtp-et-génération-5)). Les analyses faites en 0.6.x restent dans l'historique avec leurs notes d'alors, mais ne sont pas comparées à celles de la 0.7.0 : l'historique et Mission Control l'indiquent (« moteur d'évaluation différent ou inconnu »), sans rien en conclure sur le domaine. Les comparaisons reprennent entre deux analyses 0.7.0.
+- **Les rapports PDF sont créés par un processus séparé**, borné par `POSTURE_COCKPIT_MAX_CONCURRENT_REPORTS`, `POSTURE_COCKPIT_REPORT_TIMEOUT` et `POSTURE_COCKPIT_REPORT_MEMORY_MB` (voir [Réglages](#réglages)) ; les valeurs par défaut conviennent.
+
 **Quand le schéma change** (0.5.0 : du schéma 4 au 5), l'application écrit d'abord une sauvegarde complète — base et clé de session — dans `/data/backups/posture-cockpit-before-schema5-<date>.tar.gz`. Elle la relit ensuite et la compare à la base : schéma, comptes, domaines, analyses, clé de session. Il lui faut une place libre de deux fois la base ; avant la mise à jour, `posture-cockpit info` indique combien. Si l'une de ces étapes échoue, rien n'est migré et l'application ne démarre pas : le message dit pourquoi (tableau plus bas), et la base reste telle qu'elle était. Les commandes de comptes (`reset-password`, …) font de même quand elles trouvent une base à migrer. Ensuite, `info` montre cette sauvegarde :
 
 ```
@@ -332,6 +342,8 @@ docker compose exec posture-cockpit posture-cockpit disable-totp <identifiant>  
 docker compose exec posture-cockpit posture-cockpit make-admin <identifiant>
 ```
 
-### Retour entre versions au schéma 5 (v0.5.0, v0.6.0 et v0.6.1)
+### Retour entre versions au schéma 5 (v0.5.0 à v0.7.0)
 
 Avant tout changement d’image : sauvegarde vérifiée hors du volume, ordonnanceur désactivé, arrêt propre de l’instance. Le schéma 5 reste identique : le retour à une image officielle épinglée peut réutiliser le volume courant sans restaurer une ancienne sauvegarde. Les données créées après la mise à niveau doivent être conservées. La v0.5.0 retrouve ses anciennes projections, notamment DMARC, sans changer les notes observées. Tester ce retour sur copie isolée ; ne jamais démarrer simultanément deux instances sur le volume. Le retour au schéma 4 reste une autre procédure exigeant une restauration.
+
+**De la 0.7.0 à la 0.6.1** : remettez le `compose.yaml` de la 0.6.1 (et `POSTURE_COCKPIT_IMAGE` dans le `.env`, s'il est fixé), puis redémarrez. Les réglages propres à la 0.7.0 (`POSTURE_COCKPIT_SMTP_PROBE`, `POSTURE_COCKPIT_SMTP_EHLO_NAME` et les trois réglages des rapports PDF) sont sans effet en 0.6.1. La 0.6.1 relit les analyses faites en 0.7.0, pages et historique compris : l'aller-retour 0.6.1 → 0.7.0 → 0.6.1 → 0.7.0 sur le même volume est vérifié en CI depuis l'image officielle de la 0.6.1, épinglée par son digest. Les analyses de la 0.7.0 gardent leur génération 5 : la 0.6.1 ne les compare pas aux siennes.

@@ -8,6 +8,8 @@ Please report security issues privately, through GitHub's **"Report a vulnerabil
 
 Scans are **passive**: DNS queries, a TLS handshake on port 443 (one per TLS version tested), and GET requests to the home page, `/.well-known/security.txt` and the MTA-STS policy, following at most four redirects inside the scanned domain. No port scan, no form submission, no attempt to exploit anything. HTTP requests carry the User-Agent `PostureCockpit/<version> (+https://github.com/vinzgithub/posture-cockpit)`.
 
+**Optional SMTP probe (0.7.0), off by default.** When the operator sets `POSTURE_COCKPIT_SMTP_PROBE=on` (with a required `POSTURE_COCKPIT_SMTP_EHLO_NAME`), the check `mail.smtp_starttls` connects to the published MX on port 25: at most 8 MX and 16 connections per scan, within `min(12 s, CHECK_TIMEOUT − 2 s)`. It sends `EHLO`, `STARTTLS` and `QUIT`, and nothing else: no `AUTH`, `MAIL`, `RCPT` or `DATA`, no message, no relay attempt. Never in an internal perimeter. See [docs/user/SMTP_STARTTLS.md](docs/user/SMTP_STARTTLS.md).
+
 Only scan domains you own or are allowed to check.
 
 ### Where a scan may connect (egress rule)
@@ -20,12 +22,12 @@ Users choose the names that are scanned, and the scanned servers choose where th
 
 | Zone | Examples | Internet mode (default) | Internal perimeter |
 |---|---|---|---|
-| Public | any routable address | allowed, ports 80 and 443 | allowed, ports of the perimeter |
+| Public | any routable address | allowed, ports 80 and 443 (and 25 for the SMTP probe, when it is on) | allowed, ports of the perimeter |
 | Internal | 10/8, 172.16/12, 192.168/16, 100.64/10, fc00::/7, loopback, documentation ranges | **refused** | allowed **only inside the perimeter's networks** |
 | Forbidden | 0/8, link-local 169.254/16 and fe80::/10, multicast, reserved, cloud metadata (169.254.169.254, fd00:ec2::254, 100.100.100.200, 168.63.129.16…) | refused | refused |
 
 - environment proxy variables (`HTTP_PROXY`…) are ignored: a proxy would connect in our place, out of reach of the rule;
-- each scan has limits: a deadline per network operation, at most 400 DNS queries and 80 connections, a time limit per check; work still running at the end of a scan is cancelled;
+- each scan has limits: a deadline per network operation, at most 400 DNS queries and 80 connections (and 16 SMTP attempts, counted apart, when the probe is on), a time limit per check; work still running at the end of a scan is cancelled;
 - a refused connection makes the check **"not evaluated"**, with the reason, never a judgement on the domain.
 
 The guarantee covers everything that goes through the extension API (`ctx.net`). An extension is Python code running with the application's rights: it could open a socket itself. Install only extensions you trust (see below). Running the container with its own network rules (firewall, Docker network) is a useful second barrier.
