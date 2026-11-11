@@ -92,18 +92,20 @@ Depuis la **v0.6.0**, une vue **Portefeuille** aide à repérer les domaines qui
 
 Avec **« Et si… ? »**, vous pouvez sélectionner plusieurs corrections (y compris les étapes successives de DMARC) et voir ce qui *pourrait* s'améliorer. La simulation **ne modifie ni vos DNS ni vos serveurs** : seule une nouvelle analyse permettra de confirmer le résultat réel.
 
-**Exemple fictif :** [télécharger le rapport PDF Mission Control](docs/examples/posture-cockpit-mission-control-demo.fr.pdf). Rapport généré par la candidate v0.6.1 sur `menuiserie-dupont.example`, sans analyse d’une organisation réelle. Certaines actions ont un effet non déterminable ; les projections restent à confirmer.
+**Exemple fictif :** [télécharger le rapport PDF Mission Control](docs/examples/posture-cockpit-mission-control-demo.fr.pdf). Rapport généré par la candidate v0.7.0 sur `menuiserie-dupont.example`, sans analyse d’une organisation réelle. Certaines actions ont un effet non déterminable ; les projections restent à confirmer.
 
 ## Qu'est-ce que Posture Cockpit vérifie exactement ?
 
 | Partie examinée | En termes simples |
 |---|---|
-| **Messagerie** | Qui est autorisé à envoyer des e-mails au nom de votre domaine ? Quelles protections contre l'usurpation sont publiées ? L'outil vérifie notamment SPF, DKIM, DMARC, MTA-STS et TLS-RPT, dans les limites de ce qui est observable. |
+| **Messagerie** | Qui est autorisé à envoyer des e-mails au nom de votre domaine ? Quelles protections contre l'usurpation sont publiées ? L'outil vérifie notamment SPF, DKIM, DMARC, MTA-STS et TLS-RPT, dans les limites de ce qui est observable. Depuis la v0.7.0, une sonde **facultative** peut aussi vérifier que vos serveurs de messagerie proposent le chiffrement (STARTTLS) avec un certificat valide sur le port 25. |
 | **Site web** | Le site redirige-t-il correctement vers HTTPS ? Certaines protections du navigateur sont-elles présentes, comme HSTS et CSP ? |
 | **Certificats HTTPS** | Le certificat est-il valide ? Va-t-il bientôt expirer ? Les protocoles TLS et les clés répondent-ils aux exigences contrôlées ? |
 | **DNS** | Les serveurs de noms, DNSSEC et les règles CAA sont-ils configurés comme attendu ? |
 
-Au total, **20 contrôles sont intégrés dans la v0.6.1**. Certains sont sans objet pour un domaine donné ; d'autres peuvent ne pas aboutir à cause d'une erreur ou d'un serveur qui ne répond pas. Posture Cockpit fait la différence entre **« non applicable »** et **« impossible à vérifier »** : il ne considère jamais un contrôle non réalisé comme réussi.
+Au total, **21 contrôles sont intégrés dans la v0.7.0**. Certains sont sans objet pour un domaine donné ; d'autres peuvent ne pas aboutir à cause d'une erreur ou d'un serveur qui ne répond pas. Posture Cockpit fait la différence entre **« non applicable »** et **« impossible à vérifier »** : il ne considère jamais un contrôle non réalisé comme réussi.
+
+Le contrôle SMTP STARTTLS est **désactivé par défaut** : c'est le seul qui se connecte aux serveurs de messagerie, et il demande le port 25 sortant et un nom à vous pour la sonde. Voir [le contrôle SMTP STARTTLS](docs/user/SMTP_STARTTLS.fr.md).
 
 [Comprendre le calcul de la note et de la couverture](docs/user/SCORING.fr.md)
 
@@ -145,13 +147,13 @@ Vous utilisez déjà une ancienne version ? **Ne suivez pas la procédure de nou
 
 Les suites de chiffrement TLS ne sont pas énumérées, par choix : les lister demande des dizaines de négociations par adresse, ce qui dépasse une observation passive. Utilisez testssl.sh ou SSL Labs pour cet examen.
 
-Pour les domaines Internet, ses connexions web sortantes sont limitées aux **adresses publiques** et aux **ports 80 et 443**, avec des contrôles destinés à empêcher qu'une adresse ou une redirection conduise vers un réseau privé. Les audits de réseaux internes sont une fonction distincte, **désactivée par défaut** et réservée à une configuration administrateur explicite.
+Pour les domaines Internet, ses connexions web sortantes sont limitées aux **adresses publiques** et aux **ports 80 et 443** (plus le port 25 pour la sonde SMTP facultative, qui se contente de dire `EHLO`, de demander `STARTTLS` et de repartir, sans envoyer de message), avec des contrôles destinés à empêcher qu'une adresse ou une redirection conduise vers un réseau privé. Les audits de réseaux internes sont une fonction distincte, **désactivée par défaut** et réservée à une configuration administrateur explicite.
 
 L'accès au logiciel dispose notamment de comptes utilisateurs, d'une **authentification à deux facteurs TOTP**, de protections contre les tentatives répétées et d'un journal d'audit. Les données sont conservées sur votre propre instance ; les vérifications produisent naturellement des requêtes vers les services examinés.
 
 **Un point de vigilance pour la messagerie :** un domaine sans serveur MX peut tout de même envoyer des e-mails par un prestataire externe. Avant de publier une règle SPF restrictive telle que `v=spf1 -all`, vérifiez que ce domaine ne sert réellement à aucun envoi.
 
-[Documentation de sécurité](SECURITY.md) · [Audits des réseaux internes](docs/user/INSTALLATION.fr.md#audits-des-réseaux-internes)
+[Documentation de sécurité](SECURITY.md) · [Audits des réseaux internes](docs/user/INSTALLATION.fr.md#audits-de-réseaux-internes)
 
 ## Pour ceux qui veulent aller plus loin
 
