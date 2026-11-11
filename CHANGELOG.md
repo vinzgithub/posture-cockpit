@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.7.0 — date de publication à renseigner
+
+- Nouveau contrôle facultatif « Chiffrement SMTP des serveurs de réception (STARTTLS) » (`mail.smtp_starttls`, poids 5, messagerie) :
+  - STARTTLS et le certificat des MX sur le port 25 ;
+  - sonde **désactivée par défaut** (`POSTURE_COCKPIT_SMTP_PROBE=on`, nom `POSTURE_COCKPIT_SMTP_EHLO_NAME` obligatoire, sans valeur par défaut) ;
+  - `EHLO`, `STARTTLS`, TLS 1.2 ou 1.3, certificat vérifié pour le nom du MX publié, puis `QUIT` ; aucun message envoyé ;
+  - 8 MX et 16 connexions au plus, en `min(12 s, CHECK_TIMEOUT − 2 s)` ; adresses publiques et port 25 seulement, jamais en périmètre interne.
+  Voir `docs/user/SMTP_STARTTLS.fr.md`.
+- Verdict F05 et indicateur de préparation à MTA-STS `enforce` (F06), dans le détail, l'annexe SMTP du rapport PDF et l'API (`smtp_probe`, `mail_enforce_readiness`) ; une mesure manquante n'est jamais présentée comme un défaut du serveur.
+- Génération des règles 5 : les analyses 0.6.x restent dans l'historique, sans comparaison de note avec celles de la 0.7.0. Deux analyses dont la sonde SMTP différait ne sont pas comparées non plus (portée de mesure).
+- Preuves bornées :
+  - SMTP dans 64 Kio ;
+  - listes de `mail.mx` et `mail.mta_sts` à 16 éléments, les déterminants d'abord, avec les comptes exacts ;
+  - messages limités à 16 noms puis « … » ;
+  - analyses antérieures bornées à l'affichage sans réécriture de la base, preuve originale téléchargeable.
+- Rapports PDF créés par un processus séparé, hors de la boucle de l'application :
+  - 2 à la fois, 1 par compte, refus immédiat au-delà ;
+  - 60 s et 1 Gio par rapport (`POSTURE_COCKPIT_MAX_CONCURRENT_REPORTS`, `POSTURE_COCKPIT_REPORT_TIMEOUT`, `POSTURE_COCKPIT_REPORT_MEMORY_MB`) ;
+  - processus arrêté au départ du client ou à l'arrêt de l'application ;
+  - tableaux du PDF à largeurs fixes.
+- Schéma SQLite 5 inchangé : aucune migration. Retour vers la 0.6.1 par changement d'image ; l'aller-retour depuis l'image officielle 0.6.1 est vérifié en CI.
+- Notes observées des contrôles existants, scoring, événements et sécurité réseau conservés ; seuls les deux champs SMTP s'ajoutent à l'API.
+
+**Publication :** à renseigner après les opérations (PR vers `main`, tag et GitHub Release v0.7.0, workflow GHCR, digests des tags `0.7.0`, `0.7` et `latest`). Voir `docs/developer/RELEASE_V070.fr.md`.
+
 ## 0.6.1 — 2026-10-24 (publié sur GitHub et GHCR)
 
 - Projections du plan/PDF conditionnelles ou explicitement non concluantes ; aucun grade absent ni objectif de dégradation.
