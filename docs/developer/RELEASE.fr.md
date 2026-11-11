@@ -47,13 +47,13 @@ POSTURE_COCKPIT_IMAGE=posture-cockpit:recette
 
 ## Publier une version
 
-1. Sur une branche : la version dans `pyproject.toml`, `src/posture_cockpit/__init__.py` et l'image de `compose.yaml` (`0.4.2`), le titre du `CHANGELOG.md` (`## 0.4.2 — <date>`), et les liens d'installation des README et de `INSTALLATION` (`v0.4.2`). Si les dépendances changent, régénérer `docker/requirements.lock` (commande en tête du fichier). `tests/test_v041_distribution.py` vérifie que tout concorde.
+1. Sur une branche : la version dans `pyproject.toml`, `src/posture_cockpit/__init__.py` et l'image de `compose.yaml` (`0.7.0`), le titre du `CHANGELOG.md` (`## 0.7.0 — <date>`), et les liens d'installation des README et de `INSTALLATION` (`v0.7.0`). Si les dépendances changent, régénérer `docker/requirements.lock` (commande en tête du fichier). `tests/test_v041_distribution.py` vérifie que tout concorde.
 2. PR vers `main` : la CI ci-dessus, plus l'exécution à blanc de `release.yml` (les deux architectures construites, rien de publié).
-3. Après la fusion : créer le tag `v0.4.2` sur le commit de tête de `main` et **publier la release GitHub**. Publier la release **ne publie aucune image**.
-4. Publier les images : **Actions → release → Run workflow**, depuis la branche `main`, avec `release_tag` = `v0.4.2` et `confirmation` = `PUBLISH_GHCR`. Le workflow (`workflow_dispatch`) refuse de continuer si :
+3. Après la fusion : créer le tag `v0.7.0` sur le commit de tête de `main` et **publier la release GitHub**. Publier la release **ne publie aucune image**.
+4. Publier les images : **Actions → release → Run workflow**, depuis la branche `main`, avec `release_tag` = `v0.7.0` et `confirmation` = `PUBLISH_GHCR`. Le workflow (`workflow_dispatch`) refuse de continuer si :
    - la confirmation n'est pas exactement `PUBLISH_GHCR` ;
    - il n'est pas lancé depuis `main` ;
-   - la release `v0.4.2` n'existe pas, est un brouillon ou n'est pas publiée ;
+   - la release `v0.7.0` n'existe pas, est un brouillon ou n'est pas publiée ;
    - le tag ne pointe pas sur la tête actuelle de `main`.
 
    Il exécute ensuite toute la suite, la recette Docker, la construction amd64 et arm64, puis la publication sur `ghcr.io/vinzgithub/posture-cockpit` avec SBOM et provenance. Le digest est noté dans le résumé de l'exécution. La case « pre-release » de la release décide des étiquettes (ci-dessous).
@@ -63,9 +63,9 @@ POSTURE_COCKPIT_IMAGE=posture-cockpit:recette
 
 | Release | Étiquettes |
 |---|---|
-| `v0.4.2` (version finale, la plus récente) | `0.4.2`, `0.4`, `latest` |
+| `v0.7.0` (version finale, la plus récente) | `0.7.0`, `0.7`, `latest` |
 | `v0.3.3` (correctif d'une branche plus ancienne) | `0.3.3`, `0.3` — jamais `latest` |
-| `v0.4.2-rc.1`, case « pre-release » cochée | `0.4.2-rc.1` seulement — ni `0.4` ni `latest` |
+| `v0.7.0-rc.1`, case « pre-release » cochée | `0.7.0-rc.1` seulement — ni `0.7` ni `latest` |
 
 La publication se fait en trois temps, chacun vérifié (`scripts/registry_tag.py`) :
 
@@ -73,6 +73,6 @@ La publication se fait en trois temps, chacun vérifié (`scripts/registry_tag.p
 2. **Envoi des deux architectures sous la version exacte seulement.**
 3. **Étiquettes mobiles** (`X.Y`, `latest`) pointées sur ce même digest, puis **relecture de chaque étiquette** et comparaison des digests.
 
-Un échec entre 2 et 3 laisse la version exacte publiée et les étiquettes mobiles où elles étaient : relancer le job (« Re-run failed jobs ») reprend à l'étape 3. Sur une PR, tout cela est rejoué sur un registre lancé dans le job (`localhost:5000`), y compris les refus. Le tag doit correspondre au dépôt (pour une préversion, `pyproject.toml` dit `0.4.2rc1` et `compose.yaml` garde la version finale `0.4.2` ; on teste la préversion avec `POSTURE_COCKPIT_IMAGE=ghcr.io/vinzgithub/posture-cockpit:0.4.2-rc.1`).
+Un échec entre 2 et 3 laisse la version exacte publiée et les étiquettes mobiles où elles étaient : relancer le job (« Re-run failed jobs ») reprend à l'étape 3. Sur une PR, tout cela est rejoué sur un registre lancé dans le job (`localhost:5000`), y compris les refus. Le tag doit correspondre au dépôt (pour une préversion, `pyproject.toml` dit `0.7.0rc1` et `compose.yaml` garde la version finale `0.7.0` ; on teste la préversion avec `POSTURE_COCKPIT_IMAGE=ghcr.io/vinzgithub/posture-cockpit:0.7.0-rc.1`).
 
 **Une seule fois** : après la première publication, rendre le paquet public (GitHub → Packages → posture-cockpit → Package settings → Change visibility → Public), pour que l'installation n'ait besoin d'aucun compte. Ce choix est **irréversible** : un paquet public ne peut pas redevenir privé.
