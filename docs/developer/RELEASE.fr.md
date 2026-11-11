@@ -49,7 +49,15 @@ POSTURE_COCKPIT_IMAGE=posture-cockpit:recette
 
 1. Sur une branche : la version dans `pyproject.toml`, `src/posture_cockpit/__init__.py` et l'image de `compose.yaml` (`0.4.2`), le titre du `CHANGELOG.md` (`## 0.4.2 — <date>`), et les liens d'installation des README et de `INSTALLATION` (`v0.4.2`). Si les dépendances changent, régénérer `docker/requirements.lock` (commande en tête du fichier). `tests/test_v041_distribution.py` vérifie que tout concorde.
 2. PR vers `main` : la CI ci-dessus, plus l'exécution à blanc de `release.yml` (les deux architectures construites, rien de publié).
-3. Après la fusion : créer le tag `v0.4.2` et **publier la release GitHub**. C'est cet acte qui déclenche `release.yml` : toute la suite, la recette Docker, la construction amd64 et arm64, puis la publication sur `ghcr.io/vinzgithub/posture-cockpit` avec SBOM et provenance. Le digest est noté dans le résumé de l'exécution.
+3. Après la fusion : créer le tag `v0.4.2` sur le commit de tête de `main` et **publier la release GitHub**. Publier la release **ne publie aucune image**.
+4. Publier les images : **Actions → release → Run workflow**, depuis la branche `main`, avec `release_tag` = `v0.4.2` et `confirmation` = `PUBLISH_GHCR`. Le workflow (`workflow_dispatch`) refuse de continuer si :
+   - la confirmation n'est pas exactement `PUBLISH_GHCR` ;
+   - il n'est pas lancé depuis `main` ;
+   - la release `v0.4.2` n'existe pas, est un brouillon ou n'est pas publiée ;
+   - le tag ne pointe pas sur la tête actuelle de `main`.
+
+   Il exécute ensuite toute la suite, la recette Docker, la construction amd64 et arm64, puis la publication sur `ghcr.io/vinzgithub/posture-cockpit` avec SBOM et provenance. Le digest est noté dans le résumé de l'exécution. La case « pre-release » de la release décide des étiquettes (ci-dessous).
+5. Noter dans le `CHANGELOG.md` et dans le dossier de version : les SHA du commit de fusion et du tag, le lien de la release, le numéro de l'exécution de `release.yml` et le digest relu de chaque étiquette. Ces valeurs ne s'écrivent **qu'après** les opérations correspondantes.
 
 Étiquettes publiées (`scripts/release_tags.py`) :
 

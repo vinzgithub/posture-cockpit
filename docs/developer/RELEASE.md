@@ -49,7 +49,15 @@ At the end: `docker compose down -v` **in that folder only**.
 
 1. On a branch: the version in `pyproject.toml`, `src/posture_cockpit/__init__.py` and the image of `compose.yaml` (`0.4.2`), the heading of `CHANGELOG.md` (`## 0.4.2 — <date>`), and the installation links of the READMEs and `INSTALLATION` (`v0.4.2`). When dependencies change, regenerate `docker/requirements.lock` (command at the top of the file). `tests/test_v041_distribution.py` checks that everything agrees.
 2. Pull request to `main`: the CI above, plus the dry run of `release.yml` (both architectures built, nothing published).
-3. After the merge: create the tag `v0.4.2` and **publish the GitHub release**. That act triggers `release.yml`: the whole suite, the Docker recette, the amd64 and arm64 builds, then publication on `ghcr.io/vinzgithub/posture-cockpit` with SBOM and provenance. The digest is written in the summary of the run.
+3. After the merge: create the tag `v0.4.2` on the head commit of `main` and **publish the GitHub release**. Publishing the release **publishes no image**.
+4. Publish the images: **Actions → release → Run workflow**, from the `main` branch, with `release_tag` = `v0.4.2` and `confirmation` = `PUBLISH_GHCR`. The workflow (`workflow_dispatch`) refuses to go on if:
+   - the confirmation is not exactly `PUBLISH_GHCR`;
+   - it is not run from `main`;
+   - the release `v0.4.2` does not exist, is a draft or is not published;
+   - the tag does not point at the current head of `main`.
+
+   It then runs the whole suite, the Docker recette, the amd64 and arm64 builds, then publication on `ghcr.io/vinzgithub/posture-cockpit` with SBOM and provenance. The digest is written in the summary of the run. The "pre-release" box of the release decides the tags (below).
+5. Write down in `CHANGELOG.md` and in the release dossier: the SHAs of the merge commit and of the tag, the link of the release, the number of the run of `release.yml` and the digest read back for each tag. These values are written **only after** the corresponding operations.
 
 Tags published (`scripts/release_tags.py`):
 
