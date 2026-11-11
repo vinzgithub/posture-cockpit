@@ -165,7 +165,7 @@ You can explore the [architecture documentation](docs/developer/ARCHITECTURE.md)
 
 The source is published under the **[PolyForm Noncommercial 1.0.0 License](LICENSE)**. It allows the purposes described as noncommercial by the license; see the [commercial license terms](COMMERCIAL-LICENSE.md) for other uses.
 
-**Project concept, direction and validation: Vincent Fournet.** Development carried out with the assistance of AI tools (Claude and ChatGPT), under his direction.
+**Project concept, direction and validation: Vincent Fournet.**
 
 Copyright © 2026 Vincent Fournet.
 

@@ -165,7 +165,7 @@ La [documentation de l'architecture](docs/developer/ARCHITECTURE.md) s'adresse a
 
 Le code est publié sous **[PolyForm Noncommercial 1.0.0](LICENSE)**. La licence autorise les usages qu'elle définit comme non commerciaux ; pour les autres cas, consultez les [conditions de licence commerciale](COMMERCIAL-LICENSE.md).
 
-**Conception, orientation du projet et validation : Vincent Fournet.** Développement réalisé avec l'assistance d'outils d'intelligence artificielle (Claude et ChatGPT), sous sa direction.
+**Conception, orientation du projet et validation : Vincent Fournet.**
 
 Copyright © 2026 Vincent Fournet.
 
