@@ -12,7 +12,7 @@ Ce document est la carte du code : où se trouve quoi, comment une analyse circu
                  ├─► scanner.py ─► core/engine.py ─► checks/*.py (extensions)
                  │                                     │
                  │                                     ▼
-                 │                               core/network.py  (DNS, TLS, HTTP — passif)
+                 │                               core/network.py  (DNS, TLS, HTTP — passif ; SMTP en option, 0.7.0)
                  │                                     │  chaque connexion passe par
                  │                                     ▼
                  │                               core/egress.py   (où une analyse peut se connecter)
@@ -31,7 +31,8 @@ Ce document est la carte du code : où se trouve quoi, comment une analyse circu
 | `core/model.py` | `Status`, `Outcome`, `Finding`, `Remedy`, `DnsChange` : les données qui circulent partout |
 | `core/extension.py` | L'API des extensions : `Extension`, le décorateur `@extension.check`, `CheckContext` |
 | `core/registry.py` | Trouve les extensions (intégrées + points d'entrée) ; une extension cassée est signalée, jamais fatale |
-| `core/network.py` | Les quatre questions qu'un contrôle peut poser (`dns`, `certificate`, `accepts_tls`, `http_get`) et leur réalisation réelle `LiveNetwork` (cache, limites et délais par analyse) |
+| `core/network.py` | Les quatre questions qu'un contrôle peut poser (`dns`, `certificate`, `accepts_tls`, `http_get`) et leur réalisation réelle `LiveNetwork` (cache, limites et délais par analyse) ; en 0.7.0, `smtp_attempt`, un dialogue SMTP vers une adresse vérifiée, port 25, avec son propre budget (16 tentatives) |
+| `core/smtp.py` | Le dialogue SMTP de la sonde (0.7.0) : accueil `220`, `EHLO`, `STARTTLS`, TLS, `QUIT`, observé étape par étape ; jamais `MAIL`, `RCPT` ni `DATA` |
 | `core/egress.py` | **La règle unique des connexions sortantes** : zones d'adresses (publique, interne, interdite), `EgressPolicy`, `DestinationBlocked` |
 | `core/errors.py` | `NetworkError` et `Refused` (rien n'écoute : une réponse nette, contrairement à un délai dépassé) |
 | `core/fixture.py` | `FixtureNetwork` : les mêmes questions, répondues par des données enregistrées (tests, démo) |
@@ -61,7 +62,7 @@ Ce document est la carte du code : où se trouve quoi, comment une analyse circu
 2. `engine.normalize_domain` en fait un nom propre (`https://www.Exemple.fr/contact` → `exemple.fr`).
 3. `scanner.preflight` vérifie que le DNS répond quelque chose pour ce nom. Sinon : « n'existe pas » ou « le DNS ne renvoie rien », et rien n'est enregistré.
 4. `scanning.scan_and_save` prend une place auprès du **limiteur d'analyses** (analyses simultanées, analyses par compte et par heure).
-5. `scanner.scan` prend les contrôles des extensions actives et un **réseau neuf** (son cache ne sert qu'à cette analyse) construit avec la **règle du périmètre** : Internet (adresses publiques, ports 80 et 443), ou un périmètre interne (ses réseaux, serveurs DNS, ports et AC).
+5. `scanner.scan` prend les contrôles des extensions actives et un **réseau neuf** (son cache ne sert qu'à cette analyse) construit avec la **règle du périmètre** : Internet (adresses publiques, ports 80 et 443, plus le port 25 pour la sonde SMTP quand elle est activée), ou un périmètre interne (ses réseaux, serveurs DNS, ports et AC ; jamais de SMTP).
 6. `engine.scan` lance **tous les contrôles en même temps**. Chacun reçoit un `CheckContext` (domaine, réseau, heure, interne ou non) et renvoie un `Outcome`. Les contrôles faits pour Internet seulement sont « non applicables » dans une analyse interne. Un contrôle qui dépasse son délai, lève une erreur réseau, se heurte à la règle de sortie ou plante devient un `Outcome` d'état `ERROR` (« non évalué », avec la raison) : les autres continuent. Le travail encore en cours est annulé à la fin.
 7. `Scans.save` enregistre, dans une seule transaction, l'analyse (avec la façon dont elle a été lancée, `via` : web, api, schedule, et la génération de ses règles, `engine`), ses `Finding`, son évaluation (note, lettre, couverture, périmètre, métriques) et son premier état mesuré (`scan_states`) ; l'analyse est inscrite au journal d'audit.
 8. La page du plan (`GET /domains/<nom>`) appelle `views.plan_view`, qui produit des objets déjà rédigés pour le gabarit `plan.html`.
@@ -93,7 +94,7 @@ Un seul fichier SQLite dans le dossier de données, en mode WAL, lisible par son
 | 4 (0.4.0) | Métriques de `scans` (score brut, plafond, score final, couverture de diagnostic, contrôles bloqués, adresses, raisons), ajoutées vides : rien n'est recalculé |
 | 5 (0.5.0) | `scans.via`, `scans.engine`, `scan_states`, `schedules`, `schedule_runs`, `events`, `users.events_seen_at` ; un état par analyse existante, fait de ses valeurs enregistrées, rien n'est recalculé ; les images 0.4.x refusent ce schéma |
 
-**Chronologie des états mesurés** (`scan_states`, 0.5.0). Les valeurs enregistrées dans `scans` sont écrasées à chaque revérification ; chaque moment est donc aussi conservé comme un état : un état `scan` à l'enregistrement de l'analyse, un état `recheck` après chaque revérification, dans la transaction du changement. Un état contient sa date, la génération des règles, la note, la lettre, la couverture, l'évaluation, les métriques et l'état de chaque contrôle. Les lignes ne font que s'ajouter (un déclencheur refuse tout `UPDATE` ; aucun code n'en supprime ; elles partent avec leur analyse). Les analyses faites avant la 0.5.0 ont reçu un seul état fait de leurs valeurs enregistrées : `scan` si elles n'ont jamais été revérifiées, sinon `legacy`, daté de la dernière revérification — les valeurs d'avant cette revérification ont été écrasées, aucun état n'est donc inventé pour elles. La génération (`core/generation.py`) change dès que les règles donneraient un autre verdict ou une autre note pour les mêmes observations (`tests/test_v050_generation.py` échoue tant qu'elle n'a pas changé) ; la revérification d'une analyse jugée par d'autres règles n'a pas de génération.
+**Chronologie des états mesurés** (`scan_states`, 0.5.0). Les valeurs enregistrées dans `scans` sont écrasées à chaque revérification ; chaque moment est donc aussi conservé comme un état : un état `scan` à l'enregistrement de l'analyse, un état `recheck` après chaque revérification, dans la transaction du changement. Un état contient sa date, la génération des règles, la note, la lettre, la couverture, l'évaluation, les métriques et l'état de chaque contrôle. Les lignes ne font que s'ajouter (un déclencheur refuse tout `UPDATE` ; aucun code n'en supprime ; elles partent avec leur analyse). Les analyses faites avant la 0.5.0 ont reçu un seul état fait de leurs valeurs enregistrées : `scan` si elles n'ont jamais été revérifiées, sinon `legacy`, daté de la dernière revérification — les valeurs d'avant cette revérification ont été écrasées, aucun état n'est donc inventé pour elles. La génération (`core/generation.py`) change dès que les règles donneraient un autre verdict ou une autre note pour les mêmes observations (`tests/test_v050_generation.py` échoue tant qu'elle n'a pas changé ; génération 4 de la 0.4.0 à la 0.6.1, 5 depuis la 0.7.0 avec le contrôle SMTP) ; la revérification d'une analyse jugée par d'autres règles n'a pas de génération.
 
 **Transactions.** Une seule connexion sert tout le processus, et son verrou laisse rentrer le fil qui le tient — or toutes les tâches asyncio tournent sur ce fil. `transaction()` retient donc le fil et la tâche qui l'ont ouverte, et toute utilisation de la connexion par un autre pendant qu'elle est ouverte lève `TransactionOwnerError`, lectures comprises ; un autre fil attend le verrou. La règle : **aucun `await` dans `with db.transaction():`** (`tests/test_v050_contract.py` le vérifie dans le code).
 
@@ -176,3 +177,27 @@ restaurées identiques, liste exacte de ce que le retour perd).
 - Code, noms et commentaires en anglais ; textes visibles en français et en anglais.
 - Un module commence par une docstring qui dit son rôle ; les commentaires expliquent **pourquoi**, pas ce que fait la ligne.
 - `ruff check src tests examples`, `mypy` et `pytest` doivent passer avant chaque fusion (la CI les lance).
+
+### 0.7 Sonde SMTP, preuves bornées, rapports PDF
+
+**Sonde SMTP** (`mail.smtp_starttls`, désactivée par défaut). Trois modules, chacun avec un rôle :
+
+- `checks/smtp_measure.py` découvre les MX, en choisit 8 au plus et 16 tentatives, et tient l'échéance `min(12 s, CHECK_TIMEOUT − 2 s)` ;
+- chaque tentative passe par `LiveNetwork.smtp_attempt`, qui revérifie seule la règle de sortie (adresse publique, port 25, Internet uniquement) et le nom EHLO ;
+- `checks/smtp_verdict.py` est le seul à donner un statut à ce contrôle (matrice F05) et calcule l'indicateur de préparation à MTA-STS `enforce` (F06).
+
+Réglages : `config.py` (`SMTP_PROBE`, `SMTP_EHLO_NAME`, refus au démarrage). Rien n'est tenté sonde désactivée, ni dans un périmètre interne.
+
+**Portée de mesure** (`core/compare.py`, `measurement_scope`). Chaque état enregistre dans ses métriques ce qu'il a mesuré du SMTP : `on`, `off`, `internal`, `absent` ou `unknown`. Ces valeurs sont lues dans la preuve stockée, jamais dans la configuration. Deux états de portées différentes ne sont pas comparés (raison `scope`, juste après `engine`), et aucun événement n'en est tiré.
+
+**Preuves bornées.**
+- `checks/smtp_evidence.py` borne la preuve SMTP à 64 Kio.
+- `checks/mail_evidence.py` borne les listes de `mail.mx` et `mail.mta_sts` (16 éléments, les déterminants d'abord, comptes exacts) et la liste `hosts` de leurs messages.
+- Les décisions sont prises avant, sur les données complètes.
+- Les analyses antérieures sont bornées à la lecture (`storage/scans.py`), sans réécriture. Leur preuve originale se télécharge par `/domains/<nom>/history/<id>/evidence/<contrôle>`, avec les mêmes autorisations et le même audit.
+
+**Rapports PDF.** `report/jobs.py` lance `report/worker.py` dans un processus séparé :
+- l'espace d'adressage et le temps processeur sont bornés, et le processus meurt avec l'application (`PR_SET_PDEATHSIG`, résultat vérifié) ;
+- une seule échéance couvre le lancement, la mise en page et le transfert ; un seul chemin de récupération (`reap`) sert à l'arrêt, au délai, à l'annulation et à l'arrêt de l'application ;
+- `web/limits.py` (`ReportLimiter`) autorise 2 rapports à la fois et 1 par compte, avec un refus immédiat au-delà ;
+- WeasyPrint n'est jamais importé dans le processus de l'application.

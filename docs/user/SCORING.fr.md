@@ -49,7 +49,7 @@ Les pourcentages de couverture sont arrondis à l'unité inférieure : 89,6 % s'
 
 ## 4. Les poids
 
-Inchangés depuis la version 0.1.0.
+Inchangés depuis la version 0.1.0 ; la version 0.7.0 ajoute un contrôle, le chiffrement SMTP (STARTTLS), de poids 5.
 
 | Contrôle | Domaine | Poids | Audit interne |
 |---|---|---|---|
@@ -63,6 +63,7 @@ Inchangés depuis la version 0.1.0.
 | Politique de sécurité du contenu (CSP) | Site web | 4 | oui |
 | Serveurs de noms | DNS | 4 | non applicable |
 | Signature DNSSEC | DNS | 4 | non applicable |
+| Chiffrement SMTP des serveurs de réception (STARTTLS), depuis la 0.7.0 | Messagerie | 5 | non applicable |
 | Chiffrement imposé à la réception (MTA-STS) | Messagerie | 3 | non applicable |
 | Clé du certificat | TLS | 3 | oui |
 | Protection contre l'intégration (clickjacking) | Site web | 3 | oui |
@@ -75,6 +76,8 @@ Inchangés depuis la version 0.1.0.
 | Contact sécurité (security.txt) | Site web | 1 | non applicable |
 
 Le contrôle MX est une information tant que les serveurs de messagerie sont joignables ; il ne compte (« à améliorer ») que si l'un d'eux n'a pas d'adresse.
+
+Le contrôle SMTP STARTTLS n'est fait que si la sonde est activée sur l'instance (désactivée par défaut) : sinon il est « non applicable » et ne compte pas. Voir [SMTP_STARTTLS.fr.md](SMTP_STARTTLS.fr.md).
 
 ## 5. Le plan de corrections
 
@@ -172,3 +175,15 @@ n’ont aucun effet sur les statuts ni sur la note.
 ## Précision v0.6.1 : gains et cible du plan
 
 Les gains des actions calculables sont estimés hors actions à effet non déterminable, maintenues dans leur état observé et nommées à côté des gains. La cible du plan complet reste inconnue si une priorité a un effet inconnu. Le simulateur ne retire jamais silencieusement une action sélectionnée. Une fourchette HTTPS suppose des mesures futures concluantes ; elle ne garantit pas la prochaine note. La notation des observations reste inchangée (génération 4).
+
+## Version 0.7 : contrôle SMTP et génération 5
+
+- **Un 21ᵉ contrôle**, « Chiffrement SMTP des serveurs de réception (STARTTLS) », poids 5, catégorie Messagerie ([SMTP_STARTTLS.fr.md](SMTP_STARTTLS.fr.md)).
+  - Sonde désactivée (le défaut) : « non applicable », la note et la couverture ne changent pas.
+  - Sonde activée : il compte comme les autres contrôles. Un serveur injoignable depuis l'instance (port 25 bloqué, délai) le laisse « non évalué » et fait baisser la couverture. Exemple : un domaine sans site web, sur un réseau qui bloque le port 25, passe à 87,8 % de couverture, donc sous 90 % : la lettre ne peut pas dépasser B.
+- **Les autres contrôles jugent comme en 0.6.1.** Sur les mondes de référence de la génération 4, la seule différence est la ligne « non applicable » du nouveau contrôle.
+- **Génération 5.** Les règles de jugement ayant changé, les analyses sont enregistrées avec la génération 5.
+  - Une analyse faite en 0.6.x (génération 4) n'est **jamais comparée directement** à une analyse 0.7.0 : pas d'écart de note, pas d'événement. L'historique l'indique (« moteur d'évaluation différent ou inconnu »), sans en conclure une régression ni une amélioration du domaine.
+  - Les notes historiques ne sont pas recalculées. Les comparaisons reprennent entre deux analyses 0.7.0.
+- **Portée de mesure.** Deux analyses faites l'une avec la sonde activée et l'autre sans ne sont pas comparées non plus (« portée de mesure différente »). La portée est lue dans le résultat enregistré de chaque analyse, jamais dans la configuration actuelle.
+- **Inchangés** : les règles de couverture, de note et de lettre (sections 1 à 3), les plafonds et le plan de corrections.
