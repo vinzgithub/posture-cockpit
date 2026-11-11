@@ -248,6 +248,19 @@ schema5_scan() {
   [ "$status" = 303 ] || fail "schema-5 demonstration scan answered $status"
 }
 
+# Every page of the demonstration domain answers 200: its page, its details, its history, and each scan
+# of the history, those made by the other image included (the round trip on schema 5, 0.7.0).
+pages_ok() {
+  local name=$1 domain=/domains/menuiserie-dupont.example path status ids
+  ids=$(in_container "$name" python -c 'import sqlite3; print(*[r[0] for r in sqlite3.connect("/data/posture_cockpit.db").execute("SELECT id FROM scans ORDER BY id")])')
+  [ -n "$ids" ] || fail "no scan to show"
+  for path in "$domain" "$domain/details" "$domain/history" $(printf "$domain/history/%s " $ids); do
+    status=$(curl -sS -o /dev/null -w '%{http_code}' -b "$WORK/$name/cookies" "$(url "$name" "$path")")
+    [ "$status" = 200 ] || fail "$path answered $status"
+  done
+  ok "every page of the domain and of its $(echo "$ids" | wc -w) scan(s) answers 200"
+}
+
 upgrade_recette() {  # upgrade_recette OLD_IMAGE IMAGE
   local old=$1 image=$2 name=pc-recette-upgrade version key old_schema schema archive
   version=$(version_of_image "$image")
@@ -309,6 +322,7 @@ PY_EXPECT
     log_in "$name"
     ok "$old runs again on the same data (schema $schema unchanged by $version)"
     schema5_scan "$name"
+    pages_ok "$name"  # the scans of the candidate shown by the old image
     expect_output "schema $schema (up to date), 1 account(s), 1 domain(s), 3 scan(s)" in_container "$name" posture-cockpit info
     compose "$name" stop >/dev/null 2>&1
     set_image "$name" "$image"
@@ -317,6 +331,7 @@ PY_EXPECT
     log_in "$name"
     expect_output "schema $schema (up to date), 1 account(s), 1 domain(s), 3 scan(s)" in_container "$name" posture-cockpit info
     [ "$(key_hash "$name")" = "$key" ] || fail "the session key changed during schema-5 roundtrip"
+    pages_ok "$name"  # the scan of the old image shown by the candidate
     in_container "$name" python - <<'PY_INTEGRITY'
 from posture_cockpit.config import Config
 from posture_cockpit.storage import Database, Scans
