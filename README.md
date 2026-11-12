@@ -28,7 +28,7 @@ But a certificate might be close to expiring, your website might be missing usef
 
 The idea is simple: **don't just tell people something is wrong. Help them understand why it matters and what they can do next.**
 
-It's a self-hosted application with source code available on GitHub. You run it **on your own server**. It doesn't require ChatGPT, an AI subscription or an API key.
+It's a standalone, self-hosted application with source code available on GitHub: you run it **on your own server**.
 
 ## Who is it for?
 

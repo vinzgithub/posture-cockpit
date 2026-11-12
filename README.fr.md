@@ -28,7 +28,7 @@ Pourtant, un certificat peut approcher de sa date d'expiration, un site peut man
 
 L'idée est simple : **ne pas seulement vous dire qu'il y a un problème, mais vous aider à comprendre ce qu'il signifie et quoi faire ensuite.**
 
-C'est un logiciel librement consultable sur GitHub, que vous installez **sur votre propre serveur**. Il ne nécessite ni ChatGPT, ni abonnement à un service d'IA.
+C'est un logiciel autonome et auto-hébergé, librement consultable sur GitHub : vous l'installez **sur votre propre serveur**.
 
 ## À qui ça peut servir ?
 
