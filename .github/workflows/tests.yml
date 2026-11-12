@@ -88,19 +88,22 @@ jobs:
           echo "::notice title=PDF in the hardened container::$(grep -E '^reports ' "$RUNNER_TEMP/pdf.log" | tail -1)"
 
   # Instances made by the released v0.3.0 (schema 3) and v0.4.0 (schema 4), rebuilt from their tag,
-  # and by the official image of v0.4.1 (schema 4, pinned by its digest), then updated to this
-  # image on the same volume: the verified backup made before the migration, then the old image
-  # again when the schema is the same, or its refusal of the newer one (0.4.1 and later).
+  # and by the official images of v0.4.1 (schema 4) to v0.6.1 (schema 5), pinned by their digest,
+  # then updated to this image on the same volume: the verified backup made before the migration,
+  # then the old image again when the schema is the same (the version in production before 0.7.0:
+  # v0.6.1), or its refusal of the newer one (0.4.1 and later).
   upgrade:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        from: ["v0.3.0", "v0.4.0", "v0.4.1", "v0.5.0", "v0.6.0"]
+        from: ["v0.3.0", "v0.4.0", "v0.4.1", "v0.5.0", "v0.6.0", "v0.6.1"]
     env:
       OFFICIAL_0_4_1: ghcr.io/vinzgithub/posture-cockpit@sha256:c5081ebcf79fe79c30fdec4dde52d01611df6fd219ffcc4b3c6d4c80c258e9ae
       OFFICIAL_0_5_0: ghcr.io/vinzgithub/posture-cockpit@sha256:c8dacc1e82646562a3a386ba850a8dca785df5ceee98bf9910ba74eef67a5651
       OFFICIAL_0_6_0: ghcr.io/vinzgithub/posture-cockpit@sha256:70da24128abef742dc4649235d662a37596ed786a322d840c85aa02afc2fe633
+      # The digest the publication of v0.6.1 pushed and read back (release.yml, run 40123536677).
+      OFFICIAL_0_6_1: ghcr.io/vinzgithub/posture-cockpit@sha256:f670500db50aff70b535a82ec0692660888f6b6387fbe25823feeb0a15d6f069
     steps:
       - uses: actions/checkout@v7
         with:
@@ -126,13 +129,14 @@ jobs:
           docker run --rm --entrypoint python posture-cockpit:v0.4.1 -c 'import posture_cockpit; print(posture_cockpit.__version__)' \
             | grep -qx 0.4.1
       - name: Official schema-5 image, by its digest
-        if: matrix.from == 'v0.5.0' || matrix.from == 'v0.6.0'
+        if: matrix.from == 'v0.5.0' || matrix.from == 'v0.6.0' || matrix.from == 'v0.6.1'
         env:
           OLD_TAG: ${{ matrix.from }}
         run: |
           case "$OLD_TAG" in
             v0.5.0) old="$OFFICIAL_0_5_0" ;;
             v0.6.0) old="$OFFICIAL_0_6_0" ;;
+            v0.6.1) old="$OFFICIAL_0_6_1" ;;
           esac
           docker pull "$old"
           docker tag "$old" "posture-cockpit:$OLD_TAG"

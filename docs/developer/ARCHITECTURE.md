@@ -12,7 +12,7 @@ This document is the map of the code: where things are, how a scan flows, and ho
               ├─► scanner.py ─► core/engine.py ─► checks/*.py (extensions)
               │                                     │
               │                                     ▼
-              │                               core/network.py  (DNS, TLS, HTTP — passive)
+              │                               core/network.py  (DNS, TLS, HTTP — passive; SMTP optional, 0.7.0)
               │                                     │  every connection goes through
               │                                     ▼
               │                               core/egress.py   (where a scan may connect)
@@ -31,7 +31,8 @@ This document is the map of the code: where things are, how a scan flows, and ho
 | `core/model.py` | `Status`, `Outcome`, `Finding`, `Remedy`, `DnsChange`: the data that flows everywhere |
 | `core/extension.py` | The extension API: `Extension`, the `@extension.check` decorator, `CheckContext` |
 | `core/registry.py` | Finds extensions (built-in + entry points); a broken extension is reported, never fatal |
-| `core/network.py` | The four questions a check may ask (`dns`, `certificate`, `accepts_tls`, `http_get`) and their real implementation, `LiveNetwork` (cache, limits, deadlines per scan) |
+| `core/network.py` | The four questions a check may ask (`dns`, `certificate`, `accepts_tls`, `http_get`) and their real implementation, `LiveNetwork` (cache, limits, deadlines per scan); in 0.7.0, `smtp_attempt`, one SMTP dialogue with a checked address, port 25, with a budget of its own (16 attempts) |
+| `core/smtp.py` | The SMTP dialogue of the probe (0.7.0): `220` greeting, `EHLO`, `STARTTLS`, TLS, `QUIT`, observed step by step; never `MAIL`, `RCPT` or `DATA` |
 | `core/egress.py` | **The single rule for outgoing connections**: address zones (public, internal, forbidden), `EgressPolicy`, `DestinationBlocked` |
 | `core/errors.py` | `NetworkError` and `Refused` (nothing listens: a definite answer, unlike a timeout) |
 | `core/fixture.py` | `FixtureNetwork`: the same questions, answered from recorded data (tests, demo) |
@@ -61,7 +62,7 @@ This document is the map of the code: where things are, how a scan flows, and ho
 2. `engine.normalize_domain` turns it into a clean name (`https://www.Example.com/contact` → `example.com`).
 3. `scanner.preflight` checks that the DNS answers something for that name. Otherwise: "does not exist" or "the DNS returns nothing", and nothing is saved.
 4. `scanning.scan_and_save` takes a slot of the **scan limiter** (concurrent scans, scans per account and per hour).
-5. `scanner.scan` takes the checks of the enabled extensions and a **fresh network** (its cache only serves this scan) built with the **rule of the perimeter**: the Internet (public addresses, ports 80 and 443), or an internal perimeter (its networks, DNS servers, ports and CA).
+5. `scanner.scan` takes the checks of the enabled extensions and a **fresh network** (its cache only serves this scan) built with the **rule of the perimeter**: the Internet (public addresses, ports 80 and 443, plus port 25 for the SMTP probe when it is on), or an internal perimeter (its networks, DNS servers, ports and CA; never SMTP).
 6. `engine.scan` runs **all checks at once**. Each receives a `CheckContext` (domain, network, time, internal or not) and returns an `Outcome`. Checks made for the Internet only are "not applicable" in an internal scan. A check that times out, raises a network error, hits the egress rule or crashes becomes an `Outcome` with status `ERROR` ("not evaluated", with the reason): the others carry on. Work left running is cancelled at the end.
 7. `Scans.save` stores, in one transaction, the scan (with how it was started, `via`: web, api, schedule, and the generation of its rules, `engine`), its `Finding`s, its assessment (score, grade, coverage, perimeter, metrics) and its first measured state (`scan_states`); the scan is written to the audit log.
 8. The plan page (`GET /domains/<name>`) calls `views.plan_view`, which produces ready-worded objects for the `plan.html` template.
@@ -93,7 +94,7 @@ One SQLite file in the data folder, in WAL mode, readable by its owner only. Tab
 | 4 (0.4.0) | Metrics of `scans` (raw score, cap, final score, diagnostic coverage, blocked checks, addresses, reasons), added empty: nothing recomputed |
 | 5 (0.5.0) | `scans.via`, `scans.engine`, `scan_states`, `schedules`, `schedule_runs`, `events`, `users.events_seen_at`; one state per existing scan made of its stored values, nothing recomputed; the images 0.4.x refuse this schema |
 
-**Timeline of measured states** (`scan_states`, 0.5.0). The values stored in `scans` are overwritten by each recheck; each moment is also kept as a state: one `scan` state when the scan is saved, one `recheck` state after each recheck, in the transaction of the change. A state holds its date, the generation of the rules, score, grade, coverage, evaluation, the metrics and the status of every check. Rows are only ever added (a trigger refuses any `UPDATE`; no code deletes one; they go with their scan). Scans made before 0.5.0 got a single state made of their stored values: `scan` when never rechecked, otherwise `legacy`, dated from the last recheck — the values before that recheck were overwritten, so no state is made up for them. The generation (`core/generation.py`) changes whenever the rules would give another verdict or score for the same observations (`tests/test_v050_generation.py` fails until it does); a recheck of a scan judged by other rules has no generation.
+**Timeline of measured states** (`scan_states`, 0.5.0). The values stored in `scans` are overwritten by each recheck; each moment is also kept as a state: one `scan` state when the scan is saved, one `recheck` state after each recheck, in the transaction of the change. A state holds its date, the generation of the rules, score, grade, coverage, evaluation, the metrics and the status of every check. Rows are only ever added (a trigger refuses any `UPDATE`; no code deletes one; they go with their scan). Scans made before 0.5.0 got a single state made of their stored values: `scan` when never rechecked, otherwise `legacy`, dated from the last recheck — the values before that recheck were overwritten, so no state is made up for them. The generation (`core/generation.py`) changes whenever the rules would give another verdict or score for the same observations (`tests/test_v050_generation.py` fails until it does; generation 4 from 0.4.0 to 0.6.1, 5 since 0.7.0 with the SMTP check); a recheck of a scan judged by other rules has no generation.
 
 **Transactions.** One connection serves the whole process and its lock lets the same thread in again — and every asyncio task runs on that thread. So `transaction()` remembers the thread and the task that opened it, and any use of the connection by another one while it is open raises `TransactionOwnerError`, reads included; another thread waits for the lock. The rule: **no `await` inside `with db.transaction():`** (`tests/test_v050_contract.py` checks the code for it).
 
@@ -213,3 +214,27 @@ they do not change a refusal remedy to restoration. The preload list is never qu
 Stored finding decoding rejects non-finite floors, false HTTPS roots and invalid JSON.
 It raises CorruptScan at the repository boundary. Web handlers return localized HTTP 409
 pages or an error PDF; the API gives scan_unreadable. Lists isolate damaged analyses.
+
+### 0.7 SMTP probe, bounded evidence, PDF reports
+
+**SMTP probe** (`mail.smtp_starttls`, off by default). Three modules, each with one role:
+
+- `checks/smtp_measure.py` discovers the MX, chooses 8 of them at most and 16 attempts, and keeps the deadline `min(12 s, CHECK_TIMEOUT − 2 s)`;
+- each attempt goes through `LiveNetwork.smtp_attempt`, which checks the egress rule again by itself (public address, port 25, Internet only) and the EHLO name;
+- `checks/smtp_verdict.py` alone gives this check a status (matrix F05) and computes the readiness for MTA-STS `enforce` (F06).
+
+Settings: `config.py` (`SMTP_PROBE`, `SMTP_EHLO_NAME`, refused at startup). Nothing is attempted with the probe off, nor in an internal perimeter.
+
+**Measurement scope** (`core/compare.py`, `measurement_scope`). Each state keeps in its metrics what it measured of SMTP: `on`, `off`, `internal`, `absent` or `unknown`. These values are read from the stored evidence, never from the configuration. Two states of different scopes are not compared (reason `scope`, right after `engine`), and no event is derived from them.
+
+**Bounded evidence.**
+- `checks/smtp_evidence.py` bounds the SMTP evidence to 64 KiB.
+- `checks/mail_evidence.py` bounds the lists of `mail.mx` and `mail.mta_sts` (16 entries, the determining ones first, exact counts) and the `hosts` list of their messages.
+- Decisions are made before, on the complete data.
+- Older scans are bounded when read (`storage/scans.py`), never rewritten. Their original evidence is downloaded from `/domains/<name>/history/<id>/evidence/<check>`, with the same authorizations and audit.
+
+**PDF reports.** `report/jobs.py` starts `report/worker.py` in a process of its own:
+- its address space and processor time are bounded, and it dies with the application (`PR_SET_PDEATHSIG`, result checked);
+- one deadline covers the start, the layout and the transfer; one reaping path (`reap`) serves the stop, the deadline, the cancellation and the shutdown of the application;
+- `web/limits.py` (`ReportLimiter`) allows 2 reports at once and 1 per account, with an immediate refusal beyond;
+- WeasyPrint is never imported in the process of the application.

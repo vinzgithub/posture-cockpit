@@ -8,7 +8,7 @@
 
 **Français** · [**English**](README.md)
 
-![Version](https://img.shields.io/badge/version-0.6.1-126caa) ![Docker](https://img.shields.io/badge/installation-Docker-2496ED) ![Licence](https://img.shields.io/badge/licence-PolyForm%20Noncommercial-0d355d)
+![Version](https://img.shields.io/badge/version-0.7.0-126caa) ![Docker](https://img.shields.io/badge/installation-Docker-2496ED) ![Licence](https://img.shields.io/badge/licence-PolyForm%20Noncommercial-0d355d)
 
 <img src="docs/images/fr/hero.png" alt="Posture Cockpit présenté sur ordinateur et sur téléphone" width="100%">
 
@@ -28,7 +28,7 @@ Pourtant, un certificat peut approcher de sa date d'expiration, un site peut man
 
 L'idée est simple : **ne pas seulement vous dire qu'il y a un problème, mais vous aider à comprendre ce qu'il signifie et quoi faire ensuite.**
 
-C'est un logiciel librement consultable sur GitHub, que vous installez **sur votre propre serveur**. Il ne nécessite ni ChatGPT, ni abonnement à un service d'IA.
+C'est un logiciel autonome et auto-hébergé, librement consultable sur GitHub : vous l'installez **sur votre propre serveur**.
 
 ## À qui ça peut servir ?
 
@@ -92,18 +92,20 @@ Depuis la **v0.6.0**, une vue **Portefeuille** aide à repérer les domaines qui
 
 Avec **« Et si… ? »**, vous pouvez sélectionner plusieurs corrections (y compris les étapes successives de DMARC) et voir ce qui *pourrait* s'améliorer. La simulation **ne modifie ni vos DNS ni vos serveurs** : seule une nouvelle analyse permettra de confirmer le résultat réel.
 
-**Exemple fictif :** [télécharger le rapport PDF Mission Control](docs/examples/posture-cockpit-mission-control-demo.fr.pdf). Rapport généré par la candidate v0.6.1 sur `menuiserie-dupont.example`, sans analyse d’une organisation réelle. Certaines actions ont un effet non déterminable ; les projections restent à confirmer.
+**Exemple fictif :** [télécharger le rapport PDF Mission Control](docs/examples/posture-cockpit-mission-control-demo.fr.pdf). Rapport généré par la candidate v0.7.0 sur `menuiserie-dupont.example`, sans analyse d’une organisation réelle. Certaines actions ont un effet non déterminable ; les projections restent à confirmer.
 
 ## Qu'est-ce que Posture Cockpit vérifie exactement ?
 
 | Partie examinée | En termes simples |
 |---|---|
-| **Messagerie** | Qui est autorisé à envoyer des e-mails au nom de votre domaine ? Quelles protections contre l'usurpation sont publiées ? L'outil vérifie notamment SPF, DKIM, DMARC, MTA-STS et TLS-RPT, dans les limites de ce qui est observable. |
+| **Messagerie** | Qui est autorisé à envoyer des e-mails au nom de votre domaine ? Quelles protections contre l'usurpation sont publiées ? L'outil vérifie notamment SPF, DKIM, DMARC, MTA-STS et TLS-RPT, dans les limites de ce qui est observable. Depuis la v0.7.0, une sonde **facultative** peut aussi vérifier que vos serveurs de messagerie proposent le chiffrement (STARTTLS) avec un certificat valide sur le port 25. |
 | **Site web** | Le site redirige-t-il correctement vers HTTPS ? Certaines protections du navigateur sont-elles présentes, comme HSTS et CSP ? |
 | **Certificats HTTPS** | Le certificat est-il valide ? Va-t-il bientôt expirer ? Les protocoles TLS et les clés répondent-ils aux exigences contrôlées ? |
 | **DNS** | Les serveurs de noms, DNSSEC et les règles CAA sont-ils configurés comme attendu ? |
 
-Au total, **20 contrôles sont intégrés dans la v0.6.1**. Certains sont sans objet pour un domaine donné ; d'autres peuvent ne pas aboutir à cause d'une erreur ou d'un serveur qui ne répond pas. Posture Cockpit fait la différence entre **« non applicable »** et **« impossible à vérifier »** : il ne considère jamais un contrôle non réalisé comme réussi.
+Au total, **21 contrôles sont intégrés dans la v0.7.0**. Certains sont sans objet pour un domaine donné ; d'autres peuvent ne pas aboutir à cause d'une erreur ou d'un serveur qui ne répond pas. Posture Cockpit fait la différence entre **« non applicable »** et **« impossible à vérifier »** : il ne considère jamais un contrôle non réalisé comme réussi.
+
+Le contrôle SMTP STARTTLS est **désactivé par défaut** : c'est le seul qui se connecte aux serveurs de messagerie, et il demande le port 25 sortant et un nom à vous pour la sonde. Voir [le contrôle SMTP STARTTLS](docs/user/SMTP_STARTTLS.fr.md).
 
 [Comprendre le calcul de la note et de la couverture](docs/user/SCORING.fr.md)
 
@@ -121,7 +123,7 @@ Pour une **nouvelle installation**, ouvrez un terminal sur votre serveur :
 
 ```bash
 mkdir posture-cockpit && cd posture-cockpit
-curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.6.1/compose.yaml
+curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.7.0/compose.yaml
 docker compose up -d
 ```
 
@@ -135,9 +137,9 @@ Ouvrez `http://<adresse-du-serveur>:8080/setup`, saisissez ce code et créez le 
 
 **Important :** ne publiez pas cette interface directement sur Internet en HTTP. Pour un accès distant, utilisez un **proxy inverse HTTPS** correctement configuré.
 
-Vous utilisez déjà une ancienne version ? **Ne suivez pas la procédure de nouvelle installation pour la mettre à jour.** Sauvegardez votre instance et suivez le guide prévu : le passage de la v0.4.x à la v0.5.0 ou plus récente exige des précautions concernant la base de données et l'ordonnanceur ; la v0.6.1 conserve le schéma 5.
+Vous utilisez déjà une ancienne version ? **Ne suivez pas la procédure de nouvelle installation pour la mettre à jour.** Sauvegardez votre instance et suivez le guide prévu : le passage de la v0.4.x à la v0.5.0 ou plus récente exige des précautions concernant la base de données et l'ordonnanceur ; la v0.7.0 conserve le schéma 5, comme les v0.5.0 à v0.6.1.
 
-📖 [Guide complet : installation, configuration, sauvegarde et mise à jour](docs/user/INSTALLATION.fr.md) · [Version publiée v0.6.1](https://github.com/vinzgithub/posture-cockpit/releases/tag/v0.6.1)
+📖 [Guide complet : installation, configuration, sauvegarde et mise à jour](docs/user/INSTALLATION.fr.md) · [Version publiée v0.7.0](https://github.com/vinzgithub/posture-cockpit/releases/tag/v0.7.0)
 
 ## Ce que Posture Cockpit fait… et ne fait pas
 
@@ -145,13 +147,13 @@ Vous utilisez déjà une ancienne version ? **Ne suivez pas la procédure de nou
 
 Les suites de chiffrement TLS ne sont pas énumérées, par choix : les lister demande des dizaines de négociations par adresse, ce qui dépasse une observation passive. Utilisez testssl.sh ou SSL Labs pour cet examen.
 
-Pour les domaines Internet, ses connexions web sortantes sont limitées aux **adresses publiques** et aux **ports 80 et 443**, avec des contrôles destinés à empêcher qu'une adresse ou une redirection conduise vers un réseau privé. Les audits de réseaux internes sont une fonction distincte, **désactivée par défaut** et réservée à une configuration administrateur explicite.
+Pour les domaines Internet, ses connexions web sortantes sont limitées aux **adresses publiques** et aux **ports 80 et 443** (plus le port 25 pour la sonde SMTP facultative, qui se contente de dire `EHLO`, de demander `STARTTLS` et de repartir, sans envoyer de message), avec des contrôles destinés à empêcher qu'une adresse ou une redirection conduise vers un réseau privé. Les audits de réseaux internes sont une fonction distincte, **désactivée par défaut** et réservée à une configuration administrateur explicite.
 
 L'accès au logiciel dispose notamment de comptes utilisateurs, d'une **authentification à deux facteurs TOTP**, de protections contre les tentatives répétées et d'un journal d'audit. Les données sont conservées sur votre propre instance ; les vérifications produisent naturellement des requêtes vers les services examinés.
 
 **Un point de vigilance pour la messagerie :** un domaine sans serveur MX peut tout de même envoyer des e-mails par un prestataire externe. Avant de publier une règle SPF restrictive telle que `v=spf1 -all`, vérifiez que ce domaine ne sert réellement à aucun envoi.
 
-[Documentation de sécurité](SECURITY.md) · [Audits des réseaux internes](docs/user/INSTALLATION.fr.md#audits-des-réseaux-internes)
+[Documentation de sécurité](SECURITY.md) · [Audits des réseaux internes](docs/user/INSTALLATION.fr.md#audits-de-réseaux-internes)
 
 ## Pour ceux qui veulent aller plus loin
 
@@ -163,10 +165,10 @@ La [documentation de l'architecture](docs/developer/ARCHITECTURE.md) s'adresse a
 
 Le code est publié sous **[PolyForm Noncommercial 1.0.0](LICENSE)**. La licence autorise les usages qu'elle définit comme non commerciaux ; pour les autres cas, consultez les [conditions de licence commerciale](COMMERCIAL-LICENSE.md).
 
-**Conception, orientation du projet et validation : Vincent Fournet.** Développement réalisé avec l'assistance d'outils d'intelligence artificielle (Claude et ChatGPT), sous sa direction.
+**Conception, orientation du projet et validation : Vincent Fournet.**
 
 Copyright © 2026 Vincent Fournet.
 
 ---
 
-<div align="center"><sub>Posture Cockpit v0.6.1 — Comprendre ce qui protège votre domaine, et savoir quoi faire quand quelque chose manque.</sub></div>
+<div align="center"><sub>Posture Cockpit v0.7.0 — Comprendre ce qui protège votre domaine, et savoir quoi faire quand quelque chose manque.</sub></div>

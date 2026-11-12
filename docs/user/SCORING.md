@@ -49,7 +49,7 @@ Coverage percentages are rounded down: 89.6% shows as 89%, never 90%.
 
 ## 4. The weights
 
-Unchanged since version 0.1.0.
+Unchanged since version 0.1.0; version 0.7.0 adds a check, SMTP encryption (STARTTLS), with weight 5.
 
 | Check | Area | Weight | Internal audit |
 |---|---|---|---|
@@ -63,6 +63,7 @@ Unchanged since version 0.1.0.
 | Content Security Policy (CSP) | Website | 4 | yes |
 | Name servers | DNS | 4 | not applicable |
 | DNSSEC signature | DNS | 4 | not applicable |
+| SMTP encryption of the receiving servers (STARTTLS), since 0.7.0 | Mail | 5 | not applicable |
 | Encryption required on delivery (MTA-STS) | Mail | 3 | not applicable |
 | Certificate key | TLS | 3 | yes |
 | Protection against framing (clickjacking) | Website | 3 | yes |
@@ -75,6 +76,8 @@ Unchanged since version 0.1.0.
 | Security contact (security.txt) | Website | 1 | not applicable |
 
 The MX check is information as long as the mail servers can be reached; it only counts ("to improve") when one of them has no address.
+
+The SMTP STARTTLS check is only made when the probe is on on the instance (off by default): otherwise it is "not applicable" and does not count. See [SMTP_STARTTLS.md](SMTP_STARTTLS.md).
 
 ## 5. The plan of fixes
 
@@ -172,3 +175,15 @@ browser list membership. Neither history nor attribution changes any verdict or 
 ## v0.6.1 clarification: plan gains and target
 
 Calculable gains exclude named actions with an unknown effect, which remain in their observed state. The complete plan target remains unknown if any priority has an unknown effect. The simulator never silently removes a selected action. HTTPS bounds require conclusive future measurements and do not guarantee the next score. Observed scoring remains unchanged (generation 4).
+
+## Version 0.7: SMTP check and generation 5
+
+- **A 21st check**, “SMTP encryption of the receiving servers (STARTTLS)”, weight 5, Mail category ([SMTP_STARTTLS.md](SMTP_STARTTLS.md)).
+  - Probe off (the default): “not applicable”, the score and the coverage do not change.
+  - Probe on: it counts like the other checks. A server that cannot be reached from the instance (port 25 blocked, timeout) leaves it “not evaluated” and lowers the coverage. Example: a domain without a website, on a network that blocks port 25, goes down to 87.8 % coverage, hence below 90 %: the grade cannot exceed B.
+- **The other checks judge as in 0.6.1.** On the reference worlds of generation 4, the only difference is the “not applicable” line of the new check.
+- **Generation 5.** Since the judging rules changed, scans are stored with generation 5.
+  - A scan made with 0.6.x (generation 4) is **never compared directly** with a 0.7.0 scan: no score difference, no event. The history says so (“different or unknown evaluation engine”), and draws no regression nor improvement of the domain from it.
+  - Historical scores are not recomputed. Comparisons resume between two 0.7.0 scans.
+- **Measurement scope.** Two scans, one made with the probe on and the other without, are not compared either (“different measurement scope”). The scope is read from the stored result of each scan, never from the current configuration.
+- **Unchanged**: the rules of coverage, score and grade (sections 1 to 3), the caps and the plan of fixes.
