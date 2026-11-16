@@ -19,7 +19,7 @@ A version prefix would not do: the tag 0.3.0-dev.1 declares "0.2.0" with other c
 
 from __future__ import annotations
 
-GENERATION = 4
+GENERATION = 5
 
 RELEASED: dict[str, int] = {"0.4.0": 4, "0.4.1": 4}
 

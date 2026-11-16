@@ -26,6 +26,7 @@ from starlette.exceptions import HTTPException
 
 from .. import __version__
 from ..i18n import LOCALES, fmt_date, pick_locale
+from ..report.smtp import view as smtp_view
 from ..security import csrf_token, csrf_valid
 from ..storage import Row, Scan
 from ..timezones import local, local_date
@@ -260,6 +261,8 @@ def render(request: Request, template: str, status: int = 200, **context: Any) -
         "csrf": csrf_token(request.session),
         "flashes": request.session.pop("flash", []),
         "t": text,
+        # Version 0.7 (PR-D): the stored evidence of mail.smtp_starttls, ready to show (report/smtp.py).
+        "smtp_view": lambda finding: smtp_view(finding.outcome.evidence, text),
         "date": day,
         "local_time": hour,
         "path": request.url.path,

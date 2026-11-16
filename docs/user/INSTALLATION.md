@@ -4,17 +4,17 @@
 
 ## With Docker (recommended)
 
-**Fresh installations only:** these commands create a new **v0.6.1** instance. If you already have data from v0.4.1 or earlier, follow [Updating](#updating), make a verified backup outside the Docker volume and disable the scheduler before upgrading. v0.6.1 retains SQLite schema 5; changing the image alone does not downgrade a database.
+**Fresh installations only:** these commands create a new **v0.7.0** instance. If you already have data from v0.4.1 or earlier, follow [Updating](#updating), make a verified backup outside the Docker volume and disable the scheduler before upgrading. v0.7.0 keeps SQLite schema 5, like v0.5.0 to v0.6.1; changing the image alone does not downgrade a database.
 
 You need Docker Engine and **Docker Compose 2.24 or later** (`docker compose version`). Nothing to build, no Git: the official image is published on `ghcr.io/vinzgithub/posture-cockpit`, for amd64 and arm64 processors.
 
 ```bash
 mkdir posture-cockpit && cd posture-cockpit
-curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.6.1/compose.yaml
+curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.7.0/compose.yaml
 docker compose up -d
 ```
 
-The [`compose.yaml`](../../compose.yaml) file names an exact version of the image (`0.6.1`), never `latest`: an installation never changes version on its own. It keeps the protections: unprivileged user (uid 10001), read-only system, no Linux capability, `no-new-privileges`, `/tmp` in memory. The data goes to the volume `posture-cockpit_posture-cockpit-data`, whatever the installation folder.
+The [`compose.yaml`](../../compose.yaml) file names an exact version of the image (`0.7.0`), never `latest`: an installation never changes version on its own. It keeps the protections: unprivileged user (uid 10001), read-only system, no Linux capability, `no-new-privileges`, `/tmp` in memory. The data goes to the volume `posture-cockpit_posture-cockpit-data`, whatever the installation folder.
 
 ### First start: the setup code
 
@@ -32,7 +32,7 @@ For an automated installation, `POSTURE_COCKPIT_SETUP_CODE` sets the code (at le
 ### Check
 
 ```bash
-curl http://localhost:8080/healthz                       # {"status":"ok","version":"0.6.1"}
+curl http://localhost:8080/healthz                       # {"status":"ok","version":"0.7.0"}
 docker compose exec posture-cockpit posture-cockpit info  # version, schema, accounts, scans
 ```
 
@@ -41,7 +41,7 @@ docker compose exec posture-cockpit posture-cockpit info  # version, schema, acc
 Do not edit `compose.yaml`: an update replaces it. Settings go in an optional `.env` file next to it; the [`.env.example`](../../.env.example) template describes them all, commented out:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.6.1/.env.example -o .env
+curl -fsSL https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.7.0/.env.example -o .env
 nano .env                 # uncomment the lines you need
 docker compose up -d      # applies the changes
 ```
@@ -65,7 +65,8 @@ An empty line (`NAME=`) keeps the default. Every setting of the application (`PO
 The server must be able to reach the Internet:
 
 - **DNS** (port 53 UDP and TCP) to its resolvers, or those of `POSTURE_COCKPIT_NAMESERVERS`;
-- **HTTPS and HTTP** (ports 443 and 80) to the domains scanned.
+- **HTTPS and HTTP** (ports 443 and 80) to the domains scanned;
+- **SMTP** (TCP port 25) to the mail servers of the domains scanned, **only when the SMTP probe is on** (`POSTURE_COCKPIT_SMTP_PROBE=on`, off by default; see [SMTP_STARTTLS.md](SMTP_STARTTLS.md)). Many Internet providers and hosting companies block outgoing port 25: the probe is then of no use.
 
 A filtering resolver (ad blocker, corporate DNS) may return empty answers: Posture Cockpit then refuses the scan rather than reporting missing records by mistake. Give it public resolvers, for instance `POSTURE_COCKPIT_NAMESERVERS=9.9.9.9,1.1.1.1` in the `.env`.
 
@@ -73,7 +74,7 @@ A filtering resolver (ad blocker, corporate DNS) may return empty answers: Postu
 
 Scans do **not** go through an HTTP proxy: the `HTTP_PROXY` and `HTTPS_PROXY` variables are ignored, because a proxy would connect in Posture Cockpit's place, out of reach of its egress rule. The server must therefore reach ports 80 and 443 directly.
 
-**Egress rule.** In Internet mode, Posture Cockpit only connects to public addresses, on ports 80 and 443. A domain that points to a private address (10.x, 192.168.x, ::1…) is not contacted: the checks concerned are "not evaluated", with the reason. Link-local, multicast and reserved addresses and the cloud metadata services (169.254.169.254…) are never contacted, whatever the mode. Details in [SECURITY.md](../../SECURITY.md).
+**Egress rule.** In Internet mode, Posture Cockpit only connects to public addresses, on ports 80 and 443, and on port 25 for the SMTP probe when it is on (never in an internal perimeter). A domain that points to a private address (10.x, 192.168.x, ::1…) is not contacted: the checks concerned are "not evaluated", with the reason. Link-local, multicast and reserved addresses and the cloud metadata services (169.254.169.254…) are never contacted, whatever the mode. Details in [SECURITY.md](../../SECURITY.md).
 
 ## Settings
 
@@ -84,7 +85,9 @@ With Docker, these settings go in the `.env` file (`NAME=value`, see above).
 | `POSTURE_COCKPIT_DATA_DIR` | `/data` (image) | Folder of the SQLite database and the session key |
 | `POSTURE_COCKPIT_NAMESERVERS` | the system's | DNS resolvers, comma-separated |
 | `POSTURE_COCKPIT_DKIM_SELECTORS` | empty | Additional DKIM selectors (comma-separated labels, without domain suffix). Usual selectors remain checked; 30 selectors maximum overall. An invalid value stops the start, with its reason. |
-| `POSTURE_COCKPIT_CHECK_TIMEOUT` | `15` | Seconds allowed to each check |
+| `POSTURE_COCKPIT_CHECK_TIMEOUT` | `15` | Seconds allowed to each check. With the SMTP probe on: above 2 s; the probe has `min(12 s, value − 2 s)` |
+| `POSTURE_COCKPIT_SMTP_PROBE` | `off` | `on` to test STARTTLS and the certificates of the mail servers on port 25 (check `mail.smtp_starttls`, see [SMTP_STARTTLS.md](SMTP_STARTTLS.md)). Only `on` and `off` are accepted; any other value prevents startup. Needs outgoing port 25 |
+| `POSTURE_COCKPIT_SMTP_EHLO_NAME` | – | Name the probe gives in `EHLO`: a fully qualified DNS name you control (`probe.my-domain.com`). **Required with `POSTURE_COCKPIT_SMTP_PROBE=on`**, no default; an invalid name (space, control character, non-ASCII, a single label, an IP address) prevents startup |
 | `POSTURE_COCKPIT_COOKIE_SECURE` | `false` | `true` when the application is served over HTTPS |
 | `POSTURE_COCKPIT_DEFAULT_LOCALE` | `fr` | Language of the pages before sign-in |
 | `POSTURE_COCKPIT_SESSION_MAX_AGE` | `604800` | Session length in seconds (7 days) |
@@ -92,6 +95,9 @@ With Docker, these settings go in the `.env` file (`NAME=value`, see above).
 | `POSTURE_COCKPIT_INTERNAL_SCANS` | `false` | `true` to let administrators create internal perimeters |
 | `POSTURE_COCKPIT_MAX_CONCURRENT_SCANS` | `4` | Scans running at the same time on the instance |
 | `POSTURE_COCKPIT_SCANS_PER_HOUR` | `30` | Scans per account and per hour (checking one fix again does not count) |
+| `POSTURE_COCKPIT_MAX_CONCURRENT_REPORTS` | `2` | PDF reports made at the same time on the instance, from 1 to 8; one at a time per account. A report over the limit is refused at once, with a message |
+| `POSTURE_COCKPIT_REPORT_TIMEOUT` | `60` | Seconds allowed to each PDF report, from 10 to 600, from the start of its process to the last byte; beyond, it is stopped, with a message |
+| `POSTURE_COCKPIT_REPORT_MEMORY_MB` | `1024` | Address space of the process of each PDF report, in MiB, from 256 to 8192 (`RLIMIT_AS`: virtual memory, not the memory really used, about 110 MiB for the heaviest report) |
 | `POSTURE_COCKPIT_TIMEZONE` | `TZ`, else UTC | Time zone of pages and PDF reports (IANA name, e.g. `Europe/Paris`). The database and the API stay in UTC |
 | `POSTURE_COCKPIT_SESSION_COOKIE` | `posture_cockpit` | Name of the session cookie: change it for a second instance at the same address (below) |
 | `FORWARDED_ALLOW_IPS` | – | Address of the reverse proxy, so the attempt limit counts the real client address |
@@ -201,12 +207,19 @@ As the session key is restored, open sessions stay valid; accounts, two-factor a
 2. Replace `compose.yaml` with the one of the new version, then restart:
 
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.6.1/compose.yaml   # the version you want
+curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.7.0/compose.yaml   # the version you want
 docker compose up -d
 docker compose exec posture-cockpit posture-cockpit info
 ```
 
 Docker downloads the new image and recreates the container on the same volume. At start, the database is upgraded automatically. Your `.env` is left as it is; if it sets `POSTURE_COCKPIT_IMAGE`, change it to the new version.
+
+**From 0.6.x to 0.7.0**:
+
+- **The database does not change** (schema 5, as since 0.5.0): no migration, hence no automatic backup at start. The backup of step 1 is yours: keep it off the server.
+- **The SMTP probe stays off** until you set `POSTURE_COCKPIT_SMTP_PROBE=on`: scans contact nothing more than in 0.6.1. The new check `mail.smtp_starttls` is then "not applicable" and does not count in the score (see [SMTP_STARTTLS.md](SMTP_STARTTLS.md)).
+- **The judging rules change** (generation 5, see [SCORING.md](SCORING.md#version-07-smtp-check-and-generation-5)). Scans made with 0.6.x stay in the history with their scores of the time, but are not compared with those of 0.7.0: the history and Mission Control say so ("different or unknown evaluation engine"), and conclude nothing about the domain. Comparisons resume between two 0.7.0 scans.
+- **PDF reports are made by a separate process**, bounded by `POSTURE_COCKPIT_MAX_CONCURRENT_REPORTS`, `POSTURE_COCKPIT_REPORT_TIMEOUT` and `POSTURE_COCKPIT_REPORT_MEMORY_MB` (see [Settings](#settings)); the defaults suit.
 
 **When the schema changes** (0.5.0: from schema 4 to 5), the application first writes a complete backup — database and session key — to `/data/backups/posture-cockpit-before-schema5-<date>.tar.gz`. It then reads it back and compares it with the database: schema, accounts, domains, scans, session key. It needs free space of twice the database; before updating, `posture-cockpit info` says how much. If any of this fails, nothing is migrated and the application does not start: the message says why (table below), and the database is left as it was. The account commands (`reset-password`, …) do the same when they find a database to migrate. Afterwards, `info` shows that backup:
 
@@ -319,6 +332,8 @@ POSTURE_COCKPIT_DATA_DIR=/var/lib/posture-cockpit \
 
 Without Pango, everything works except the PDF report, which shows a message.
 
+Each PDF report is laid out in a process of its own, started by the application with its own Python (`python -m posture_cockpit.report.worker`): the pages, the API and `/healthz` keep answering while it is made. Its limits are `POSTURE_COCKPIT_MAX_CONCURRENT_REPORTS`, `POSTURE_COCKPIT_REPORT_TIMEOUT` and `POSTURE_COCKPIT_REPORT_MEMORY_MB` (table above); a value out of bounds or not a whole number stops the start, with its reason. The process receives the HTML of the report and reads only its stylesheet and fonts, never the network; it runs as the user of the application (a hardening, not a sandbox). If the application stops, even abruptly, the process stops with it (`PR_SET_PDEATHSIG` on Linux); should the system refuse that request, the log says so (`Not killed with the application`) and the process remains bounded by its processor time and by its pipes, closed with the application. With Docker nothing is to be changed: it works with `read_only`, `cap_drop: ALL` and `no-new-privileges`. The memory of the container is not limited by `compose.yaml`; add a limit (`mem_limit`) if your host needs one.
+
 ## Rescue
 
 ```bash
@@ -327,6 +342,14 @@ docker compose exec posture-cockpit posture-cockpit disable-totp <username>   # 
 docker compose exec posture-cockpit posture-cockpit make-admin <username>
 ```
 
-### Returning between schema-5 versions (v0.5.0, v0.6.0 and v0.6.1)
+### Returning between schema-5 versions (v0.5.0 to v0.7.0)
 
 Before changing images: verify a backup outside the volume, disable scheduling and stop the instance cleanly. Schema 5 is unchanged: a pinned official older image can reuse the current volume without restoring an earlier backup. Data created after the upgrade must remain available. v0.5.0 shows its older projections, including DMARC, while observed scores remain unchanged. Test on an isolated copy; never run two instances concurrently on that volume. Returning to schema 4 still requires a separate restore procedure.
+
+**From 0.7.0 to 0.6.1**: put back the `compose.yaml` of 0.6.1 (and `POSTURE_COCKPIT_IMAGE` in the `.env`, if it is set), then restart. The settings of 0.7.0 (`POSTURE_COCKPIT_SMTP_PROBE`, `POSTURE_COCKPIT_SMTP_EHLO_NAME` and the three settings of PDF reports) have no effect in 0.6.1. 0.6.1 reads the scans made with 0.7.0, pages and history included: the round trip 0.6.1 → 0.7.0 → 0.6.1 → 0.7.0 on the same volume is checked in CI from the official image of 0.6.1, pinned by its digest. The scans of 0.7.0 keep their generation 5: 0.6.1 does not compare them with its own.
+
+**Limits of 0.6.1 after this return** (checked on a copy of the production): the scans of 0.7.0 remain readable and keep their score, but 0.6.1 does not know the SMTP check.
+- It shows it by its technical identifiers (`mail.smtp_starttls.title`, `mail.smtp_starttls.ok`…), on the pages and in the PDF, without the STARTTLS annex. If the probe had found a defect, the proposed correction carries these identifiers too.
+- It ignores the measurement scope: between a scan of 0.7.0 made with the probe on and another made with the probe off, the change of score it shows (history, Mission Control) comes from the setting, not from the domain.
+
+Run a scan after the return: 0.6.1 compares it with no scan of 0.7.0, and its own results are shown normally.

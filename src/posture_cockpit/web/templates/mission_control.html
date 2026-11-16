@@ -41,10 +41,10 @@
 <section class="panel" aria-labelledby="mc-changes">
   <h2 id="mc-changes">{{ t('mc.changes') }}</h2>
   {% if comparison.comparable %}<p>{{ t('mc.score_delta', n=('%+d' | format(comparison.score_delta))) }}</p>
-  {% else %}<p class="small">{{ t('mc.no_delta') }} {{ t('mc.reason.' ~ comparison.reason) }}</p>{% endif %}
+  {% else %}<p class="small">{{ t('mc.no_delta') }} {{ t('mc.reason.' ~ ('scope_unknown' if comparison.reason == 'scope' and scope_unknown else comparison.reason)) }}</p>{% endif %}
   {% if transitions %}<ul class="mc-transitions">{% for row in transitions[:3] %}{{ transition(row) }}{% endfor %}</ul>
     {% if transitions | length > 3 %}<details><summary>{{ t('mc.see_all', n=transitions | length) }}</summary><ul class="mc-transitions">{% for row in transitions[3:] %}{{ transition(row) }}{% endfor %}</ul></details>{% endif %}
-  {% else %}<p>{{ t('mc.no_changes') }}{% if not changes.available and changes.reason != comparison.reason %} {{ t('mc.reason.' ~ changes.reason) }}{% endif %}</p>{% endif %}
+  {% else %}<p>{{ t('mc.no_changes') }}{% if not changes.available and changes.reason != comparison.reason %} {{ t('mc.reason.' ~ ('scope_unknown' if changes.reason == 'scope' and scope_unknown else changes.reason)) }}{% endif %}</p>{% endif %}
   <p class="small muted">{{ t('mc.status_history') }}</p>
   <a href="/domains/{{ scan.domain }}/history">{{ t('details.history') }}</a>
 </section>

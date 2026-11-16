@@ -46,8 +46,10 @@ def populate(s, count, now, *, internal_every=10):
                          "VALUES(?,?,?,?,?,?,1,'0.5.0',4)", scans)
         s.db.executemany("INSERT INTO findings(scan_id,check_id,category,weight,status,outcome) VALUES(?,?,?,?,?,?)",
                          finding_rows)
+        # Version 0.7 (R5): the states hold mail.smtp_starttls (NA, probe off) and, as the instance stores
+        # them, their measurement scope; without it they would be of unknown scope, never compared.
         s.db.executemany("INSERT INTO scan_states(scan_id,at,origin,score,grade,coverage,checks,engine,evaluation,"
-                         "metrics) VALUES(?,?,?,?,?,?,?,4,'complete','{}')", states)
+                         "metrics) VALUES(?,?,?,?,?,?,?,4,'complete','{\"measurement_scope\": \"off\"}')", states)
         s.db.executemany("INSERT INTO schedules(domain_id,updated_at,next_run_at,failures,frequency,at_minute,enabled) "
                          "VALUES(?,?,?,?,'daily',300,1)", schedules)
         s.db.executemany("INSERT INTO schedule_runs(domain_id,slot,state,claim,claimed_at,scan_id,owner,finished_at) "

@@ -33,7 +33,9 @@ from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import Any
 
+from ..checks import mail_evidence, smtp_evidence
 from ..core import generation, scoring
+from ..core.compare import SMTP_CHECK, measurement_scope
 from ..core.engine import ScanResult
 from ..core.model import HTTPS_ROOT_CHECK, Finding
 from ..core.schedule_time import format_time
@@ -105,7 +107,21 @@ def _stored_finding(check_id: str, category: str, weight: int, status: str, payl
         raise ValueError("non-finite floor")
     if family.get("name") == "https" and family.get("role") == "root" and check_id != HTTPS_ROOT_CHECK:
         raise ValueError("false HTTPS root")
+    if check_id == SMTP_CHECK and len(payload) > smtp_evidence.LIMIT_BYTES and isinstance(data.get("evidence"), dict):
+        data["evidence"] = _shown_smtp(data["evidence"], data.get("params") or {})
+    if check_id in mail_evidence.CHECKS:
+        mail_evidence.shown(check_id, data)  # stored before correction 4: bounded to be shown, never rewritten
     return Finding.from_stored(check_id, category, weight, status, data)
+
+
+def _shown_smtp(evidence: dict[str, Any], params: dict[str, Any]) -> dict[str, Any]:
+    """An evidence of mail.smtp_starttls stored before it was bounded (correction 2 of v0.7.0) and beyond
+    the limit, bounded to be read (details, PDF, API, history, rechecks), never rewritten: the database
+    keeps it as it was, and :meth:`Scans.stored_evidence` gives it whole. An evidence within the limit, or
+    bounded when it was made, is read as stored."""
+    if "bounds" in evidence or smtp_evidence.size(evidence) <= smtp_evidence.LIMIT_BYTES:
+        return evidence
+    return smtp_evidence.bound(evidence, named=str(params.get("host", "")), original=True)
 
 
 def _finding(row: Row) -> Finding:
@@ -196,6 +212,16 @@ class Scans:
     def latest(self, domain_id: int) -> Scan | None:
         scan_id = self.latest_id(domain_id)
         return self.get(scan_id) if scan_id else None
+
+    def stored_evidence(self, scan_id: int, check_id: str) -> dict[str, Any] | None:
+        """The evidence of a finding as the database keeps it, never bounded nor rewritten: its recheck when
+        there is one, as the pages show the finding (correction 2 of v0.7.0, A7). None when there is none."""
+        row = (self.db.one("SELECT outcome FROM rechecks WHERE scan_id=? AND check_id=?", (scan_id, check_id))
+               or self.db.one("SELECT outcome FROM findings WHERE scan_id=? AND check_id=?", (scan_id, check_id)))
+        if row is None:
+            return None
+        evidence = json.loads(row["outcome"]).get("evidence")
+        return evidence if isinstance(evidence, dict) else None
 
     def latest_id(self, domain_id: int) -> int | None:
         """The number of the latest scan of a domain: the one the plan of fixes shows."""
@@ -359,12 +385,20 @@ class Scans:
 
     def _add_state(self, scan_id: int, at: str, origin: str, engine: int | None, a: scoring.Assessment,
                    findings: list[Finding]) -> None:
-        """Adds a state to the timeline of a scan; called inside the transaction of its change."""
+        """Adds a state to the timeline of a scan; called inside the transaction of its change.
+
+        Version 0.7 (R5, D5a): the metrics of the state also keep its measurement scope, computed from
+        the findings it holds (a recheck's included) and the perimeter of the scan, in the JSON only:
+        no column, no migration."""
+        metrics = _metrics(a, findings)
+        perimeter = self.db.value("SELECT perimeter FROM scans WHERE id=?", (scan_id,))
+        smtp = next((f.outcome.evidence for f in findings if f.check_id == SMTP_CHECK), None)
+        metrics["measurement_scope"] = measurement_scope(smtp, internal=bool(perimeter))
         self.db.execute(
             "INSERT INTO scan_states(scan_id, at, origin, engine, score, grade, coverage, evaluation, metrics, checks)"
             " VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (scan_id, at, origin, engine, a.score, a.grade, a.coverage, a.evaluation,
-             json.dumps(_metrics(a, findings), sort_keys=True),
+             json.dumps(metrics, sort_keys=True),
              json.dumps({f.check_id: f.status.value for f in findings}, sort_keys=True)))
         # Same transaction as the immutable measurement; no orphan event on a crash.
         from .events import record_state
@@ -376,10 +410,18 @@ class Scans:
         return self.save_rechecks(scan_id, [finding])
 
     def save_rechecks(self, scan_id: int, findings: list[Finding]) -> scoring.Assessment:
-        """Store a whole recheck group and its metrics in one transaction."""
+        """Store a whole recheck group and its metrics in one transaction.
+
+        Version 0.7: a finding of a check the scan does not hold is not stored. A group rechecks its
+        checks together (mail.mta_sts with mail.smtp_starttls, R6); on a scan made before a check
+        existed, the scan keeps the checks it was made with."""
         with self.db.transaction():
             stamp = utcnow()
+            held = {row["check_id"] for row in self.db.all("SELECT check_id FROM findings WHERE scan_id=?",
+                                                           (scan_id,))}
             for finding in findings:
+                if finding.check_id not in held:
+                    continue
                 if finding.check_id == HTTPS_ROOT_CHECK:
                     previous = self.db.one("SELECT outcome, checked_at FROM rechecks WHERE scan_id=? AND check_id=?",
                                            (scan_id, HTTPS_ROOT_CHECK))

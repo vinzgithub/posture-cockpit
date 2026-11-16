@@ -1,6 +1,6 @@
 # Posture Cockpit v0.6.1 — dossier de livraison
 
-**État : version v0.6.1 validée et publiée le 24 octobre 2026 sur GitHub et GHCR.** Cahier des charges révision 3 validé techniquement par Claude ; intégration et publication approuvées par le mainteneur. **Aucun déploiement ni mise à jour d'une instance existante n'a été effectué.**
+**État : version v0.6.1 validée et publiée le 24 octobre 2026 sur GitHub et GHCR.** Cahier des charges révision 3 validé techniquement ; intégration et publication approuvées par le mainteneur. **Aucun déploiement ni mise à jour d'une instance existante n'a été effectué.**
 
 ## Périmètre livré
 
@@ -31,7 +31,7 @@ Les sept PR #33 à #39 ont été préparées en branches empilées, puis intégr
 - Chromium avec transport de bouclage local : **29 tests réussis**, sans service ni domaine réel.
 - Ruff et mypy : réussis ; tests de mise en page PDF et T01 réussis.
 - Cinq tests F04 supplémentaires comparent les attentes SPF/DNSSEC/MX/MTA-STS/CSP avec les vrais contrôles sur réponses synthétiques, avant/après stockage historique et nouveau : réussis.
-- Différentiel indépendant de celui de Claude : 20 000 cas, graine `6101`, cas tirés du corpus `tests/data/observation-v050-mc3.json`, statuts aléatoires (statut original conservé lorsque des signaux imposent un verdict). `assess` et `by_category` complets normalisés en JSON : empreintes identiques v0.5.0/candidate, `8e3c2d973bc0e0fd66d74c0a7d305b6b93e326e343b0eaf2e0d230bfeee70013`. Ce générateur ne prétend pas reproduire celui de Claude.
+- Second différentiel, indépendant du premier : 20 000 cas, graine `6101`, cas tirés du corpus `tests/data/observation-v050-mc3.json`, statuts aléatoires (statut original conservé lorsque des signaux imposent un verdict). `assess` et `by_category` complets normalisés en JSON : empreintes identiques v0.5.0/candidate, `8e3c2d973bc0e0fd66d74c0a7d305b6b93e326e343b0eaf2e0d230bfeee70013`. Ce générateur ne prétend pas reproduire celui du premier différentiel.
 - Compatibilité au niveau du code : trois scans synthétiques avec extension `expect` OK/WARN/null, lecture et vraies écritures de revérification avec le tag v0.5.0 (`88623bccf9054b3fbbb1c360151efd27f467460f`), remontée candidate ; notes conservées et `integrity_check=ok`.
 - Deux rapports PDF fictifs normaux, FR/EN, 57/C, quatre pages chacun ; texte extrait contrôlé et huit pages rendues/inspectées. Recette : [exemples](../examples/README.md).
 

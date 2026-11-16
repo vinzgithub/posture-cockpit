@@ -15,7 +15,7 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from posture_cockpit.config import Config
-from posture_cockpit.core import schedule_time
+from posture_cockpit.core import generation, schedule_time
 from posture_cockpit.core.fixture import FixtureNetwork
 from posture_cockpit.core.schedule_time import Definition
 from posture_cockpit.scanner import DEMO_DOMAIN, demo_data
@@ -100,7 +100,7 @@ def test_a_due_scan_runs_once_is_recorded_as_scheduled_and_the_next_one_follows(
     [run] = pc.runs()
     [scan] = pc.scheduled_scans()
     assert (run["state"], run["scan_id"], run["slot"]) == ("done", scan["id"], "2026-10-20T05:00")
-    assert scan["started_by"] is None and scan["engine"] == 4
+    assert scan["started_by"] is None and scan["engine"] == generation.GENERATION
     assert pc.s.db.value("SELECT origin FROM scan_states WHERE scan_id = ?", (scan["id"],)) == "scan"
     pc.tick()  # nothing more the same day
     assert len(pc.runs()) == 1

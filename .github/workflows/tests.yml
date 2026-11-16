@@ -32,7 +32,10 @@ jobs:
   # The pages in Chromium (tests/browser): copy buttons on a page in plain HTTP,
   # language switch, steps on a phone. A missing browser fails the job, never skips it.
   browser:
-    runs-on: ubuntu-latest
+    # Pinned, unlike the other jobs: ubuntu-latest moved to Ubuntu 26.04 (November 2026), where the
+    # pinned Playwright cannot install Chromium and the job failed before any test ran. Move to a newer
+    # image together with a Playwright version that supports it; never by skipping the browser tests.
+    runs-on: ubuntu-24.04
     env:
       PYTHONDONTWRITEBYTECODE: "1"
     steps:
@@ -69,21 +72,38 @@ jobs:
             posture-cockpit:ci -c 'pip install --quiet --user "pytest>=8" "pyyaml>=6" && python -m pytest -q -rs -p no:cacheprovider' \
             | tee "$RUNNER_TEMP/pytest.log"
           echo "::notice title=Tests inside the image::$(tail -1 "$RUNNER_TEMP/pytest.log")"
+      # Version 0.7.0, corrective 3: the PDF reports, each in a process of its own, in the image run with the
+      # protections of compose.yaml (read-only system, /tmp in memory, no capability, no-new-privileges,
+      # uid 10001): the event loop never held, the limits, the processes stopped, the same pages as before;
+      # the stop, the deadline, the cancellations and the death of the parent (review of PR #51).
+      - name: PDF reports in a separate process, in the hardened container
+        run: |
+          set -o pipefail
+          docker run --rm --read-only --tmpfs /tmp --cap-drop ALL --security-opt no-new-privileges \
+            --user 10001:10001 -e HOME=/tmp -e XDG_CACHE_HOME=/tmp/cache -v "$PWD:/checks:ro" -w /checks \
+            --entrypoint sh posture-cockpit:ci -c 'pip install --quiet --user "pytest>=8" "pyyaml>=6" && \
+              python -m pytest -q -rA -p no:cacheprovider tests/test_v070_pdf_process.py tests/test_v070_pdf_server.py \
+              tests/test_v070_pdf_robustness.py' \
+            | tee "$RUNNER_TEMP/pdf.log"
+          echo "::notice title=PDF in the hardened container::$(grep -E '^reports ' "$RUNNER_TEMP/pdf.log" | tail -1)"
 
   # Instances made by the released v0.3.0 (schema 3) and v0.4.0 (schema 4), rebuilt from their tag,
-  # and by the official image of v0.4.1 (schema 4, pinned by its digest), then updated to this
-  # image on the same volume: the verified backup made before the migration, then the old image
-  # again when the schema is the same, or its refusal of the newer one (0.4.1 and later).
+  # and by the official images of v0.4.1 (schema 4) to v0.6.1 (schema 5), pinned by their digest,
+  # then updated to this image on the same volume: the verified backup made before the migration,
+  # then the old image again when the schema is the same (the version in production before 0.7.0:
+  # v0.6.1), or its refusal of the newer one (0.4.1 and later).
   upgrade:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        from: ["v0.3.0", "v0.4.0", "v0.4.1", "v0.5.0", "v0.6.0"]
+        from: ["v0.3.0", "v0.4.0", "v0.4.1", "v0.5.0", "v0.6.0", "v0.6.1"]
     env:
       OFFICIAL_0_4_1: ghcr.io/vinzgithub/posture-cockpit@sha256:c5081ebcf79fe79c30fdec4dde52d01611df6fd219ffcc4b3c6d4c80c258e9ae
       OFFICIAL_0_5_0: ghcr.io/vinzgithub/posture-cockpit@sha256:c8dacc1e82646562a3a386ba850a8dca785df5ceee98bf9910ba74eef67a5651
       OFFICIAL_0_6_0: ghcr.io/vinzgithub/posture-cockpit@sha256:70da24128abef742dc4649235d662a37596ed786a322d840c85aa02afc2fe633
+      # The digest the publication of v0.6.1 pushed and read back (release.yml, run 40123536677).
+      OFFICIAL_0_6_1: ghcr.io/vinzgithub/posture-cockpit@sha256:f670500db50aff70b535a82ec0692660888f6b6387fbe25823feeb0a15d6f069
     steps:
       - uses: actions/checkout@v7
         with:
@@ -109,13 +129,14 @@ jobs:
           docker run --rm --entrypoint python posture-cockpit:v0.4.1 -c 'import posture_cockpit; print(posture_cockpit.__version__)' \
             | grep -qx 0.4.1
       - name: Official schema-5 image, by its digest
-        if: matrix.from == 'v0.5.0' || matrix.from == 'v0.6.0'
+        if: matrix.from == 'v0.5.0' || matrix.from == 'v0.6.0' || matrix.from == 'v0.6.1'
         env:
           OLD_TAG: ${{ matrix.from }}
         run: |
           case "$OLD_TAG" in
             v0.5.0) old="$OFFICIAL_0_5_0" ;;
             v0.6.0) old="$OFFICIAL_0_6_0" ;;
+            v0.6.1) old="$OFFICIAL_0_6_1" ;;
           esac
           docker pull "$old"
           docker tag "$old" "posture-cockpit:$OLD_TAG"

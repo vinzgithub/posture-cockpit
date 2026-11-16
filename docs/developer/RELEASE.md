@@ -47,17 +47,25 @@ At the end: `docker compose down -v` **in that folder only**.
 
 ## Releasing a version
 
-1. On a branch: the version in `pyproject.toml`, `src/posture_cockpit/__init__.py` and the image of `compose.yaml` (`0.4.2`), the heading of `CHANGELOG.md` (`## 0.4.2 — <date>`), and the installation links of the READMEs and `INSTALLATION` (`v0.4.2`). When dependencies change, regenerate `docker/requirements.lock` (command at the top of the file). `tests/test_v041_distribution.py` checks that everything agrees.
+1. On a branch: the version in `pyproject.toml`, `src/posture_cockpit/__init__.py` and the image of `compose.yaml` (`0.7.0`), the heading of `CHANGELOG.md` (`## 0.7.0 — <date>`), and the installation links of the READMEs and `INSTALLATION` (`v0.7.0`). When dependencies change, regenerate `docker/requirements.lock` (command at the top of the file). `tests/test_v041_distribution.py` checks that everything agrees.
 2. Pull request to `main`: the CI above, plus the dry run of `release.yml` (both architectures built, nothing published).
-3. After the merge: create the tag `v0.4.2` and **publish the GitHub release**. That act triggers `release.yml`: the whole suite, the Docker recette, the amd64 and arm64 builds, then publication on `ghcr.io/vinzgithub/posture-cockpit` with SBOM and provenance. The digest is written in the summary of the run.
+3. After the merge: create the tag `v0.7.0` on the head commit of `main` and **publish the GitHub release**. Publishing the release **publishes no image**.
+4. Publish the images: **Actions → release → Run workflow**, from the `main` branch, with `release_tag` = `v0.7.0` and `confirmation` = `PUBLISH_GHCR`. The workflow (`workflow_dispatch`) refuses to go on if:
+   - the confirmation is not exactly `PUBLISH_GHCR`;
+   - it is not run from `main`;
+   - the release `v0.7.0` does not exist, is a draft or is not published;
+   - the tag does not point at the current head of `main`.
+
+   It then runs the whole suite, the Docker recette, the amd64 and arm64 builds, then publication on `ghcr.io/vinzgithub/posture-cockpit` with SBOM and provenance. The digest is written in the summary of the run. The "pre-release" box of the release decides the tags (below).
+5. Write down in `CHANGELOG.md` and in the release dossier: the SHAs of the merge commit and of the tag, the link of the release, the number of the run of `release.yml` and the digest read back for each tag. These values are written **only after** the corresponding operations.
 
 Tags published (`scripts/release_tags.py`):
 
 | Release | Tags |
 |---|---|
-| `v0.4.2` (final version, the latest) | `0.4.2`, `0.4`, `latest` |
+| `v0.7.0` (final version, the latest) | `0.7.0`, `0.7`, `latest` |
 | `v0.3.3` (a fix of an older line) | `0.3.3`, `0.3` — never `latest` |
-| `v0.4.2-rc.1`, "pre-release" box ticked | `0.4.2-rc.1` only — neither `0.4` nor `latest` |
+| `v0.7.0-rc.1`, "pre-release" box ticked | `0.7.0-rc.1` only — neither `0.7` nor `latest` |
 
 Publication happens in three steps, each checked (`scripts/registry_tag.py`):
 
@@ -65,6 +73,6 @@ Publication happens in three steps, each checked (`scripts/registry_tag.py`):
 2. **Both architectures pushed under the exact version only.**
 3. **Moving tags** (`X.Y`, `latest`) pointed at that digest, then **every tag read back** and the digests compared.
 
-A failure between 2 and 3 leaves the exact version published and the moving tags where they were: re-running the job ("Re-run failed jobs") resumes at step 3. On a pull request, all of it is rehearsed against a registry started in the job (`localhost:5000`), refusals included. The tag must match the repository (for a pre-release, `pyproject.toml` says `0.4.2rc1` and `compose.yaml` keeps the final version `0.4.2`; the pre-release is tested with `POSTURE_COCKPIT_IMAGE=ghcr.io/vinzgithub/posture-cockpit:0.4.2-rc.1`).
+A failure between 2 and 3 leaves the exact version published and the moving tags where they were: re-running the job ("Re-run failed jobs") resumes at step 3. On a pull request, all of it is rehearsed against a registry started in the job (`localhost:5000`), refusals included. The tag must match the repository (for a pre-release, `pyproject.toml` says `0.7.0rc1` and `compose.yaml` keeps the final version `0.7.0`; the pre-release is tested with `POSTURE_COCKPIT_IMAGE=ghcr.io/vinzgithub/posture-cockpit:0.7.0-rc.1`).
 
 **Once**: after the first publication, make the package public (GitHub → Packages → posture-cockpit → Package settings → Change visibility → Public), so that installing needs no account. This choice is **irreversible**: a public package cannot become private again.

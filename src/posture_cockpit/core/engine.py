@@ -29,7 +29,7 @@ from datetime import UTC, datetime
 from . import https_probe
 from .egress import DestinationBlocked
 from .errors import ConnectionReset, ConnectionTimedOut, Refused, TLSHandshakeError
-from .extension import Check, CheckContext
+from .extension import Check, CheckContext, SmtpSettings
 from .model import HTTPS_FAMILY, Finding, Outcome, Role, Status
 from .network import Network, NetworkError
 from .remediation import with_expectation
@@ -130,14 +130,19 @@ async def _https_family(check: Check, ctx: CheckContext, timeout: float, deadlin
 
 async def scan(domain: str, checks: Iterable[Check], net: Network, timeout: float = CHECK_TIMEOUT,
                now: datetime | None = None, internal: bool = False,
-               probe_deadline: float | None = None, history: dict | None = None) -> ScanResult:
+               probe_deadline: float | None = None, history: dict | None = None,
+               smtp: SmtpSettings | None = None) -> ScanResult:
     """Runs ``checks`` on ``domain`` concurrently. ``domain`` must already be normalized.
 
     ``internal``: the scan runs in an internal perimeter; checks made for the
     Internet only are reported as not applicable without running.
-    ``probe_deadline``: the HTTPS probe's (default :data:`.https_probe.PROBE_DEADLINE`)."""
+    ``probe_deadline``: the HTTPS probe's (default :data:`.https_probe.PROBE_DEADLINE`).
+    ``smtp`` (version 0.7.0): the instance's SMTP probe settings; off when not given."""
     started = now or datetime.now(UTC)
-    ctx = CheckContext(domain=domain, net=net, now=started, internal=internal, history=history or {})
+    # ``timeout`` goes into the context too: a check that must return what it observed before the
+    # engine stops it (the SMTP probe) computes its own deadline from it.
+    ctx = CheckContext(domain=domain, net=net, now=started, internal=internal, history=history or {},
+                       smtp=smtp or SmtpSettings(), check_timeout=timeout)
     clock = time.monotonic()
 
     def start(check: Check) -> Awaitable[Finding]:

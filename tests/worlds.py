@@ -136,3 +136,34 @@ def run(data: dict, *check_ids: str, domain: str = DOMAIN, registry: Registry | 
 
 def one(data: dict, check_id: str, registry: Registry | None = None) -> Finding:
     return run(data, check_id, registry=registry)[check_id]
+
+
+# ------------------------------------------------------------------ version 0.7: the SMTP probe
+EHLO = "probe.posture-cockpit.example"  # the EHLO name of the test instance (a name chosen for the tests)
+MX = "mx.example.net"                   # the MX of the healthy domain, at 192.0.2.25
+
+
+def with_smtp(data: dict, outcomes: dict, **dns: list[str] | str | None) -> dict:
+    """``data`` where the MX answers as ``outcomes`` says (address → outcome, see core/fixture.py), with
+    these DNS answers too (``with_smtp(d, {...}, **{"mx.example.net AAAA": ["2001:db8::25"]})``)."""
+    return changed(data, smtp={MX: outcomes}, dns=dns) if "smtp" in data else changed(
+        {**data, "smtp": {}}, smtp={MX: outcomes}, dns=dns)
+
+
+def without_website(data: dict) -> dict:
+    """``data`` where neither the domain nor www has an address: the web and TLS checks are NA."""
+    return changed(data, dns={f"{DOMAIN} A": [], f"www.{DOMAIN} A": []})
+
+
+def scan_smtp(data: dict, *check_ids: str, probe: bool = True, timeout: float = 5,
+              registry: Registry | None = None) -> tuple[dict[str, Finding], FixtureNetwork]:
+    """Runs some checks (all of them when none is given) with the SMTP probe on (or off), on a recorded
+    network bound to the domain; returns the findings by id and the network (what it was asked)."""
+    from posture_cockpit.core.extension import SmtpSettings
+
+    registry = registry or Registry.discover()
+    checks = [registry.get(c) for c in check_ids] if check_ids else registry.checks()
+    net = FixtureNetwork(data, NOW, domain=DOMAIN, ehlo_name=EHLO if probe else None)
+    settings = SmtpSettings(enabled=probe, ehlo_name=EHLO if probe else None)
+    result = asyncio.run(engine.scan(DOMAIN, checks, net, timeout=timeout, now=NOW, smtp=settings))
+    return {f.check_id: f for f in result.findings}, net

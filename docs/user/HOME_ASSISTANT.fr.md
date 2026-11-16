@@ -125,3 +125,26 @@ Une analyse stockée illisible est isolée. L’API des domaines continue à fou
 résultats des domaines sains ; l’entrée endommagée contient `domain`, `scan_id` et
 `error: "scan_unreadable"`. Une requête sur cette analyse seule renvoie HTTP 409 avec
 le même code. Aucune note n’est déduite de constats corrompus.
+
+### Ajouts de l’API en 0.7
+
+Deux objets s’ajoutent à chaque domaine ; aucun autre champ ne change. Ils sont lus dans le résultat enregistré du contrôle SMTP (voir [SMTP_STARTTLS.fr.md](SMTP_STARTTLS.fr.md)), jamais dans la configuration actuelle.
+
+`smtp_probe`, toujours présent :
+
+| Champ | Valeurs |
+|---|---|
+| `scope` | `on` (la sonde a mesuré), `off` (sonde désactivée : `status` `na`, `rule` `F05.01`), `internal` (périmètre interne), `absent` (analyse antérieure à la 0.7.0), `unknown` (erreur du moteur) |
+| `status` | `ok`, `warn`, `fail`, `na`, `error`, ou `null` quand le contrôle est absent |
+| `rule` | la ligne de décision, de `F05.01` à `F05.12`, ou `null` |
+| `mx`, `addresses`, `verified` | MX publiés, adresses des MX mesurés, adresses dont le certificat a été vérifié ; `null` sauf si la sonde a mesuré |
+
+`mail_enforce_readiness`, toujours présent :
+
+| Champ | Valeurs |
+|---|---|
+| `state` | `ready`, `compatible`, `to_fix`, `unconfirmed` (cause `probe_off` quand la sonde était désactivée), `not_applicable`, ou `null` (contrôle absent, périmètre interne, erreur du moteur) |
+| `causes` | liste des causes, comme sur la page de détail |
+| `policy` | politique MTA-STS telle que la voient les expéditeurs : `enforce`, `testing`, `none`, `missing`, `invalid`, `unavailable`, `unreadable`, ou `null` quand aucune n’a été lue |
+
+Une préparation est mesurée depuis cette instance : elle ne garantit pas la livraison depuis Internet. Ne comparez deux `score` qu’à `engine` et `smtp_probe.scope` égaux.

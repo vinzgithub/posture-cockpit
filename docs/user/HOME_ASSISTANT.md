@@ -125,3 +125,26 @@ An unreadable stored analysis is isolated. The domains endpoint keeps returning 
 summaries for other domains and returns an entry with `domain`, `scan_id` and
 `error: "scan_unreadable"` for the damaged one. Single-analysis requests return HTTP 409
 with the same error code. No score is inferred from corrupted findings.
+
+### API additions in 0.7
+
+Two objects are added to each domain; no other field changes. Both are read from the stored result of the SMTP check (see [SMTP_STARTTLS.md](SMTP_STARTTLS.md)), never from the current configuration.
+
+`smtp_probe`, always present:
+
+| Field | Values |
+|---|---|
+| `scope` | `on` (the probe measured), `off` (probe off: `status` `na`, `rule` `F05.01`), `internal` (internal perimeter), `absent` (scan made before 0.7.0), `unknown` (engine error) |
+| `status` | `ok`, `warn`, `fail`, `na`, `error`, or `null` when the check is absent |
+| `rule` | the line of the decision, `F05.01` to `F05.12`, or `null` |
+| `mx`, `addresses`, `verified` | MX published, addresses of the MX measured, addresses whose certificate was verified; `null` unless the probe measured |
+
+`mail_enforce_readiness`, always present:
+
+| Field | Values |
+|---|---|
+| `state` | `ready`, `compatible`, `to_fix`, `unconfirmed` (cause `probe_off` when the probe was off), `not_applicable`, or `null` (check absent, internal perimeter, engine error) |
+| `causes` | list of causes, as on the details page |
+| `policy` | MTA-STS policy as senders see it: `enforce`, `testing`, `none`, `missing`, `invalid`, `unavailable`, `unreadable`, or `null` when none was read |
+
+A readiness is measured from this instance: it does not guarantee delivery from the Internet. Compare two `score` values only when `engine` and `smtp_probe.scope` are equal.

@@ -15,6 +15,11 @@ report of an internal perimeter is marked for restricted distribution.
 The HTML is rendered with Jinja (report.html, report.css) and turned into PDF
 by WeasyPrint. WeasyPrint needs the Pango library; when it is missing the rest
 of the application keeps working and only this report is unavailable.
+
+The web application never runs WeasyPrint itself (version 0.7.0, corrective 3):
+it renders the HTML here and has report/worker.py lay the PDF out in a process
+of its own (report/jobs.py). build_pdf and build_unreadable_pdf make the same
+PDF in the calling process, for the tests and the commands.
 """
 
 from __future__ import annotations
@@ -32,6 +37,7 @@ from ..core.model import Effort, Finding, Status
 from ..i18n import Catalog, finding_summary, finding_verdict, fmt_date
 from ..storage import Scan
 from ..timezones import UTC, local, offset_label
+from .smtp import view as smtp_view
 
 REPORT_DIR = Path(__file__).parent
 _env = Environment(loader=FileSystemLoader(REPORT_DIR), autoescape=select_autoescape(["html"]))
@@ -167,6 +173,10 @@ def report_context(catalog: Catalog, lang: str, scan: Scan, author: str = "", tz
             "ref": catalog.text(lang, f"{f.check_id}.ref") if catalog.has(lang, f"{f.check_id}.ref") else "",
         })
 
+    # Version 0.7 (PR-D): the SMTP measure as stored, for the annex (report/smtp.py).
+    smtp_finding = next((f for f in findings if f.check_id == "mail.smtp_starttls"), None)
+    smtp = smtp_view(smtp_finding.outcome.evidence, t) if smtp_finding is not None else None
+
     started = local(scan.started_at, tz)
     generated = (now or datetime.now(UTC)).astimezone(tz)
     return {
@@ -183,7 +193,7 @@ def report_context(catalog: Catalog, lang: str, scan: Scan, author: str = "", tz
                       percent=result.coverage_percent),
         "perimeter": scan.perimeter,
         "diagnosis": diagnosis, "conclusion": conclusion, "prescriptions": prescriptions,
-        "improvements": improvements, "categories": categories, "annex": annex, "gaps": gaps,
+        "improvements": improvements, "categories": categories, "annex": annex, "gaps": gaps, "smtp": smtp,
         "checks_count": len(findings), "addresses": scan.addresses(), "plan": plan,
         "gap_groups": {cause: _same_reason([g for g in gaps if g["cause"] == cause])
                        for cause in ("network", "dependency", "tool", "policy", "budget")},
@@ -217,14 +227,18 @@ def build_pdf(catalog: Catalog, lang: str, scan: Scan, author: str = "", tz: tzi
     return HTML(string=html, base_url=str(REPORT_DIR)).write_pdf()
 
 
-def build_unreadable_pdf(catalog: Catalog, lang: str) -> bytes:
-    """A localized error document; never render untrusted stored outcomes as a report."""
+def unreadable_html(catalog: Catalog, lang: str) -> str:
+    """The HTML of the localized error document of an unreadable scan: never its stored outcomes."""
     from html import escape
 
+    message = escape(catalog.text(lang, "error.scan_unreadable"))
+    return f'<html lang="{escape(lang)}"><meta charset="utf-8"><body><p>{message}</p></body></html>'
+
+
+def build_unreadable_pdf(catalog: Catalog, lang: str) -> bytes:
+    """A localized error document; never render untrusted stored outcomes as a report."""
     try:
         from weasyprint import HTML
     except (ImportError, OSError) as error:
         raise ReportUnavailable(str(error)) from error
-    message = escape(catalog.text(lang, "error.scan_unreadable"))
-    html = f'<html lang="{escape(lang)}"><meta charset="utf-8"><body><p>{message}</p></body></html>'
-    return HTML(string=html).write_pdf()
+    return HTML(string=unreadable_html(catalog, lang)).write_pdf()

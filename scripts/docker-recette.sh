@@ -191,6 +191,10 @@ install_recette() {  # install_recette IMAGE VERSION
   status=$(curl -sS -o "$WORK/report.pdf" -w '%{http_code}' -b "$WORK/$fresh/cookies" "$(url "$fresh" /domains/menuiserie-dupont.example/report.pdf)")
   if [ "$status" != 200 ] || [ "$(head -c 5 "$WORK/report.pdf")" != "%PDF-" ]; then fail "PDF report: $status"; fi
   ok "PDF report generated in the image"
+  # 0.7.0, corrective 3: the report is laid out in a process of its own, gone once the PDF is sent.
+  in_container "$fresh" python -c 'import pathlib, sys; name = b"posture_cockpit.report." + b"worker"; sys.exit(any(name in p.read_bytes() for p in pathlib.Path("/proc").glob("[0-9]*/cmdline")))' \
+    || fail "a process of a PDF report is still running"
+  ok "no process of a PDF report left in the container"
   expect_output "schema $schema (up to date), 1 account(s), 1 domain(s), 1 scan(s)" in_container "$fresh" posture-cockpit info
   ok "posture-cockpit info"
 
@@ -242,6 +246,19 @@ schema5_scan() {
   local name=$1 status
   status=$(post "$name" "/domains/menuiserie-dupont.example/scan" "csrf=$(csrf "$name" /domains/menuiserie-dupont.example)")
   [ "$status" = 303 ] || fail "schema-5 demonstration scan answered $status"
+}
+
+# Every page of the demonstration domain answers 200: its page, its details, its history, and each scan
+# of the history, those made by the other image included (the round trip on schema 5, 0.7.0).
+pages_ok() {
+  local name=$1 domain=/domains/menuiserie-dupont.example path status ids
+  ids=$(in_container "$name" python -c 'import sqlite3; print(*[r[0] for r in sqlite3.connect("/data/posture_cockpit.db").execute("SELECT id FROM scans ORDER BY id")])')
+  [ -n "$ids" ] || fail "no scan to show"
+  for path in "$domain" "$domain/details" "$domain/history" $(printf "$domain/history/%s " $ids); do
+    status=$(curl -sS -o /dev/null -w '%{http_code}' -b "$WORK/$name/cookies" "$(url "$name" "$path")")
+    [ "$status" = 200 ] || fail "$path answered $status"
+  done
+  ok "every page of the domain and of its $(echo "$ids" | wc -w) scan(s) answers 200"
 }
 
 upgrade_recette() {  # upgrade_recette OLD_IMAGE IMAGE
@@ -305,6 +322,7 @@ PY_EXPECT
     log_in "$name"
     ok "$old runs again on the same data (schema $schema unchanged by $version)"
     schema5_scan "$name"
+    pages_ok "$name"  # the scans of the candidate shown by the old image
     expect_output "schema $schema (up to date), 1 account(s), 1 domain(s), 3 scan(s)" in_container "$name" posture-cockpit info
     compose "$name" stop >/dev/null 2>&1
     set_image "$name" "$image"
@@ -313,6 +331,7 @@ PY_EXPECT
     log_in "$name"
     expect_output "schema $schema (up to date), 1 account(s), 1 domain(s), 3 scan(s)" in_container "$name" posture-cockpit info
     [ "$(key_hash "$name")" = "$key" ] || fail "the session key changed during schema-5 roundtrip"
+    pages_ok "$name"  # the scan of the old image shown by the candidate
     in_container "$name" python - <<'PY_INTEGRITY'
 from posture_cockpit.config import Config
 from posture_cockpit.storage import Database, Scans

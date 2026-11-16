@@ -47,7 +47,7 @@ code { font: 400 8.5pt "IBM Plex Mono", monospace; color: #5A554B; }
 .prescriptions { list-style: none; margin: 0; padding: 0; }
 .prescriptions li { display: flex; gap: 14pt; padding: 12pt 0; border-bottom: 0.6pt solid #CFC6B5; page-break-inside: avoid; }
 .p-number { flex: none; width: 22pt; font: 400 26pt/1 "Newsreader"; color: #8A2C1D; }
-.p-body { flex: 1; }
+.p-body { flex: 1; min-width: 0; }  /* its width is what the row leaves: its text is never measured to size it */
 .p-body h2 { font-size: 14pt; margin-bottom: 3pt; }
 .p-meta { margin-top: 4pt; color: #6B6559; font-size: 9pt; }
 .p-side { flex: none; text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 5pt; }
@@ -56,8 +56,13 @@ code { font: 400 8.5pt "IBM Plex Mono", monospace; color: #5A554B; }
 .badge-urgent { background: #8A2C1D; color: #FBF8F2; }
 .signature { margin-top: 26pt; text-align: right; font: italic 400 10.5pt "Newsreader"; color: #5A554B; }
 
-.areas { width: 100%; border-collapse: collapse; }
-.areas th { text-align: left; font: 600 12pt "Newsreader"; padding: 8pt 8pt 8pt 0; width: 28%; }
+/* The widths of the columns of .areas and .checks come from their first row, never from their text
+   (table-layout: fixed): a long text, a list of MX for instance, is laid out once, line by line, instead
+   of being measured break by break to size its column, a cost that grew with the square of its length
+   (character by character once its cells could break anywhere). The percentages count the padding
+   (border-box), as the automatic layout counted them. */
+.areas { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.areas th { text-align: left; font: 600 12pt "Newsreader"; padding: 8pt 8pt 8pt 0; width: 28%; box-sizing: border-box; }
 .areas td { padding: 8pt 6pt; border-bottom: 0.6pt solid #E2DACB; font-size: 9.5pt; color: #3A3630; vertical-align: middle; }
 .areas tr > * { border-bottom: 0.6pt solid #E2DACB; }
 .areas .num { font: 500 10pt "IBM Plex Mono"; color: #1C1B18; width: 26pt; }
@@ -78,12 +83,19 @@ p { orphans: 3; widows: 3; }
 .method-block { break-inside: avoid; page-break-inside: avoid; }
 
 .annex-title { font-size: 18pt; margin-bottom: 10pt; }
-.checks { width: 100%; border-collapse: collapse; font-size: 8.5pt; }
+.checks { width: 100%; border-collapse: collapse; font-size: 8.5pt; table-layout: fixed; }
 .checks th { text-align: left; font: 600 7.5pt "IBM Plex Sans"; letter-spacing: .1em; text-transform: uppercase; color: #6B6559; padding: 4pt 6pt; border-bottom: 1pt solid #1C1B18; }
 .checks td { padding: 6pt; border-bottom: 0.5pt solid #E2DACB; vertical-align: top; }
 .checks tr { page-break-inside: avoid; }
-.checks td:first-child { width: 34%; }
-.checks td:nth-child(2) { width: 15%; }
+.checks th:first-child, .checks td:first-child { width: 34%; box-sizing: border-box; }
+/* The result column holds the longest status pill ("Non applicable", in the report of a domain whose SMTP
+   probe is off, as most are): the automatic layout widened it to that pill, the fixed one gives it that
+   width once for all, so that no pill runs past it in either language. */
+.checks th:nth-child(2), .checks td:nth-child(2) { width: 15.81%; box-sizing: border-box; }
+/* A text that names what the DNS published (an MX, an alias) breaks a word too long for its line rather
+   than run past the page (R2 of the review of PR-D): break-word, which only breaks such a word, and never
+   measures a column, whose width is fixed above. */
+.areas td:last-child, .checks td:nth-child(3), .improvements li { overflow-wrap: break-word; }
 .pill { display: inline-block; padding: 1pt 6pt; border-radius: 8pt; font: 600 7.5pt "IBM Plex Sans"; white-space: nowrap; }
 .pill-ok { background: #E3EFE3; color: #24572D; }
 .pill-warn { background: #F6E8CC; color: #7A4B06; }
@@ -109,3 +121,22 @@ p { orphans: 3; widows: 3; }
 
 .masthead > div:first-child { flex: 1; min-width: 0; }
 .masthead .seal { flex: 0 0 100pt; width: 100pt; }
+
+/* Version 0.7: the SMTP measure of the MX in the annex. Rows never split across pages; addresses,
+   IPv6 included, are never cut: their column takes the width of the longest. */
+.smtp-annex { margin-top: 14pt; }
+.smtp-annex-title { font: 600 11pt "Newsreader"; margin: 0 0 4pt; break-after: avoid; page-break-after: avoid; }
+.smtp-readiness { font-size: 9pt; margin: 0 0 3pt; break-after: avoid; page-break-after: avoid; }
+.smtp-small { font-size: 7.5pt; color: #5A554B; margin: 0 0 3pt; }
+.smtp-rows { width: 100%; border-collapse: collapse; font-size: 7.5pt; margin-top: 4pt; }
+.smtp-rows th { text-align: left; font: 600 7pt "IBM Plex Sans"; color: #6B6559; padding: 3pt 4pt; border-bottom: 1pt solid #1C1B18; }
+.smtp-rows td { padding: 3pt 4pt; border-bottom: 0.4pt solid #CFC6B5; vertical-align: top; overflow-wrap: break-word; }
+.smtp-rows td:first-child { min-width: 9em; }  /* a word of ordinary length (a name, a cipher) is not cut... */
+/* ...unless it is a word longer than report/smtp.py's LONG_WORD (R2 of the review of PR-D): then it breaks
+   where it must, never past the page; so do the names a policy leaves out, in a paragraph. */
+.smtp-rows .smtp-long, .smtp-annex p.smtp-small { overflow-wrap: anywhere; }
+.smtp-rows td:nth-child(3), .smtp-rows td:nth-child(5) { min-width: 7em; }  /* none collapses */
+.smtp-rows td:nth-child(4) { min-width: 11em; }
+.smtp-rows tr { break-inside: avoid; page-break-inside: avoid; }
+.smtp-rows thead { display: table-header-group; }
+.smtp-rows td.smtp-address { font-family: "IBM Plex Mono", monospace; font-size: 7pt; white-space: nowrap; overflow-wrap: normal; }

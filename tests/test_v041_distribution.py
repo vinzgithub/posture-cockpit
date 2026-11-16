@@ -68,7 +68,8 @@ def documented_variables():
 
 def test_every_variable_of_env_example_is_used():
     config = (ROOT / "src/posture_cockpit/config.py").read_text()
-    read = {f"POSTURE_COCKPIT_{n}" for n in re.findall(r'_env(?:_bool)?\("([A-Z_]+)"', config)}
+    # parse_report_setting reads the settings of the PDF reports (0.7.0), as _env does the others.
+    read = {f"POSTURE_COCKPIT_{n}" for n in re.findall(r'(?:_env(?:_bool)?|parse_report_setting)\("([A-Z_]+)"', config)}
     read |= {"POSTURE_COCKPIT_TIMEZONE", "POSTURE_COCKPIT_DKIM_SELECTORS"}
     compose_text = (ROOT / "compose.yaml").read_text()
     used = read | set(re.findall(r"\$\{([A-Z_]+)", compose_text)) | {"COMPOSE_PROJECT_NAME", "FORWARDED_ALLOW_IPS"}

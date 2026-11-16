@@ -43,6 +43,9 @@ def context(catalog: Catalog, lang: str, domain: Row, scan: Scan, states: list[S
     dependencies = [f for f in findings if f.family == HTTPS_FAMILY and f.role is Role.DEPENDENT
                     and (f.status is Status.BLOCKED
                          or (f.status is Status.ERROR and f.outcome.evidence.get("cause") == CAUSE_DEPENDENCY))]
-    return {"domain": domain, "scan": scan, "current_state": current, "plan": view,
+    # Version 0.7 (PR-D, P3): a comparison refused because a scope is unknown (an error of the engine on the
+    # SMTP check) is said as such, not as a probe turned on or off.
+    scope_unknown = previous is not None and "unknown" in (previous.measured, current.measured)
+    return {"domain": domain, "scan": scan, "current_state": current, "plan": view, "scope_unknown": scope_unknown,
             "candidates": candidates, "transitions": transitions, "changes": changes,
             "comparison": compare(previous, current), "dependencies": dependencies}

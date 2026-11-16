@@ -29,8 +29,8 @@ with TemporaryDirectory() as folder:
         did = scans.add_domain(DEMO_DOMAIN, None)
         sid = scans.save(did, result, __version__, None)
         scan = scans.get(sid)
-        for language, author in [('fr', 'DÉMONSTRATION FICTIVE — candidate v0.6.1'),
-                                 ('en', 'FICTIONAL DEMONSTRATION — v0.6.1 candidate')]:
+        for language, author in [('fr', f'DÉMONSTRATION FICTIVE — candidate v{__version__}'),
+                                 ('en', f'FICTIONAL DEMONSTRATION — v{__version__} candidate')]:
             path = output / f'posture-cockpit-mission-control-demo.{language}.pdf'
             path.write_bytes(build_pdf(catalog, language, scan, author))
             print(path.name, scan.assessment().score, scan.assessment().grade)

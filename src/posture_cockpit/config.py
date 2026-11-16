@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import math
 import os
 import re
 import secrets
@@ -18,6 +19,26 @@ DEFAULT_SESSION_COOKIE = "posture_cockpit"
 _COOKIE_NAME = re.compile(r"[A-Za-z0-9_-]{1,64}")
 # A setup code chosen by the operator (POSTURE_COCKPIT_SETUP_CODE) has at least this many letters or digits.
 MIN_SETUP_CODE = 12
+
+# Version 0.7.0: the SMTP probe of the MX servers (port 25). The values the operator may write.
+SMTP_PROBE_VALUES = ("off", "on")
+# Seconds the engine keeps for itself after the SMTP probe's deadline, to gather and store what the
+# probe observed before it stops the check (specification 0.7.0, F02: min(12 s, CHECK_TIMEOUT - 2 s)).
+SMTP_CHECK_MARGIN = 2.0
+# A host name in EHLO (RFC 5321 §4.1.1.1, §2.3.5), and the MX name of the SMTP dialogue: at most 253
+# characters, labels of letters, digits and hyphens (RFC 1123 §2.1), neither starting nor ending with a
+# hyphen, 63 characters at most (check_host_name).
+_HOST_LABEL = re.compile(r"(?!-)[a-z0-9-]{1,63}(?<!-)")
+MAX_HOST_NAME = 253
+# Version 0.7.0, corrective 3: PDF reports, each laid out in a process of its own (report/jobs.py). The
+# default and the bounds of each setting (whole numbers): reports at the same time on the instance, seconds
+# allowed to each from the start of its process to the last byte, MiB of address space of its process
+# (RLIMIT_AS: virtual memory, not the memory really used; the heaviest report measured peaks at 300 MiB).
+REPORT_SETTINGS = {
+    "MAX_CONCURRENT_REPORTS": (2, 1, 8),
+    "REPORT_TIMEOUT": (60, 10, 600),
+    "REPORT_MEMORY_MB": (1024, 256, 8192),
+}
 
 
 class StartupError(RuntimeError):
@@ -66,11 +87,26 @@ class Config:
     # Scheduled scans (0.5.0): POSTURE_COCKPIT_SCHEDULER, on unless set to off. Off by default for
     # a Config built directly (the tests), so that only the tests of the scheduler start one.
     scheduler: bool = False
+    # SMTP probe of the MX servers (0.7.0): POSTURE_COCKPIT_SMTP_PROBE, off unless set to on. Off by
+    # default because many networks block outgoing port 25: an operator turns it on knowingly.
+    smtp_probe: bool = False
+    # Name sent in EHLO by the SMTP probe: POSTURE_COCKPIT_SMTP_EHLO_NAME, required when the probe is
+    # on. There is no default on purpose (see check_smtp_settings).
+    smtp_ehlo_name: str | None = None
+    # PDF reports (0.7.0, corrective 3, see REPORT_SETTINGS): POSTURE_COCKPIT_MAX_CONCURRENT_REPORTS,
+    # POSTURE_COCKPIT_REPORT_TIMEOUT, POSTURE_COCKPIT_REPORT_MEMORY_MB.
+    max_concurrent_reports: int = REPORT_SETTINGS["MAX_CONCURRENT_REPORTS"][0]
+    report_timeout: int = REPORT_SETTINGS["REPORT_TIMEOUT"][0]
+    report_memory_mb: int = REPORT_SETTINGS["REPORT_MEMORY_MB"][0]
 
     def __post_init__(self) -> None:
         check_cookie_name(self.session_cookie, secure=self.cookie_secure)
+        for name, value in (("MAX_CONCURRENT_REPORTS", self.max_concurrent_reports),
+                            ("REPORT_TIMEOUT", self.report_timeout), ("REPORT_MEMORY_MB", self.report_memory_mb)):
+            check_report_setting(name, value)
         if self.setup_code and len(normalize_setup_code(self.setup_code)) < MIN_SETUP_CODE:
             raise ValueError(f"POSTURE_COCKPIT_SETUP_CODE: at least {MIN_SETUP_CODE} letters or digits")
+        self.smtp_ehlo_name = check_smtp_settings(self.smtp_probe, self.smtp_ehlo_name, self.check_timeout)
 
     @property
     def db_path(self) -> Path:
@@ -95,6 +131,13 @@ class Config:
             session_cookie=_env("SESSION_COOKIE", DEFAULT_SESSION_COOKIE).strip(),
             setup_code=_env("SETUP_CODE", "").strip(),
             scheduler=_env_bool("SCHEDULER", True),
+            smtp_probe=parse_smtp_probe(_env("SMTP_PROBE", "off")),
+            # Blank counts as absent, as for every variable; otherwise the value is kept exactly as
+            # written, control characters included, so that check_smtp_settings can refuse them.
+            smtp_ehlo_name=_env("SMTP_EHLO_NAME", "") or None,
+            max_concurrent_reports=parse_report_setting("MAX_CONCURRENT_REPORTS"),
+            report_timeout=parse_report_setting("REPORT_TIMEOUT"),
+            report_memory_mb=parse_report_setting("REPORT_MEMORY_MB"),
         )
         check_dkim_selectors(_env("DKIM_SELECTORS", ""))
         return config
@@ -122,6 +165,121 @@ def check_dkim_selectors(value: str) -> None:
         dkim_selectors(value)
     except ValueError as e:
         raise ValueError(f"POSTURE_COCKPIT_DKIM_SELECTORS: {e}") from None
+
+
+def parse_report_setting(name: str) -> int:
+    """A setting of the PDF reports (REPORT_SETTINGS): a whole number within its bounds, or its default when
+    the variable is absent or blank. Anything else stops the start, naming the variable and its bounds,
+    rather than being corrected silently."""
+    default, low, high = REPORT_SETTINGS[name]
+    value = _env(name, str(default)).strip()
+    if not re.fullmatch(r"[0-9]{1,9}", value):
+        raise ValueError(f"{ENV_PREFIX}{name}: {value!r} is not a whole number; write one from {low} to {high}")
+    return check_report_setting(name, int(value))
+
+
+def check_report_setting(name: str, value: int) -> int:
+    """Raises ValueError, naming the variable and its bounds, when ``value`` is out of them (REPORT_SETTINGS)."""
+    _, low, high = REPORT_SETTINGS[name]
+    if isinstance(value, bool) or not isinstance(value, int) or not low <= value <= high:
+        raise ValueError(f"{ENV_PREFIX}{name}: {value!r} is out of bounds; write a whole number from {low} to {high}")
+    return value
+
+
+def parse_smtp_probe(value: str) -> bool:
+    """POSTURE_COCKPIT_SMTP_PROBE: ``off`` or ``on``, in any case; anything else stops the start.
+
+    Only these two words are accepted, unlike the other switches (``true``, ``1``…): turning on
+    connections to port 25 of other people's servers must be a deliberate, unambiguous choice."""
+    word = value.strip().lower()
+    if word not in SMTP_PROBE_VALUES:
+        raise ValueError(f"POSTURE_COCKPIT_SMTP_PROBE: {value!r} is not allowed, write off or on")
+    return word == "on"
+
+
+def check_smtp_settings(probe: bool, ehlo_name: str | None, check_timeout: float) -> str | None:
+    """Checks the SMTP probe settings together; returns the EHLO name as it will be sent, or None.
+
+    - The EHLO name is checked whenever it is given, even with the probe off, so that a wrong
+      value is found before the day the probe is turned on (specification 0.7.0, F02 bis).
+    - With the probe on, the EHLO name is required. There is deliberately no default and no
+      fallback on the host name: in a container it is not a fully qualified name, and it would
+      reveal an internal identifier to every mail server the probe talks to.
+    - With the probe on, CHECK_TIMEOUT must be a finite number of seconds that leaves the probe some
+      time after the margin the engine keeps for itself, otherwise the probe's deadline would be zero,
+      negative or undefined (F02). float() accepts "nan", "inf" and "-inf": a comparison with nan is
+      always false and inf would mean no deadline at all, so both are refused before comparing. With
+      the probe off, CHECK_TIMEOUT keeps the meaning and the accepted values it had in v0.6.1."""
+    name = validate_ehlo_name(ehlo_name) if ehlo_name is not None else None
+    if not probe:
+        return name
+    if name is None:
+        raise ValueError("POSTURE_COCKPIT_SMTP_EHLO_NAME: required when POSTURE_COCKPIT_SMTP_PROBE=on; "
+                         "write a fully qualified name under your control, e.g. probe.example.org")
+    if not math.isfinite(check_timeout):
+        raise ValueError(f"POSTURE_COCKPIT_CHECK_TIMEOUT: {check_timeout!r} is not a finite number of seconds; "
+                         "with POSTURE_COCKPIT_SMTP_PROBE=on write a number such as 15")
+    if check_timeout <= SMTP_CHECK_MARGIN:
+        raise ValueError(f"POSTURE_COCKPIT_CHECK_TIMEOUT: {check_timeout:g} s leaves no time to the SMTP probe; "
+                         f"with POSTURE_COCKPIT_SMTP_PROBE=on it must be above {SMTP_CHECK_MARGIN:g} s")
+    return name
+
+
+def validate_ehlo_name(value: str) -> str:
+    """The EHLO name of the SMTP probe, checked as a fully qualified host name, in lower case.
+
+    Raises ValueError naming the variable and the reason. The name is sent as it is in the SMTP
+    command ``EHLO <name>``: a control character (CR, LF) could add a command of its own, so any
+    such character refuses the value, wherever it is. Only ASCII is accepted: an internationalised
+    name is written in its ``xn--`` form. The check is a syntax check: it does not prove that the
+    name exists in the DNS, nor that it belongs to the operator.
+
+    One tolerance, here only, because the value comes from a file the administrator edits: spaces
+    around it, as an editor may leave them, are not part of the name and are dropped before the
+    check. Only spaces: a tab, CR or LF at either end is a control character and refuses the value.
+    Then the strict rules of :func:`check_host_name`; the name sent is the one they return."""
+    return check_host_name(value.strip(" "), "POSTURE_COCKPIT_SMTP_EHLO_NAME")
+
+
+def check_host_name(value: str, what: str) -> str:
+    """``value`` checked as a fully qualified ASCII host name, strictly; returned normalised.
+
+    Raises ValueError, its message starting with ``what``. The rules, in the order they are checked:
+    no control character anywhere (CR, LF, tab…); ASCII only; no space, around the name or in it;
+    not empty; at most 253 characters; at least two labels; each label 1 to 63 letters, digits and
+    hyphens, no hyphen at either end (so no underscore and no empty label); the last label not all
+    digits (an address is not a host name).
+
+    Nothing is trimmed or repaired. The only normalisation changes the form, never the name: lower
+    case (host names are case-insensitive, RFC 4343) and no root's dot (``mx.example.org.`` is the
+    absolute form of ``mx.example.org``).
+
+    One rule for every host name the SMTP probe uses (version 0.7): the EHLO name at start, then,
+    just before anything is sent, the EHLO name and the published MX name in the SMTP dialogue
+    (core/smtp.py), where the MX name is also the TLS SNI and the name the certificate must carry."""
+    if any(ord(c) < 32 or ord(c) == 127 for c in value):
+        raise ValueError(f"{what}: control characters (CR, LF...) are not allowed")
+    if not value.isascii():
+        raise ValueError(f"{what}: {value!r} is not ASCII; write an internationalised name in its xn-- form")
+    if " " in value:
+        raise ValueError(f"{what}: {value!r} contains a space; a host name has none")
+    name = value.lower()
+    name = name[:-1] if name.endswith(".") else name  # the root's dot is not sent
+    if not name:
+        raise ValueError(f"{what}: empty")
+    if len(name) > MAX_HOST_NAME:
+        raise ValueError(f"{what}: longer than {MAX_HOST_NAME} characters")
+    labels = name.split(".")
+    if len(labels) < 2:
+        raise ValueError(f"{what}: {value!r} is not a fully qualified name (at least two labels, "
+                         "e.g. host.example.org)")
+    for label in labels:
+        if not _HOST_LABEL.fullmatch(label):
+            raise ValueError(f"{what}: {label!r} is not a valid label (letters, digits and hyphens, "
+                             "at most 63, no hyphen at either end)")
+    if labels[-1].isdigit():  # an IPv4 address (192.0.2.1) or a numeric top-level label: not a host name
+        raise ValueError(f"{what}: {value!r} is an address, not a host name")
+    return name
 
 
 def normalize_setup_code(code: str) -> str:

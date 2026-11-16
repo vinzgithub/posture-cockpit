@@ -11,7 +11,7 @@ import logging
 from collections.abc import Callable
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.exceptions import HTTPException
@@ -22,12 +22,13 @@ from ..config import Config, StartupError, prepare_data_dir, secret_key
 from ..core.network import Network
 from ..core.registry import Registry
 from ..i18n import Catalog
+from ..report import jobs
 from ..scanner import Scanner
 from ..security import LoginThrottle
 from ..storage import Accounts, AuditLog, CorruptScan, InstanceSettings, Perimeters, Scans, instance_lock, open_database
 from ..storage.schedules import Schedules
 from . import deps, first_run
-from .limits import ScanLimiter
+from .limits import ReportLimiter, ScanLimiter
 from .routes import account, admin, api, auth, dashboard, domains, events, mission_control, perimeters, report
 from .scheduler import Scheduler
 from .services import STATIC_DIR, TEMPLATES_DIR, Services
@@ -73,6 +74,7 @@ def create_app(config: Config | None = None, registry: Registry | None = None,
         scanner=Scanner(registry, config, disabled=settings.disabled_extensions, network_factory=network_factory),
         throttle=LoginThrottle(), account_throttle=LoginThrottle(max_failures=10, lock_seconds=900),
         scan_limiter=ScanLimiter(config.max_concurrent_scans, config.scans_per_hour),
+        report_limiter=ReportLimiter(config.max_concurrent_reports),
         templates=Jinja2Templates(directory=TEMPLATES_DIR),
         schedules=Schedules(db, config.timezone),
     )
@@ -85,6 +87,8 @@ def create_app(config: Config | None = None, registry: Registry | None = None,
     if app.state.scheduler is not None:
         app.router.on_startup.append(app.state.scheduler.start)
         app.router.on_shutdown.append(app.state.scheduler.stop)
+    # The PDF reports still being laid out (report/jobs.py): their processes are killed when it stops.
+    app.router.on_shutdown.append(jobs.stop_all)
     app.router.on_shutdown.append(folder_lock.release)
     # While no account exists, /setup asks for a one-time code written to the log (first_run.py).
     app.state.setup_code = None
@@ -160,16 +164,10 @@ def _add_error_pages(app: FastAPI) -> None:
 
     @app.exception_handler(CorruptScan)
     async def corrupt_scan(request: Request, exc: CorruptScan):
+        # The PDF of an unreadable scan is made by the routes of the report themselves (web/routes/report.py),
+        # in a process of its own and within the limits of the reports (0.7.0, corrective 3).
         if _wants_json(request):
             return JSONResponse({"error": "scan_unreadable", "scan_id": exc.scan_id}, status_code=409)
-        if request.url.path.endswith("/report.pdf"):
-            from ..report import ReportUnavailable, build_unreadable_pdf
-
-            try:
-                pdf = build_unreadable_pdf(request.app.state.services.catalog, deps.lang_of(request))
-                return Response(pdf, status_code=409, media_type="application/pdf")
-            except ReportUnavailable:
-                pass
         return deps.render(request, "error.html", status=409, message=deps.t(request, "error.scan_unreadable"))
 
     @app.exception_handler(deps.CsrfError)

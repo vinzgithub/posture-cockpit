@@ -7,7 +7,7 @@ Extension authors only need the names exported here::
     from posture_cockpit.core import CheckContext, Extension, ok, warn, fail, na, info, Remedy, Effort, DnsChange
 """
 
-from .extension import CATEGORIES, Check, CheckContext, Extension, load_messages
+from .extension import CATEGORIES, Check, CheckContext, Extension, SmtpSettings, load_messages
 from .model import (
     DnsChange,
     Effort,
@@ -29,6 +29,7 @@ from .network import Certificate, DnsAnswer, HttpReply, Network, NetworkError, R
 
 __all__ = [
     "CATEGORIES", "Certificate", "Check", "CheckContext", "DnsAnswer", "DnsChange", "Effort", "Extension",
-    "Finding", "HttpReply", "Network", "NetworkError", "Outcome", "Refused", "Remedy", "Role", "Signal", "Status",
+    "Finding", "HttpReply", "Network", "NetworkError", "Outcome", "Refused", "Remedy", "Role", "Signal",
+    "SmtpSettings", "Status",
     "UntrustedCertificate", "blocked", "fail", "info", "load_messages", "na", "not_evaluated", "ok", "warn",
 ]

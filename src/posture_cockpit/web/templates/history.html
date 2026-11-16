@@ -16,7 +16,7 @@
   {% if comparison.comparable %}
     <p>{{ t('v050.comparison.delta', points=('%+d' | format(comparison.score_delta))) }}</p>
   {% else %}
-    <p>{{ t('v050.comparison.unavailable') }} — {{ t('v050.comparison.reason.' ~ comparison.reason) }}</p>
+    <p>{{ t('v050.comparison.unavailable') }} — {{ t('v050.comparison.reason.' ~ ('scope_unknown' if comparison.reason == 'scope' and scope_unknown else comparison.reason)) }}</p>
   {% endif %}
 </div>
 {% endif %}

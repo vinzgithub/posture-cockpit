@@ -21,6 +21,7 @@ from pathlib import Path
 
 from .config import Config
 from .core import engine
+from .core.extension import SmtpSettings
 from .core.fixture import FixtureNetwork
 from .core.model import HTTPS_FAMILY, Finding
 from .core.network import LiveNetwork, Network
@@ -28,6 +29,8 @@ from .core.registry import Registry
 from .storage.perimeters import Perimeter
 
 DEMO_DIR = Path(__file__).parent / "demo"
+# Version 0.7 (R6): checks rechecked together, because they read the same measures.
+MAIL_TLS_GROUP = frozenset({"mail.mta_sts", "mail.smtp_starttls"})
 DEMO_DOMAIN = "menuiserie-dupont.example"
 
 
@@ -55,18 +58,30 @@ class Scanner:
         self.disabled = disabled
         self._network_factory = network_factory
 
+    @property
+    def smtp(self) -> SmtpSettings:
+        """The SMTP probe settings, as the configuration checked them at start (version 0.7.0)."""
+        return SmtpSettings(enabled=self.config.smtp_probe, ehlo_name=self.config.smtp_ehlo_name)
+
     def network_for(self, domain: str, perimeter: Perimeter | None = None) -> Network:
-        """A fresh network per scan, so cached answers never outlive it."""
+        """A fresh network per scan, so cached answers never outlive it.
+
+        Version 0.7: the network is bound to the audited domain, whose published MX are the only servers
+        the SMTP probe may reach, and gets the EHLO name checked at start (None: the probe is off). An
+        internal perimeter says so explicitly: the probe never runs there, whatever its rule allows."""
         if perimeter is not None and not self.config.internal_scans:
             raise InternalScansDisabled()
         if self._network_factory is not None:
             return self._network_factory(domain)
+        settings = self.smtp
+        ehlo_name = settings.ehlo_name if settings.enabled else None
         if perimeter is not None:
-            return LiveNetwork(list(perimeter.nameservers), policy=perimeter.policy(), trusted_ca=perimeter.ca_pem)
+            return LiveNetwork(list(perimeter.nameservers), policy=perimeter.policy(), trusted_ca=perimeter.ca_pem,
+                               domain=domain, internal=True)
         data = demo_data(domain)
         if data is not None:
-            return FixtureNetwork(data)
-        return LiveNetwork(self.config.nameservers)
+            return FixtureNetwork(data, domain=domain, ehlo_name=ehlo_name)
+        return LiveNetwork(self.config.nameservers, domain=domain, ehlo_name=ehlo_name)
 
     async def preflight(self, domain: str, perimeter: Perimeter | None = None) -> str | None:
         """Why the domain cannot be scanned ("unknown", "empty"), or None (see engine.preflight)."""
@@ -76,18 +91,30 @@ class Scanner:
                    ) -> engine.ScanResult:
         checks = self.registry.checks(disabled=self.disabled())
         return await engine.scan(domain, checks, self.network_for(domain, perimeter),
-                                 timeout=self.config.check_timeout, internal=perimeter is not None, history=history)
+                                 timeout=self.config.check_timeout, internal=perimeter is not None, history=history,
+                                 smtp=self.smtp)
 
     async def recheck_group(self, domain: str, check_id: str, perimeter: Perimeter | None = None,
                             history: dict | None = None) -> list[Finding]:
-        """One fresh probe for the entire enabled HTTPS family; otherwise one check."""
+        """One fresh probe for the entire enabled HTTPS family; otherwise one check.
+
+        Version 0.7 (R6): mail.mta_sts and mail.smtp_starttls are rechecked together, either way: they
+        share one reading of the MTA-STS policy (and the SMTP verdict depends on it), so a recheck
+        stores both from the same measures, in one transaction (save_rechecks). With the probe off,
+        the SMTP check is NA again and asks nothing."""
         checks = self.registry.checks(disabled=self.disabled())
         check = next((c for c in checks if c.id == check_id), None)
         if check is None:
             return []
-        selected = [c for c in checks if c.family == HTTPS_FAMILY] if check.family == HTTPS_FAMILY else [check]
+        if check.family == HTTPS_FAMILY:
+            selected = [c for c in checks if c.family == HTTPS_FAMILY]
+        elif check.id in MAIL_TLS_GROUP:
+            selected = [c for c in checks if c.id in MAIL_TLS_GROUP]
+        else:
+            selected = [check]
         result = await engine.scan(domain, selected, self.network_for(domain, perimeter),
-                                   timeout=self.config.check_timeout, internal=perimeter is not None, history=history)
+                                   timeout=self.config.check_timeout, internal=perimeter is not None, history=history,
+                                   smtp=self.smtp)
         return result.findings
 
     async def recheck(self, domain: str, check_id: str, perimeter: Perimeter | None = None) -> Finding | None:

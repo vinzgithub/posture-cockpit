@@ -1,0 +1,1221 @@
+{
+ "recorded_on": "6c9f3218e05675a0a6a4f4121a534861b33620e9",
+ "worlds": {
+  "enforce": {
+   "status": "ok",
+   "summary": "mail.mta_sts.enforce",
+   "params": {},
+   "evidence": [
+    [
+     "records",
+     [
+      "v=STSv1; id=20261012"
+     ]
+    ],
+    [
+     "url",
+     "https://mta-sts.example.org/.well-known/mta-sts.txt"
+    ],
+    [
+     "status",
+     200
+    ],
+    [
+     "mode",
+     "enforce"
+    ],
+    [
+     "mx_patterns",
+     [
+      "mx.example.net"
+     ]
+    ],
+    [
+     "max_age",
+     604800
+    ]
+   ],
+   "remedy": null,
+   "signals": [],
+   "asked": [
+    "dns example.org MX",
+    "dns _mta-sts.example.org TXT",
+    "dns mta-sts.example.org A",
+    "dns mta-sts.example.org AAAA",
+    "http https://mta-sts.example.org/.well-known/mta-sts.txt"
+   ]
+  },
+  "no_mx": {
+   "status": "na",
+   "summary": "mail.no_inbound",
+   "params": {},
+   "evidence": [],
+   "remedy": null,
+   "signals": [],
+   "asked": [
+    "dns example.org MX"
+   ]
+  },
+  "null_mx": {
+   "status": "na",
+   "summary": "mail.no_inbound",
+   "params": {},
+   "evidence": [],
+   "remedy": null,
+   "signals": [],
+   "asked": [
+    "dns example.org MX"
+   ]
+  },
+  "mx_timeout": {
+   "status": "error",
+   "summary": "check.error.network_timeout",
+   "params": {},
+   "evidence": [
+    [
+     "error",
+     "DNS example.org MX: Timeout"
+    ]
+   ],
+   "remedy": null,
+   "signals": [],
+   "asked": [
+    "dns example.org MX"
+   ]
+  },
+  "missing": {
+   "status": "warn",
+   "summary": "mail.mta_sts.missing",
+   "params": {},
+   "evidence": [],
+   "remedy": {
+    "minutes": 30,
+    "effort": "delegate",
+    "dns": [],
+    "message": "mail.mta_sts.message",
+    "how": "",
+    "expect": "warn"
+   },
+   "signals": [],
+   "asked": [
+    "dns example.org MX",
+    "dns _mta-sts.example.org TXT"
+   ]
+  },
+  "other_txt_only": {
+   "status": "warn",
+   "summary": "mail.mta_sts.missing",
+   "params": {},
+   "evidence": [
+    [
+     "ignored",
+     [
+      "hello world"
+     ]
+    ]
+   ],
+   "remedy": {
+    "minutes": 30,
+    "effort": "delegate",
+    "dns": [],
+    "message": "mail.mta_sts.message",
+    "how": "",
+    "expect": "warn"
+   },
+   "signals": [],
+   "asked": [
+    "dns example.org MX",
+    "dns _mta-sts.example.org TXT"
+   ]
+  },
+  "sts_v2_only": {
+   "status": "warn",
+   "summary": "mail.mta_sts.bad_record",
+   "params": {},
+   "evidence": [
+    [
+     "records",
+     [
+      "v=STSv2; id=1"
+     ]
+    ]
+   ],
+   "remedy": {
+    "minutes": 30,
+    "effort": "delegate",
+    "dns": [],
+    "message": "mail.mta_sts.message",
+    "how": "",
+    "expect": "warn"
+   },
+   "signals": [],
+   "asked": [
+    "dns example.org MX",
+    "dns _mta-sts.example.org TXT"
+   ]
+  },
+  "bad_record": {
+   "status": "warn",
+   "summary": "mail.mta_sts.bad_record",
+   "params": {},
+   "evidence": [
+    [
+     "records",
+     [
+      "v=STSv1; id="
+     ]
+    ]
+   ],
+   "remedy": {
+    "minutes": 30,
+    "effort": "delegate",
+    "dns": [],
+    "message": "mail.mta_sts.message",
+    "how": "",
+    "expect": "warn"
+   },
+   "signals": [],
+   "asked": [
+    "dns example.org MX",
+    "dns _mta-sts.example.org TXT"
+   ]
+  },
+  "two_records": {
+   "status": "warn",
+   "summary": "mail.mta_sts.bad_record",
+   "params": {},
+   "evidence": [
+    [
+     "records",
+     [
+      "v=STSv1; id=1",
+      "v=STSv1; id=2"
+     ]
+    ]
+   ],
+   "remedy": {
+    "minutes": 30,
+    "effort": "delegate",
+    "dns": [],
+    "message": "mail.mta_sts.message",
+    "how": "",
+    "expect": "warn"
+   },
+   "signals": [],
+   "asked": [
+    "dns example.org MX",
+    "dns _mta-sts.example.org TXT"
+   ]
+  },
+  "record_and_noise": {
+   "status": "ok",
+   "summary": "mail.mta_sts.enforce",
+   "params": {},
+   "evidence": [
+    [
+     "records",
+     [
+      "v=STSv1; id=20261012"
+     ]
+    ],
+    [
+     "ignored",
+     [
+      "hello"
+     ]
+    ],
+    [
+     "url",
+     "https://mta-sts.example.org/.well-known/mta-sts.txt"
+    ],
+    [
+     "status",
+     200
+    ],
+    [
+     "mode",
+     "enforce"
+    ],
+    [
+     "mx_patterns",
+     [
+      "mx.example.net"
+     ]
+    ],
+    [
+     "max_age",
+     604800
+    ]
+   ],
+   "remedy": null,
+   "signals": [],
+   "asked": [
+    "dns example.org MX",
+    "dns _mta-sts.example.org TXT",
+    "dns mta-sts.example.org A",
+    "dns mta-sts.example.org AAAA",
+    "http https://mta-sts.example.org/.well-known/mta-sts.txt"
+   ]
+  },
+  "txt_timeout": {
+   "status": "error",
+   "summary": "check.error.network_timeout",
+   "params": {},
+   "evidence": [
+    [
+     "error",
+     "DNS _mta-sts.example.org TXT: Timeout"
+    ]
+   ],
+   "remedy": null,
+   "signals": [],
+   "asked": [
+    "dns example.org MX",
+    "dns _mta-sts.example.org TXT"
+   ]
+  },
+  "no_policy_address": {
+   "status": "warn",
+   "summary": "mail.mta_sts.no_policy",
+   "params": {},
+   "evidence": [
+    [
+     "records",
+     [
+      "v=STSv1; id=20261012"
+     ]
+    ],
+    [
+     "url",
+     "https://mta-sts.example.org/.well-known/mta-sts.txt"
+    ]
+   ],
+   "remedy": {
+    "minutes": 30,
+    "effort": "delegate",
+    "dns": [],
+    "message": "mail.mta_sts.message",
+    "how": "",
+    "expect": "warn"
+   },
+   "signals": [],
+   "asked": [
+    "dns example.org MX",
+    "dns _mta-sts.example.org TXT",
+    "dns mta-sts.example.org A",
+    "dns mta-sts.example.org AAAA"
+   ]
+  },
+  "policy_address_v6": {
+   "status": "ok",
+   "summary": "mail.mta_sts.enforce",
+   "params": {},
+   "evidence": [
+    [
+     "records",
+     [
+      "v=STSv1; id=20261012"
+     ]
+    ],
+    [
+     "url",
+     "https://mta-sts.example.org/.well-known/mta-sts.txt"
+    ],
+    [
+     "status",
+     200
+    ],
+    [
+     "mode",
+     "enforce"
+    ],
+    [
+     "mx_patterns",
+     [
+      "mx.example.net"
+     ]
+    ],
+    [
+     "max_age",
+     604800
+    ]
+   ],
+   "remedy": null,
+   "signals": [],
+   "asked": [
+    "dns example.org MX",
+    "dns _mta-sts.example.org TXT",
+    "dns mta-sts.example.org A",
+    "dns mta-sts.example.org AAAA",
+    "http https://mta-sts.example.org/.well-known/mta-sts.txt"
+   ]
+  },
+  "policy_address_timeout": {
+   "status": "error",
+   "summary": "check.error.network_timeout",
+   "params": {},
+   "evidence": [
+    [
+     "error",
+     "DNS mta-sts.example.org A: Timeout"
+    ]
+   ],
+   "remedy": null,
+   "signals": [],
+   "asked": [
+    "dns example.org MX",
+    "dns _mta-sts.example.org TXT",
+    "dns mta-sts.example.org A"
+   ]
+  },
+  "refused": {
+   "status": "warn",
+   "summary": "mail.mta_sts.no_policy",
+   "params": {},
+   "evidence": [
+    [
+     "records",
+     [
+      "v=STSv1; id=20261012"
+     ]
+    ],
+    [
+     "url",
+     "https://mta-sts.example.org/.well-known/mta-sts.txt"
+    ]
+   ],
+   "remedy": {
+    "minutes": 30,
+    "effort": "delegate",
+    "dns": [],
+    "message": "mail.mta_sts.message",
+    "how": "",
+    "expect": "warn"
+   },
+   "signals": [],
+   "asked": [
+    "dns example.org MX",
+    "dns _mta-sts.example.org TXT",
+    "dns mta-sts.example.org A",
+    "dns mta-sts.example.org AAAA",
+    "http https://mta-sts.example.org/.well-known/mta-sts.txt"
+   ]
+  },
+  "http_timeout": {
+   "status": "error",
+   "summary": "check.error.network_timeout",
+   "params": {},
+   "evidence": [
+    [
+     "error",
+     "HTTP https://mta-sts.example.org/.well-known/mta-sts.txt: ReadTimeout"
+    ]
+   ],
+   "remedy": null,
+   "signals": [],
+   "asked": [
+    "dns example.org MX",
+    "dns _mta-sts.example.org TXT",
+    "dns mta-sts.example.org A",
+    "dns mta-sts.example.org AAAA",
+    "http https://mta-sts.example.org/.well-known/mta-sts.txt"
+   ]
+  },
+  "not_found": {
+   "status": "warn",
+   "summary": "mail.mta_sts.no_policy",
+   "params": {},
+   "evidence": [
+    [
+     "records",
+     [
+      "v=STSv1; id=20261012"
+     ]
+    ],
+    [
+     "url",
+     "https://mta-sts.example.org/.well-known/mta-sts.txt"
+    ],
+    [
+     "status",
+     404
+    ]
+   ],
+   "remedy": {
+    "minutes": 30,
+    "effort": "delegate",
+    "dns": [],
+    "message": "mail.mta_sts.message",
+    "how": "",
+    "expect": "warn"
+   },
+   "signals": [],
+   "asked": [
+    "dns example.org MX",
+    "dns _mta-sts.example.org TXT",
+    "dns mta-sts.example.org A",
+    "dns mta-sts.example.org AAAA",
+    "http https://mta-sts.example.org/.well-known/mta-sts.txt"
+   ]
+  },
+  "redirect": {
+   "status": "warn",
+   "summary": "mail.mta_sts.no_policy",
+   "params": {},
+   "evidence": [
+    [
+     "records",
+     [
+      "v=STSv1; id=20261012"
+     ]
+    ],
+    [
+     "url",
+     "https://mta-sts.example.org/.well-known/mta-sts.txt"
+    ],
+    [
+     "status",
+     301
+    ]
+   ],
+   "remedy": {
+    "minutes": 30,
+    "effort": "delegate",
+    "dns": [],
+    "message": "mail.mta_sts.message",
+    "how": "",
+    "expect": "warn"
+   },
+   "signals": [],
+   "asked": [
+    "dns example.org MX",
+    "dns _mta-sts.example.org TXT",
+    "dns mta-sts.example.org A",
+    "dns mta-sts.example.org AAAA",
+    "http https://mta-sts.example.org/.well-known/mta-sts.txt"
+   ]
+  },
+  "untrusted": {
+   "status": "warn",
+   "summary": "mail.mta_sts.bad_certificate",
+   "params": {
+    "problem": "certificate not trusted"
+   },
+   "evidence": [
+    [
+     "records",
+     [
+      "v=STSv1; id=20261012"
+     ]
+    ],
+    [
+     "url",
+     "https://mta-sts.example.org/.well-known/mta-sts.txt"
+    ],
+    [
+     "certificate",
+     "certificate not trusted"
+    ]
+   ],
+   "remedy": {
+    "minutes": 30,
+    "effort": "delegate",
+    "dns": [],
+    "message": "mail.mta_sts.message",
+    "how": "",
+    "expect": "warn"
+   },
+   "signals": [],
+   "asked": [
+    "dns example.org MX",
+    "dns _mta-sts.example.org TXT",
+    "dns mta-sts.example.org A",
+    "dns mta-sts.example.org AAAA",
+    "http https://mta-sts.example.org/.well-known/mta-sts.txt"
+   ]
+  },
+  "expired_certificate": {
+   "status": "warn",
+   "summary": "mail.mta_sts.bad_certificate",
+   "params": {
+    "problem": "certificate has expired"
+   },
+   "evidence": [
+    [
+     "records",
+     [
+      "v=STSv1; id=20261012"
+     ]
+    ],
+    [
+     "url",
+     "https://mta-sts.example.org/.well-known/mta-sts.txt"
+    ],
+    [
+     "certificate",
+     "certificate has expired"
+    ]
+   ],
+   "remedy": {
+    "minutes": 30,
+    "effort": "delegate",
+    "dns": [],
+    "message": "mail.mta_sts.message",
+    "how": "",
+    "expect": "warn"
+   },
+   "signals": [],
+   "asked": [
+    "dns example.org MX",
+    "dns _mta-sts.example.org TXT",
+    "dns mta-sts.example.org A",
+    "dns mta-sts.example.org AAAA",
+    "http https://mta-sts.example.org/.well-known/mta-sts.txt"
+   ]
+  },
+  "bad_policy": {
+   "status": "warn",
+   "summary": "mail.mta_sts.bad_policy",
+   "params": {
+    "fields": "mode, max_age"
+   },
+   "evidence": [
+    [
+     "records",
+     [
+      "v=STSv1; id=20261012"
+     ]
+    ],
+    [
+     "url",
+     "https://mta-sts.example.org/.well-known/mta-sts.txt"
+    ],
+    [
+     "status",
+     200
+    ],
+    [
+     "mode",
+     ""
+    ],
+    [
+     "mx_patterns",
+     []
+    ],
+    [
+     "max_age",
+     null
+    ]
+   ],
+   "remedy": {
+    "minutes": 30,
+    "effort": "delegate",
+    "dns": [],
+    "message": "mail.mta_sts.message",
+    "how": "",
+    "expect": "warn"
+   },
+   "signals": [],
+   "asked": [
+    "dns example.org MX",
+    "dns _mta-sts.example.org TXT",
+    "dns mta-sts.example.org A",
+    "dns mta-sts.example.org AAAA",
+    "http https://mta-sts.example.org/.well-known/mta-sts.txt"
+   ]
+  },
+  "empty_policy": {
+   "status": "warn",
+   "summary": "mail.mta_sts.bad_policy",
+   "params": {
+    "fields": "version, mode, max_age"
+   },
+   "evidence": [
+    [
+     "records",
+     [
+      "v=STSv1; id=20261012"
+     ]
+    ],
+    [
+     "url",
+     "https://mta-sts.example.org/.well-known/mta-sts.txt"
+    ],
+    [
+     "status",
+     200
+    ],
+    [
+     "mode",
+     ""
+    ],
+    [
+     "mx_patterns",
+     []
+    ],
+    [
+     "max_age",
+     null
+    ]
+   ],
+   "remedy": {
+    "minutes": 30,
+    "effort": "delegate",
+    "dns": [],
+    "message": "mail.mta_sts.message",
+    "how": "",
+    "expect": "warn"
+   },
+   "signals": [],
+   "asked": [
+    "dns example.org MX",
+    "dns _mta-sts.example.org TXT",
+    "dns mta-sts.example.org A",
+    "dns mta-sts.example.org AAAA",
+    "http https://mta-sts.example.org/.well-known/mta-sts.txt"
+   ]
+  },
+  "none": {
+   "status": "warn",
+   "summary": "mail.mta_sts.disabled",
+   "params": {},
+   "evidence": [
+    [
+     "records",
+     [
+      "v=STSv1; id=20261012"
+     ]
+    ],
+    [
+     "url",
+     "https://mta-sts.example.org/.well-known/mta-sts.txt"
+    ],
+    [
+     "status",
+     200
+    ],
+    [
+     "mode",
+     "none"
+    ],
+    [
+     "mx_patterns",
+     [
+      "mx.example.net"
+     ]
+    ],
+    [
+     "max_age",
+     604800
+    ]
+   ],
+   "remedy": {
+    "minutes": 30,
+    "effort": "delegate",
+    "dns": [],
+    "message": "mail.mta_sts.message",
+    "how": "",
+    "expect": "warn"
+   },
+   "signals": [],
+   "asked": [
+    "dns example.org MX",
+    "dns _mta-sts.example.org TXT",
+    "dns mta-sts.example.org A",
+    "dns mta-sts.example.org AAAA",
+    "http https://mta-sts.example.org/.well-known/mta-sts.txt"
+   ]
+  },
+  "testing": {
+   "status": "warn",
+   "summary": "mail.mta_sts.testing",
+   "params": {
+    "mode": "testing"
+   },
+   "evidence": [
+    [
+     "records",
+     [
+      "v=STSv1; id=20261012"
+     ]
+    ],
+    [
+     "url",
+     "https://mta-sts.example.org/.well-known/mta-sts.txt"
+    ],
+    [
+     "status",
+     200
+    ],
+    [
+     "mode",
+     "testing"
+    ],
+    [
+     "mx_patterns",
+     [
+      "mx.example.net"
+     ]
+    ],
+    [
+     "max_age",
+     604800
+    ]
+   ],
+   "remedy": {
+    "minutes": 10,
+    "effort": "delegate",
+    "dns": [],
+    "message": "mail.mta_sts.enforce_message",
+    "how": "",
+    "expect": "ok"
+   },
+   "signals": [],
+   "asked": [
+    "dns example.org MX",
+    "dns _mta-sts.example.org TXT",
+    "dns mta-sts.example.org A",
+    "dns mta-sts.example.org AAAA",
+    "http https://mta-sts.example.org/.well-known/mta-sts.txt"
+   ]
+  },
+  "testing_uncovered": {
+   "status": "warn",
+   "summary": "mail.mta_sts.mx_mismatch",
+   "params": {
+    "hosts": "mx.example.net",
+    "n": 1,
+    "mode": "testing"
+   },
+   "evidence": [
+    [
+     "records",
+     [
+      "v=STSv1; id=20261012"
+     ]
+    ],
+    [
+     "url",
+     "https://mta-sts.example.org/.well-known/mta-sts.txt"
+    ],
+    [
+     "status",
+     200
+    ],
+    [
+     "mode",
+     "testing"
+    ],
+    [
+     "mx_patterns",
+     [
+      "mx.other.example"
+     ]
+    ],
+    [
+     "max_age",
+     604800
+    ],
+    [
+     "uncovered",
+     [
+      "mx.example.net"
+     ]
+    ]
+   ],
+   "remedy": {
+    "minutes": 15,
+    "effort": "delegate",
+    "dns": [],
+    "message": "mail.mta_sts.mx_message",
+    "how": "",
+    "expect": "warn"
+   },
+   "signals": [],
+   "asked": [
+    "dns example.org MX",
+    "dns _mta-sts.example.org TXT",
+    "dns mta-sts.example.org A",
+    "dns mta-sts.example.org AAAA",
+    "http https://mta-sts.example.org/.well-known/mta-sts.txt"
+   ]
+  },
+  "enforce_uncovered": {
+   "status": "fail",
+   "summary": "mail.mta_sts.mx_mismatch",
+   "params": {
+    "hosts": "mx.example.net",
+    "n": 1,
+    "mode": "enforce"
+   },
+   "evidence": [
+    [
+     "records",
+     [
+      "v=STSv1; id=20261012"
+     ]
+    ],
+    [
+     "url",
+     "https://mta-sts.example.org/.well-known/mta-sts.txt"
+    ],
+    [
+     "status",
+     200
+    ],
+    [
+     "mode",
+     "enforce"
+    ],
+    [
+     "mx_patterns",
+     [
+      "mx.other.example"
+     ]
+    ],
+    [
+     "max_age",
+     604800
+    ],
+    [
+     "uncovered",
+     [
+      "mx.example.net"
+     ]
+    ]
+   ],
+   "remedy": {
+    "minutes": 15,
+    "effort": "delegate",
+    "dns": [],
+    "message": "mail.mta_sts.mx_message",
+    "how": "",
+    "expect": "ok"
+   },
+   "signals": [],
+   "asked": [
+    "dns example.org MX",
+    "dns _mta-sts.example.org TXT",
+    "dns mta-sts.example.org A",
+    "dns mta-sts.example.org AAAA",
+    "http https://mta-sts.example.org/.well-known/mta-sts.txt"
+   ]
+  },
+  "enforce_partly_covered": {
+   "status": "fail",
+   "summary": "mail.mta_sts.mx_mismatch",
+   "params": {
+    "hosts": "backup.example.com",
+    "n": 1,
+    "mode": "enforce"
+   },
+   "evidence": [
+    [
+     "records",
+     [
+      "v=STSv1; id=20261012"
+     ]
+    ],
+    [
+     "url",
+     "https://mta-sts.example.org/.well-known/mta-sts.txt"
+    ],
+    [
+     "status",
+     200
+    ],
+    [
+     "mode",
+     "enforce"
+    ],
+    [
+     "mx_patterns",
+     [
+      "mx.example.net"
+     ]
+    ],
+    [
+     "max_age",
+     604800
+    ],
+    [
+     "uncovered",
+     [
+      "backup.example.com"
+     ]
+    ]
+   ],
+   "remedy": {
+    "minutes": 15,
+    "effort": "delegate",
+    "dns": [],
+    "message": "mail.mta_sts.mx_message",
+    "how": "",
+    "expect": "ok"
+   },
+   "signals": [],
+   "asked": [
+    "dns example.org MX",
+    "dns _mta-sts.example.org TXT",
+    "dns mta-sts.example.org A",
+    "dns mta-sts.example.org AAAA",
+    "http https://mta-sts.example.org/.well-known/mta-sts.txt"
+   ]
+  },
+  "wildcard": {
+   "status": "ok",
+   "summary": "mail.mta_sts.enforce",
+   "params": {},
+   "evidence": [
+    [
+     "records",
+     [
+      "v=STSv1; id=20261012"
+     ]
+    ],
+    [
+     "url",
+     "https://mta-sts.example.org/.well-known/mta-sts.txt"
+    ],
+    [
+     "status",
+     200
+    ],
+    [
+     "mode",
+     "enforce"
+    ],
+    [
+     "mx_patterns",
+     [
+      "*.example.net"
+     ]
+    ],
+    [
+     "max_age",
+     604800
+    ]
+   ],
+   "remedy": null,
+   "signals": [],
+   "asked": [
+    "dns example.org MX",
+    "dns _mta-sts.example.org TXT",
+    "dns mta-sts.example.org A",
+    "dns mta-sts.example.org AAAA",
+    "http https://mta-sts.example.org/.well-known/mta-sts.txt"
+   ]
+  },
+  "wildcard_too_deep": {
+   "status": "fail",
+   "summary": "mail.mta_sts.mx_mismatch",
+   "params": {
+    "hosts": "a.mx.example.net",
+    "n": 1,
+    "mode": "enforce"
+   },
+   "evidence": [
+    [
+     "records",
+     [
+      "v=STSv1; id=20261012"
+     ]
+    ],
+    [
+     "url",
+     "https://mta-sts.example.org/.well-known/mta-sts.txt"
+    ],
+    [
+     "status",
+     200
+    ],
+    [
+     "mode",
+     "enforce"
+    ],
+    [
+     "mx_patterns",
+     [
+      "*.example.net"
+     ]
+    ],
+    [
+     "max_age",
+     604800
+    ],
+    [
+     "uncovered",
+     [
+      "a.mx.example.net"
+     ]
+    ]
+   ],
+   "remedy": {
+    "minutes": 15,
+    "effort": "delegate",
+    "dns": [],
+    "message": "mail.mta_sts.mx_message",
+    "how": "",
+    "expect": "ok"
+   },
+   "signals": [],
+   "asked": [
+    "dns example.org MX",
+    "dns _mta-sts.example.org TXT",
+    "dns mta-sts.example.org A",
+    "dns mta-sts.example.org AAAA",
+    "http https://mta-sts.example.org/.well-known/mta-sts.txt"
+   ]
+  },
+  "short_max_age": {
+   "status": "warn",
+   "summary": "mail.mta_sts.short_max_age",
+   "params": {
+    "seconds": 3600
+   },
+   "evidence": [
+    [
+     "records",
+     [
+      "v=STSv1; id=20261012"
+     ]
+    ],
+    [
+     "url",
+     "https://mta-sts.example.org/.well-known/mta-sts.txt"
+    ],
+    [
+     "status",
+     200
+    ],
+    [
+     "mode",
+     "enforce"
+    ],
+    [
+     "mx_patterns",
+     [
+      "mx.example.net"
+     ]
+    ],
+    [
+     "max_age",
+     3600
+    ]
+   ],
+   "remedy": {
+    "minutes": 5,
+    "effort": "delegate",
+    "dns": [],
+    "message": "mail.mta_sts.max_age_message",
+    "how": "",
+    "expect": "ok"
+   },
+   "signals": [],
+   "asked": [
+    "dns example.org MX",
+    "dns _mta-sts.example.org TXT",
+    "dns mta-sts.example.org A",
+    "dns mta-sts.example.org AAAA",
+    "http https://mta-sts.example.org/.well-known/mta-sts.txt"
+   ]
+  },
+  "testing_short_max_age": {
+   "status": "warn",
+   "summary": "mail.mta_sts.testing",
+   "params": {
+    "mode": "testing"
+   },
+   "evidence": [
+    [
+     "records",
+     [
+      "v=STSv1; id=20261012"
+     ]
+    ],
+    [
+     "url",
+     "https://mta-sts.example.org/.well-known/mta-sts.txt"
+    ],
+    [
+     "status",
+     200
+    ],
+    [
+     "mode",
+     "testing"
+    ],
+    [
+     "mx_patterns",
+     [
+      "mx.example.net"
+     ]
+    ],
+    [
+     "max_age",
+     3600
+    ]
+   ],
+   "remedy": {
+    "minutes": 10,
+    "effort": "delegate",
+    "dns": [],
+    "message": "mail.mta_sts.enforce_message",
+    "how": "",
+    "expect": "warn"
+   },
+   "signals": [],
+   "asked": [
+    "dns example.org MX",
+    "dns _mta-sts.example.org TXT",
+    "dns mta-sts.example.org A",
+    "dns mta-sts.example.org AAAA",
+    "http https://mta-sts.example.org/.well-known/mta-sts.txt"
+   ]
+  },
+  "unknown_field": {
+   "status": "ok",
+   "summary": "mail.mta_sts.enforce",
+   "params": {},
+   "evidence": [
+    [
+     "records",
+     [
+      "v=STSv1; id=20261012"
+     ]
+    ],
+    [
+     "url",
+     "https://mta-sts.example.org/.well-known/mta-sts.txt"
+    ],
+    [
+     "status",
+     200
+    ],
+    [
+     "mode",
+     "enforce"
+    ],
+    [
+     "mx_patterns",
+     [
+      "mx.example.net"
+     ]
+    ],
+    [
+     "max_age",
+     604800
+    ]
+   ],
+   "remedy": null,
+   "signals": [],
+   "asked": [
+    "dns example.org MX",
+    "dns _mta-sts.example.org TXT",
+    "dns mta-sts.example.org A",
+    "dns mta-sts.example.org AAAA",
+    "http https://mta-sts.example.org/.well-known/mta-sts.txt"
+   ]
+  }
+ }
+}
