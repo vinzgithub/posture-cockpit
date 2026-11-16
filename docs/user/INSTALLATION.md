@@ -347,3 +347,9 @@ docker compose exec posture-cockpit posture-cockpit make-admin <username>
 Before changing images: verify a backup outside the volume, disable scheduling and stop the instance cleanly. Schema 5 is unchanged: a pinned official older image can reuse the current volume without restoring an earlier backup. Data created after the upgrade must remain available. v0.5.0 shows its older projections, including DMARC, while observed scores remain unchanged. Test on an isolated copy; never run two instances concurrently on that volume. Returning to schema 4 still requires a separate restore procedure.
 
 **From 0.7.0 to 0.6.1**: put back the `compose.yaml` of 0.6.1 (and `POSTURE_COCKPIT_IMAGE` in the `.env`, if it is set), then restart. The settings of 0.7.0 (`POSTURE_COCKPIT_SMTP_PROBE`, `POSTURE_COCKPIT_SMTP_EHLO_NAME` and the three settings of PDF reports) have no effect in 0.6.1. 0.6.1 reads the scans made with 0.7.0, pages and history included: the round trip 0.6.1 → 0.7.0 → 0.6.1 → 0.7.0 on the same volume is checked in CI from the official image of 0.6.1, pinned by its digest. The scans of 0.7.0 keep their generation 5: 0.6.1 does not compare them with its own.
+
+**Limits of 0.6.1 after this return** (checked on a copy of the production): the scans of 0.7.0 remain readable and keep their score, but 0.6.1 does not know the SMTP check.
+- It shows it by its technical identifiers (`mail.smtp_starttls.title`, `mail.smtp_starttls.ok`…), on the pages and in the PDF, without the STARTTLS annex. If the probe had found a defect, the proposed correction carries these identifiers too.
+- It ignores the measurement scope: between a scan of 0.7.0 made with the probe on and another made with the probe off, the change of score it shows (history, Mission Control) comes from the setting, not from the domain.
+
+Run a scan after the return: 0.6.1 compares it with no scan of 0.7.0, and its own results are shown normally.

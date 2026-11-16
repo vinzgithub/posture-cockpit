@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.7.0 — date de publication à renseigner
+## 0.7.0 — 2026-11-16
 
 - Nouveau contrôle facultatif « Chiffrement SMTP des serveurs de réception (STARTTLS) » (`mail.smtp_starttls`, poids 5, messagerie) :
   - STARTTLS et le certificat des MX sur le port 25 ;
@@ -20,7 +20,7 @@
   - 60 s et 1 Gio par rapport (`POSTURE_COCKPIT_MAX_CONCURRENT_REPORTS`, `POSTURE_COCKPIT_REPORT_TIMEOUT`, `POSTURE_COCKPIT_REPORT_MEMORY_MB`) ;
   - processus arrêté au départ du client ou à l'arrêt de l'application ;
   - tableaux du PDF à largeurs fixes.
-- Schéma SQLite 5 inchangé : aucune migration. Retour vers la 0.6.1 par changement d'image ; l'aller-retour depuis l'image officielle 0.6.1 est vérifié en CI.
+- Schéma SQLite 5 inchangé : aucune migration. Retour vers la 0.6.1 par changement d'image ; l'aller-retour depuis l'image officielle 0.6.1 est vérifié en CI et sur une copie de la production. Après un retour, la 0.6.1 affiche le contrôle SMTP par ses identifiants techniques et peut comparer deux analyses 0.7.0 de portées différentes (voir INSTALLATION, « Retour entre versions au schéma 5 »).
 - Notes observées des contrôles existants, scoring, événements et sécurité réseau conservés ; seuls les deux champs SMTP s'ajoutent à l'API.
 
 **Publication :** à renseigner après les opérations (PR vers `main`, tag et GitHub Release v0.7.0, workflow GHCR, digests des tags `0.7.0`, `0.7` et `latest`). Voir `docs/developer/RELEASE_V070.fr.md`.

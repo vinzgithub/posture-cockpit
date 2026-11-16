@@ -1,6 +1,6 @@
 # Posture Cockpit v0.7.0 — dossier de livraison
 
-**État : candidate v0.7.0, non publiée.** Cahier des charges révision 3 et plan en six PR (A, B1, B2, C, D, E) validés le 5 novembre 2026. Chaque PR a fait l'objet d'une contre-revue indépendante et a été fusionnée dans `integration/v0.7.0` avec l'accord explicite du mainteneur, sans réécriture d'historique. **Aucune publication et aucun déploiement n'ont été faits ; la production (v0.6.1) n'a pas été modifiée.**
+**État : candidate v0.7.0, recette finale faite le 16 novembre 2026.** Cahier des charges révision 3 et plan en six PR (A, B1, B2, C, D, E) validés le 5 novembre 2026. Chaque PR a fait l'objet d'une contre-revue indépendante et a été fusionnée dans `integration/v0.7.0` avec l'accord explicite du mainteneur, sans réécriture d'historique. **Aucune publication et aucun déploiement n'ont été faits ; la production (v0.6.1) n'a pas été modifiée.**
 
 ## Périmètre livré
 
@@ -15,7 +15,7 @@
 | Correction 2 | #50 | Preuve SMTP bornée à 64 Kio, compteurs exacts, preuve originale téléchargeable (A7) | `bdf94b2` |
 | Correction 3 | #51 | Rapports PDF dans un processus séparé : limites de concurrence, de durée et de mémoire ; arrêt sûr | `e053283` |
 | Correction 4 | #52 | Preuves et listes de `mail.mx` et `mail.mta_sts` bornées ; anciennes analyses bornées à la lecture | `c35fc56` |
-| E | PR-E | Version 0.7.0, documentation FR/EN, notes de version, exemples régénérés, montée et retour depuis l'image officielle v0.6.1 en CI | — |
+| E | #53 | Version 0.7.0, documentation FR/EN, notes de version, exemples régénérés, montée et retour depuis l'image officielle v0.6.1 en CI | `9c923ae` |
 
 ## Invariants et décisions
 
@@ -55,9 +55,13 @@
 
 ### PR-E
 
-- Ruff, mypy et pytest local (Python 3.13) : voir la description de la PR.
+- Ruff et mypy propres ; pytest local (Python 3.13) : 2 913 réussis et 2 ignorés ; Chromium : 39 réussis.
 - PDF de démonstration régénérés en v0.7.0 : **57/C**, comme en v0.6.1 ; 4 pages par langue ; annexe des 21 contrôles, le contrôle SMTP « non applicable » ; aucune valeur `None` ; marque fictive visible ; huit pages rendues et inspectées.
-- CI de la PR-E, dont la montée et l'aller-retour depuis l'image officielle v0.6.1 : voir la description de la PR. Résultats à reporter ici avant la publication.
+- CI du commit de fusion `9c923ae` ([run 43189879476](https://github.com/vinzgithub/posture-cockpit/actions/runs/43189879476)) : **12 tâches réussies**.
+  - Python 3.11, 3.12 et 3.13 : 2 914 réussis et 1 ignoré chacun ;
+  - suite dans l'image : 2 914 réussis ; conteneur durci : 64 tests PDF réussis ;
+  - Chromium : 39 réussis ;
+  - retour arrière et montées depuis v0.3.0, v0.4.0, v0.4.1, v0.5.0, v0.6.0 et v0.6.1 réussis, dont l'aller-retour v0.6.1 → 0.7.0 → v0.6.1 → 0.7.0 depuis l'image officielle épinglée par digest.
 
 ## Risques résiduels acceptés
 
@@ -69,41 +73,30 @@
 6. **Nouvelles analyses sans liste complète.** Comme pour SMTP, elles ne conservent pas les listes complètes de MX et de motifs : seuls 16 éléments déterminants et les comptes exacts sont gardés. Les analyses antérieures gardent leur original en base.
 7. **Preuves SPF, DMARC, CAA et TLS-RPT non bornées** (D3) : chacune est limitée par une réponse DNS (64 Kio au plus) et n'est pas imprimée dans le PDF.
 8. **Processus de rapport : un durcissement, pas un bac à sable.** Il tourne sous l'utilisateur de l'application. Si `prctl(PR_SET_PDEATHSIG)` est refusé, le refus est journalisé, et le processus reste borné par son temps processeur et ses tubes.
-9. **Montée de la PR-E et pages de l'ancienne image.** L'aller-retour vérifie que l'ancienne image affiche les pages et l'historique des analyses de la candidate (HTTP 200). Le contenu rendu par la 0.6.1 pour le contrôle SMTP, qu'elle ne connaît pas, n'est pas inspecté visuellement en CI. Il est à regarder lors de la recette sur copie.
+9. **Retour vers la 0.6.1 : affichage par la 0.6.1 des analyses de la 0.7.0** (contrôlé sur une copie de la production, voir la recette). Les analyses restent lisibles et gardent leur note, sans erreur. Mais la 0.6.1 affiche le contrôle SMTP par ses identifiants techniques (`mail.smtp_starttls.title`, `mail.smtp_starttls.ok`…), y compris dans une correction si la sonde avait relevé un défaut, et elle ignore la portée de mesure : entre deux analyses 0.7.0 faites sonde activée et sonde désactivée, elle affiche une évolution de note (« +1 points ») qui vient du réglage. Dès sa première analyse après le retour, plus aucune comparaison avec la 0.7.0. Limite documentée dans INSTALLATION (« Retour entre versions au schéma 5 »), sans correction : la 0.6.1 est publiée.
+10. **Textes imprécis de la restitution SMTP.** La phrase « le port 25 joint depuis cette instance ne prouve pas… » s'affiche aussi quand aucun port 25 n'a été joint (sonde désactivée, adresses non autorisées), et la ligne « Limites de la mesure » n'accorde pas le singulier (« 1 adresses publiées »). Sans effet sur les verdicts ni sur la note.
 
-## Recette finale à mener (préparation)
+Observation hors périmètre : la page d'historique porte deux attributs `style` bloqués par la politique de sécurité du contenu (`style-src 'self'`), en 0.6.1 comme en 0.7.0 ; défaut d'affichage mineur et ancien.
 
-Elle se fait après la fusion de la PR-E, sur le commit fusionné, et **sans toucher la production**. Chaque commande sera donnée une à une, marquée 🔎 (lecture) ou ⚠ (modification).
+## Recette finale (16 novembre 2026)
 
-### 1. Image locale, instance Docker isolée
+Sur le LXC 119, qui héberge aussi la production, par décision du mainteneur ; instances distinctes (projets, conteneurs, ports, cookies et volumes propres), commandes Compose toujours écrites avec `-p`. La production n'a été que lue (une sauvegarde `backup --output -`) ; elle est restée en service, sans redémarrage.
 
-1. Construire l'image depuis le commit fusionné (`docker build -t posture-cockpit:0.7.0-recette .`) et vérifier `posture_cockpit.__version__ == "0.7.0"`.
-2. `scripts/docker-recette.sh install posture-cockpit:0.7.0-recette` : installation neuve, code d'initialisation, sauvegarde, restauration, refus.
-3. `scripts/docker-recette.sh upgrade <image officielle v0.6.1 par digest> posture-cockpit:0.7.0-recette` : montée, retour à la 0.6.1 sur le même volume, nouvelle montée, pages 200, `integrity_check=ok`.
-4. `scripts/docker-recette.sh rollback` (vers la 0.4.1 par restauration), comme en CI.
-5. Instance de test à la main (section « Une instance de test sur le même serveur » d'INSTALLATION) :
-   - sonde désactivée : contrôle « non applicable », note inchangée ;
-   - puis sonde activée avec un nom EHLO valide si le port 25 sortant est ouvert, sinon constater « non évalué » ;
-   - refus au démarrage d'un nom EHLO invalide et d'une valeur de sonde invalide ;
-   - rapports PDF FR/EN, deux simultanés et un troisième refusé ;
-   - API `smtp_probe` et `mail_enforce_readiness`.
-
-### 2. Copie restaurée de la production
-
-1. Sauvegarde vérifiée de la production (lecture seule pour la production : `backup --output -`, `check-backup`), copiée hors du serveur.
-2. Restauration dans une instance de test distincte (projet, conteneur, port, cookie et volume propres), en **v0.6.1** d'abord ; contrôle de `info`, des comptes, de la double authentification et des domaines.
-3. Ordonnanceur désactivé, puis passage de cette instance en **v0.7.0** (image locale) :
-   - `info` indique le schéma 5 à jour et aucune migration ;
-   - historique conservé ; analyses 0.6.x affichées sans comparaison (« moteur d'évaluation différent ou inconnu ») ;
-   - nouvelles analyses des domaines réels, sonde désactivée puis activée si possible ;
-   - PDF FR/EN, API et Home Assistant si utilisé.
-4. Retour de cette copie en **v0.6.1** : pages, historique et analyses 0.7.0 lisibles ; puis nouvelle montée en 0.7.0.
-
-### 3. Critères de sortie
-
-- Aucune erreur 500, aucun processus de rapport restant, `integrity_check=ok`, sessions et comptes intacts.
-- Notes des contrôles existants identiques entre 0.6.1 et 0.7.0 pour une même observation, sonde désactivée.
-- Aucune anomalie bloquante (sécurité, intégrité des données, verdicts, disponibilité, régression).
+- **Image** : `posture-cockpit:0.7.0-recette`, construite depuis `9c923ae` (`sha256:9bdebe81d2c0…`), version 0.7.0. Images de référence par digest : v0.6.1 `sha256:f670500d…` (celle de la production) et v0.4.1 `sha256:c5081ebc…`.
+- **Recette scriptée** : `install` 24 vérifications, `upgrade` depuis v0.6.1 18 vérifications, `rollback` vers v0.4.1 31 vérifications ; mêmes nombres qu'en CI ; aucune instance restante.
+- **Instance isolée** :
+  - version 0.7.0 et schéma 5 ; compte et double authentification ;
+  - sonde désactivée : contrôle SMTP « Non applicable », hors note et hors couverture ;
+  - trois démarrages refusés avec un message clair (valeur de sonde invalide, sonde sans nom EHLO, nom EHLO invalide) ;
+  - sonde activée : `gmail.com` « Conforme » (TLS 1.3, certificats vérifiés, IPv6 sans route listée comme non testée, 10 tentatives sur 16) ; un MX à adresse privée (DNS local) refusé par la règle de sortie et « Non évalué », sans défaut imputé ; comparaison refusée entre analyses de portées différentes ;
+  - PDF FR/EN ; trois demandes simultanées par trois comptes : deux rapports, un refus immédiat (`busy`), aucun processus restant ;
+  - API `smtp_probe` et `mail_enforce_readiness` conformes ; journal sans erreur 5xx.
+- **Copie restaurée de la production** (1 compte, 9 domaines, 30 analyses) :
+  - restauration en v0.6.1, `integrity_check = ok` ; montée en 0.7.0 sans migration ; historique 0.1.0 à 0.6.1 lisible, comparaison avec la 0.7.0 refusée (moteur différent) ;
+  - notes identiques entre 0.6.1 et 0.7.0 pour une même observation, sonde désactivée : `finances.gouv.fr` 88 A et `clubic.com` 77 B, 20 contrôles sur 20 identiques, seule différence le contrôle SMTP « non applicable ». Deux analyses de `clubic.com` (site derrière Cloudflare) ont vu les contrôles web « non évalués » faute de réponse HTTP : une contre-épreuve en alternance 0.6.1 / 0.7.0 a montré la même instabilité du site dans les deux versions ;
+  - sonde activée : `finances.gouv.fr` SMTP « Conforme » (F05.10), `clubic.com` « Non évalué » (F05.08) ;
+  - retour en v0.6.1 sur le même volume, puis nouvelle montée en 0.7.0 : `integrity_check = ok` à chaque étape, 40 analyses ;
+  - risque n° 9 : rendu et absence d'erreur 500 vérifiés (130 adresses, dont 49 PDF, toutes en 200 hors `/admin` en 303 de reconfirmation) ; comptes, rôles, domaines et clé de session identiques à la production ; écarts de lisibilité et de comparaison décrits au risque n° 9.
 
 ## Procédure de retour
 
