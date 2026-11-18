@@ -1,6 +1,6 @@
 # Posture Cockpit v0.7.0 — dossier de livraison
 
-**État : candidate v0.7.0, recette finale faite le 16 novembre 2026.** Cahier des charges révision 3 et plan en six PR (A, B1, B2, C, D, E) validés le 5 novembre 2026. Chaque PR a fait l'objet d'une contre-revue indépendante et a été fusionnée dans `integration/v0.7.0` avec l'accord explicite du mainteneur, sans réécriture d'historique. **Aucune publication et aucun déploiement n'ont été faits ; la production (v0.6.1) n'a pas été modifiée.**
+**État : v0.7.0 publiée** (GitHub Release le 17 novembre 2026, image GHCR le 18 novembre 2026), après la recette finale du 16 novembre 2026. Cahier des charges révision 3 et plan en six PR (A, B1, B2, C, D, E) validés le 5 novembre 2026. Chaque PR a fait l'objet d'une contre-revue indépendante et a été fusionnée dans `integration/v0.7.0` avec l'accord explicite du mainteneur, sans réécriture d'historique. La production a été migrée séparément, le 18 novembre 2026 (voir « Publication »).
 
 ## Périmètre livré
 
@@ -103,12 +103,17 @@ Sur le LXC 119, qui héberge aussi la production, par décision du mainteneur ; 
 - **Vers la 0.6.1, même schéma 5** : sauvegarde vérifiée hors volume, ordonnanceur désactivé, arrêt propre ; puis `compose.yaml` de la 0.6.1 (ou image officielle épinglée `sha256:f670500db50aff70b535a82ec0692660888f6b6387fbe25823feeb0a15d6f069`) sur le même volume. Aucune restauration n'est nécessaire, et les réglages propres à la 0.7.0 sont sans effet. Voir INSTALLATION, « Retour entre versions au schéma 5 ».
 - **En dernier recours** : restauration de la sauvegarde faite avant la mise à jour (`restore --replace`), qui perd tout ce qui a été fait depuis (liste dans INSTALLATION, « Retour arrière »).
 
-## Publication (à renseigner après les opérations)
+## Publication
 
 Procédure : [RELEASE.fr.md](RELEASE.fr.md#publier-une-version).
 
-- PR `integration/v0.7.0` → `main` : _numéro et SHA du commit de fusion, à renseigner après la fusion_.
-- Tag `v0.7.0` et GitHub Release : _SHA du tag, lien et date de publication, à renseigner après la publication_.
-- Workflow GHCR (`release.yml`, lancé à la main avec `PUBLISH_GHCR`) : _numéro de l'exécution, à renseigner après_.
-- Digests relus de `0.7.0`, `0.7` et `latest` : _à renseigner après la publication_.
-- Production : _migration distincte, sur autorisation, non comprise dans la publication_.
+- **PR #54** `release/v0.7.0` → `main` (contenu de `integration/v0.7.0` et commit documentaire `78f31c2`) : CI du HEAD réussie (25 vérifications) ; fusion par merge commit **`b04b6c7c61ed86575f08d8714b44e0f6bfaf2ca9`**, parents `fce2ec0` et `78f31c2`, arbre identique à `78f31c2`.
+- **Tag `v0.7.0`** sur `b04b6c7` et **GitHub Release** [v0.7.0](https://github.com/vinzgithub/posture-cockpit/releases/tag/v0.7.0), publiée le 17 novembre 2026 à 06:59 UTC, version finale (non préversion), dernière version.
+- **Workflow GHCR** `release.yml`, lancé à la main depuis `main` avec `release_tag=v0.7.0` et `PUBLISH_GHCR` : [exécution 44252216523](https://github.com/vinzgithub/posture-cockpit/actions/runs/44252216523), le 18 novembre 2026, 13 jobs réussis (suite Python 3.11 à 3.13, Chromium, Docker, retour arrière, montées depuis v0.3.0 à v0.6.1, image AMD64 et ARM64). État du registre avant publication : version absente.
+- **Digests relus** : `0.7.0`, `0.7` et `latest` → `sha256:edc18c687847d2a9d1475d0f88fbfca117295eda0be7a998b0194e380982fd53`. Relecture indépendante : l'image téléchargée en production le 18 novembre 2026 porte ce même digest.
+- Entre la GitHub Release (17 novembre) et le workflow GHCR (18 novembre), l'image `0.7.0` n'était pas encore publiée : une installation neuve pendant cet intervalle aurait échoué au téléchargement de l'image.
+- **Production** (LXC 119), migrée le 18 novembre 2026, distinctement de la publication :
+  - sauvegarde cohérente vérifiée par la v0.6.1 (1 compte, 9 domaines, 30 analyses ; SHA-256 `65fbf1e86152592d927a2fd9b642cbd53a2e87e46f9e02fdd928aaea894fe551`), copiée hors du conteneur LXC ;
+  - `compose.yaml` de la v0.7.0 et `POSTURE_COCKPIT_IMAGE` passé à `0.7.0` ; ancienne configuration conservée ;
+  - démarrage sain, schéma 5 à jour sans migration, `integrity_check = ok` ;
+  - puis sonde SMTP activée et résolveurs publics (`POSTURE_COCKPIT_NAMESERVERS`) : le domaine du mainteneur, auparavant résolu en adresses privées par le DNS local, est mesuré comme depuis Internet, et son MX obtient « Conforme ».
