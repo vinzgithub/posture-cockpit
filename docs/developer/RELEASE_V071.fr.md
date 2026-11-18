@@ -67,7 +67,7 @@ Un résultat est **inconnu** quand la version qui l'affiche n'a pas de titre pou
 
 ### Locales
 
-- Suite complète : à reporter après la dernière exécution.
+- Suite complète (Python 3.13, OpenSSL 3.5) : **2 939 réussis, 2 ignorés**, en 6 min 47 s. Les deux cas ignorés sont les mêmes qu'en 0.7.0 (machine dépendante).
 - `tests/test_v071_corrections.py` : les trois corrections, en FR et en EN, en page et en PDF. Pour D7 :
   - observation informative ;
   - contrôle noté inconnu, avec remède ;
@@ -82,7 +82,22 @@ Un résultat est **inconnu** quand la version qui l'affiche n'a pas de titre pou
 
 ### CI
 
-À reporter : run complet, tâche `upgrade (v0.7.0)`, qui fait l'aller-retour 0.7.0 → 0.7.1 → 0.7.0 → 0.7.1 depuis l'image officielle épinglée par son digest `sha256:edc18c687847d2a9d1475d0f88fbfca117295eda0be7a998b0194e380982fd53`, et essai à blanc de `release`.
+**SHA applicatif et tests validés : `f012b15a238900cea6fffff69b5b68e2e493dbc9`.** Les mises à jour de ce dossier qui suivent sont documentaires.
+
+- Run `tests` 44401855570 (PR #56) : **17 tâches réussies**.
+  - Python 3.11, 3.12 et 3.13 : 2 940 réussis, 1 ignoré.
+  - Chromium : 40 réussis, dont le test de la politique de sécurité.
+  - Suite complète dans l'image : 2 940 réussis, 1 ignoré.
+  - Rapports PDF dans le conteneur durci : 64 réussis.
+  - Mises à jour depuis v0.3.0 à v0.7.0, et retour vers la 0.4.1.
+- Tâche `upgrade (v0.7.0)` 135146710290 : image officielle 0.7.0 épinglée par son digest `sha256:edc18c687847d2a9d1475d0f88fbfca117295eda0be7a998b0194e380982fd53`. Au même volume :
+  1. données créées par la 0.7.0 ;
+  2. montée en 0.7.1 ;
+  3. retour en 0.7.0 (« runs again on the same data ») et analyse ;
+  4. nouvelle montée en 0.7.1.
+
+  Les pages des trois analyses répondent 200 dans les deux images, `integrity_check=ok`, sans restauration.
+- Run `release` 44401855518 (essai à blanc sur PR) : réussi ; aucune publication.
 
 ## Recette (à faire, sur un LXC distinct de la production)
 
