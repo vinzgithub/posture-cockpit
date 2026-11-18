@@ -87,6 +87,48 @@ jobs:
             | tee "$RUNNER_TEMP/pdf.log"
           echo "::notice title=PDF in the hardened container::$(grep -E '^reports ' "$RUNNER_TEMP/pdf.log" | tail -1)"
 
+  # Version 0.8.0, PR-A: the TLS bench (tests/tls_lab) and the report of what the TLS of the image can do,
+  # inside the image, on AMD64 and on ARM64 (emulated). Loopback only: the bench refuses any other
+  # destination before a packet leaves (tests/tls_lab/guard.py). The two reports are kept as artifacts.
+  tls-lab:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-qemu-action@v4
+        if: matrix.arch == 'arm64'
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/${{ matrix.arch }}
+          push: false
+          load: true
+          tags: posture-cockpit:lab
+      - name: TLS capabilities of the image (${{ matrix.arch }})
+        run: |
+          set -o pipefail
+          mkdir -p "$RUNNER_TEMP/lab"
+          docker run --rm --platform "linux/${{ matrix.arch }}" --user 10001:10001 -e HOME=/tmp \
+            -e PYTHONPATH=/checks/tests -v "$PWD:/checks:ro" -w /checks --entrypoint python \
+            posture-cockpit:lab -m tls_lab.capabilities | tee "$RUNNER_TEMP/lab/tls-capabilities-${{ matrix.arch }}.json"
+      - name: TLS bench inside the image (${{ matrix.arch }})
+        run: |
+          set -o pipefail
+          docker run --rm --platform "linux/${{ matrix.arch }}" --user 10001:10001 -e HOME=/tmp \
+            -v "$PWD:/checks:ro" -w /checks --entrypoint sh posture-cockpit:lab \
+            -c 'pip install --quiet --user "pytest>=8" && python -m pytest -q -rs -p no:cacheprovider tests/tls_lab' \
+            | tee "$RUNNER_TEMP/lab/tls-bench-${{ matrix.arch }}.log"
+          echo "::notice title=TLS bench (${{ matrix.arch }})::$(tail -1 "$RUNNER_TEMP/lab/tls-bench-${{ matrix.arch }}.log")"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tls-lab-${{ matrix.arch }}
+          path: ${{ runner.temp }}/lab/
+
   # Instances made by the released v0.3.0 (schema 3) and v0.4.0 (schema 4), rebuilt from their tag,
   # and by the official images of v0.4.1 (schema 4) to v0.6.1 (schema 5), pinned by their digest,
   # then updated to this image on the same volume: the verified backup made before the migration,
