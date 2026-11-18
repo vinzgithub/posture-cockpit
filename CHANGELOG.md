@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.7.1 — non publiée
+
+Version corrective : aucune fonction nouvelle, aucun changement de note.
+
+- **Phrase sur le port 25** : la limite « le port 25 joint depuis cette instance ne garantit pas la livraison depuis Internet » n'apparaît plus que si au moins un dialogue SMTP a eu lieu, d'après la preuve enregistrée. Elle disparaît avec la sonde désactivée, sans adresse jointe ou pour une preuve qui ne le dit pas (détail et PDF).
+- **Accord des compteurs** : « Limites de la mesure » accorde chaque compteur (« 1 adresse publiée », « 1 connexion ouverte »…), en français et en anglais, dans le détail et le PDF.
+- **Graphique de l'historique** : les deux attributs `style` que la politique de sécurité du navigateur refusait sont retirés. Le rendu est celui affiché depuis la 0.6 (feuille de style inchangée), la politique de sécurité est inchangée et la console ne signale plus de violation.
+- **Résultats d'une version plus récente** : un résultat enregistré par une version postérieure, et que la 0.7.1 ne connaît pas, est présenté à part, par son identifiant, son statut enregistré et ses valeurs relevées. Tout est borné (30 résultats, 80 caractères par identifiant, 4 Kio de valeurs par résultat) et échappé. Il n'est jamais proposé dans le plan de corrections, les simulations ou les contrôles non évalués, et ne crée aucune transition ni aucun événement. Le PDF le mentionne en une ligne. La note, la couverture et l'API sont calculées comme en 0.7.0.
+- Schéma SQLite 5 et génération 5 inchangés : aucune migration, aucun recalcul, aucune donnée réécrite. Retour vers la 0.7.0 par simple changement d'image ; l'aller-retour depuis l'image officielle 0.7.0 est vérifié en CI. Après une version plus récente, revenir vers la 0.7.1 plutôt que vers la 0.7.0 (voir INSTALLATION, « Retour entre versions au schéma 5 »).
+
+**Publication :** à renseigner après les opérations. Voir `docs/developer/RELEASE_V071.fr.md`.
+
 ## 0.7.0 — 2026-11-16
 
 - Nouveau contrôle facultatif « Chiffrement SMTP des serveurs de réception (STARTTLS) » (`mail.smtp_starttls`, poids 5, messagerie) :

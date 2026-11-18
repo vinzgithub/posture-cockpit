@@ -8,7 +8,7 @@
 
 **English** · [**Français**](README.fr.md)
 
-![Version](https://img.shields.io/badge/version-0.7.0-126caa) ![Docker](https://img.shields.io/badge/install-Docker-2496ED) ![License](https://img.shields.io/badge/license-PolyForm%20Noncommercial-0d355d)
+![Version](https://img.shields.io/badge/version-0.7.1-126caa) ![Docker](https://img.shields.io/badge/install-Docker-2496ED) ![License](https://img.shields.io/badge/license-PolyForm%20Noncommercial-0d355d)
 
 <img src="docs/images/en/hero.png" alt="Posture Cockpit displayed on a computer and a phone" width="100%">
 
@@ -123,7 +123,7 @@ For a **new installation**, run:
 
 ```bash
 mkdir posture-cockpit && cd posture-cockpit
-curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.7.0/compose.yaml
+curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.7.1/compose.yaml
 docker compose up -d
 ```
 
@@ -137,9 +137,9 @@ Open `http://<server-address>:8080/setup`, enter the code and create the adminis
 
 **Important:** don't expose the application to the public Internet over plain HTTP. Use a properly configured **HTTPS reverse proxy** for remote access.
 
-Already running an older version? **Don't use the new-install steps as an upgrade guide.** Back up your existing installation and follow the documented process. A transition from v0.4.x to v0.5.0 or later needs special care around the database schema and scheduler; v0.7.0 keeps schema 5, like v0.5.0 to v0.6.1.
+Already running an older version? **Don't use the new-install steps as an upgrade guide.** Back up your existing installation and follow the documented process. A transition from v0.4.x to v0.5.0 or later needs special care around the database schema and scheduler; v0.7.1 keeps schema 5, like v0.5.0 to v0.7.0.
 
-📖 [Full installation, configuration, backup and upgrade guide](docs/user/INSTALLATION.md) · [Published v0.7.0 release](https://github.com/vinzgithub/posture-cockpit/releases/tag/v0.7.0)
+📖 [Full installation, configuration, backup and upgrade guide](docs/user/INSTALLATION.md) · [Published v0.7.1 release](https://github.com/vinzgithub/posture-cockpit/releases/tag/v0.7.1)
 
 ## What Posture Cockpit does — and doesn't do
 
@@ -171,4 +171,4 @@ Copyright © 2026 Vincent Fournet.
 
 ---
 
-<div align="center"><sub>Posture Cockpit v0.7.0 — Understand what protects your domain, and what to do when something is missing.</sub></div>
+<div align="center"><sub>Posture Cockpit v0.7.1 — Understand what protects your domain, and what to do when something is missing.</sub></div>
