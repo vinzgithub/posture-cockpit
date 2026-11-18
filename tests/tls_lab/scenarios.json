@@ -1,0 +1,1744 @@
+{
+ "version": "2026.1",
+ "about": "Oracle of the TLS bench (tests/tls_lab/scenarios.py explains the fields).",
+ "scenarios": [
+  {
+   "id": "tls12.aead_pfs.p256",
+   "family": "announced",
+   "offer": {
+    "versions": [
+     "TLS1.2"
+    ],
+    "categories": [
+     "aead_pfs"
+    ]
+   },
+   "offer_class": "modern",
+   "reply": {
+    "messages": [
+     [
+      "server_hello",
+      {
+       "suite": "0xC02F",
+       "version": "0x0303"
+      }
+     ],
+     [
+      "certificate"
+     ],
+     [
+      "ecdhe",
+      {
+       "group": "0x0017",
+       "point": 65
+      }
+     ],
+     [
+      "done"
+     ]
+    ]
+   },
+   "expected": {
+    "evidence": "announced",
+    "facts": {
+     "kind": "server_hello",
+     "version": "TLS1.2",
+     "suite": "0xC02F",
+     "group": "0x0017"
+    }
+   },
+   "sha256": "08d70b8f1e941337cd010d3bcb6db807dbbf710f5f42c5dc0e34b12d6f5f6f76"
+  },
+  {
+   "id": "tls12.aead_pfs.x25519",
+   "family": "announced",
+   "offer": {
+    "versions": [
+     "TLS1.2"
+    ],
+    "categories": [
+     "aead_pfs"
+    ]
+   },
+   "offer_class": "modern",
+   "reply": {
+    "messages": [
+     [
+      "server_hello",
+      {
+       "suite": "0xC030",
+       "version": "0x0303"
+      }
+     ],
+     [
+      "certificate"
+     ],
+     [
+      "ecdhe",
+      {
+       "group": "0x001D",
+       "point": 32
+      }
+     ],
+     [
+      "done"
+     ]
+    ]
+   },
+   "expected": {
+    "evidence": "announced",
+    "facts": {
+     "kind": "server_hello",
+     "version": "TLS1.2",
+     "suite": "0xC030",
+     "group": "0x001D"
+    }
+   },
+   "sha256": "84c1c79f19fbb2d2aa4b0c5af33405dfce91af3bde838de17d942083cae5ca79"
+  },
+  {
+   "id": "tls12.aead_pfs.chacha20",
+   "family": "announced",
+   "offer": {
+    "versions": [
+     "TLS1.2"
+    ],
+    "categories": [
+     "aead_pfs"
+    ]
+   },
+   "offer_class": "modern",
+   "reply": {
+    "messages": [
+     [
+      "server_hello",
+      {
+       "suite": "0xCCA8",
+       "version": "0x0303"
+      }
+     ],
+     [
+      "certificate"
+     ],
+     [
+      "ecdhe",
+      {
+       "group": "0x001D",
+       "point": 32
+      }
+     ],
+     [
+      "done"
+     ]
+    ]
+   },
+   "expected": {
+    "evidence": "announced",
+    "facts": {
+     "kind": "server_hello",
+     "version": "TLS1.2",
+     "suite": "0xCCA8",
+     "group": "0x001D"
+    }
+   },
+   "sha256": "2e473a7dbb4f1c70bf72e6882049df6467e0b6cf5df5aaa70999e58ad8029c53"
+  },
+  {
+   "id": "tls12.dhe_aead.2048",
+   "family": "announced",
+   "offer": {
+    "versions": [
+     "TLS1.2"
+    ],
+    "categories": [
+     "dhe_aead"
+    ]
+   },
+   "offer_class": "legacy",
+   "reply": {
+    "messages": [
+     [
+      "server_hello",
+      {
+       "suite": "0x009E",
+       "version": "0x0303"
+      }
+     ],
+     [
+      "certificate"
+     ],
+     [
+      "dhe",
+      {
+       "bits": 2048
+      }
+     ],
+     [
+      "done"
+     ]
+    ]
+   },
+   "expected": {
+    "evidence": "announced",
+    "facts": {
+     "kind": "server_hello",
+     "version": "TLS1.2",
+     "suite": "0x009E",
+     "dh_bits": 2048
+    }
+   },
+   "sha256": "19ce15818e5a06da1e76d4ea5631db43e13c3bf01021f0a430c5d1fe6fb89d9a"
+  },
+  {
+   "id": "tls12.cbc_pfs.p256",
+   "family": "announced",
+   "offer": {
+    "versions": [
+     "TLS1.2"
+    ],
+    "categories": [
+     "cbc_pfs"
+    ]
+   },
+   "offer_class": "modern",
+   "reply": {
+    "messages": [
+     [
+      "server_hello",
+      {
+       "suite": "0xC013",
+       "version": "0x0303"
+      }
+     ],
+     [
+      "certificate"
+     ],
+     [
+      "ecdhe",
+      {
+       "group": "0x0017",
+       "point": 65
+      }
+     ],
+     [
+      "done"
+     ]
+    ]
+   },
+   "expected": {
+    "evidence": "announced",
+    "facts": {
+     "kind": "server_hello",
+     "version": "TLS1.2",
+     "suite": "0xC013",
+     "group": "0x0017"
+    }
+   },
+   "sha256": "49be656c7fbe1d100da2d5977606ff2acbc5f5a24ba72a204f10d15bd99a7fc3"
+  },
+  {
+   "id": "tls12.dhe_cbc.1024",
+   "family": "announced",
+   "offer": {
+    "versions": [
+     "TLS1.2"
+    ],
+    "categories": [
+     "dhe_cbc"
+    ]
+   },
+   "offer_class": "legacy",
+   "reply": {
+    "messages": [
+     [
+      "server_hello",
+      {
+       "suite": "0x0033",
+       "version": "0x0303"
+      }
+     ],
+     [
+      "certificate"
+     ],
+     [
+      "dhe",
+      {
+       "bits": 1024
+      }
+     ],
+     [
+      "done"
+     ]
+    ]
+   },
+   "expected": {
+    "evidence": "announced",
+    "facts": {
+     "kind": "server_hello",
+     "version": "TLS1.2",
+     "suite": "0x0033",
+     "dh_bits": 1024
+    }
+   },
+   "note": "DHE in TLS 1.2 is a legacy offer (RFC 10015); the server chose a 1024-bit prime.",
+   "sha256": "5245ed22e2a76f19c7ae5f06c28083625263f58239667e408797c635b8c0a56e"
+  },
+  {
+   "id": "tls12.aead_pfs.fragmented",
+   "family": "announced",
+   "offer": {
+    "versions": [
+     "TLS1.2"
+    ],
+    "categories": [
+     "aead_pfs"
+    ]
+   },
+   "offer_class": "modern",
+   "reply": {
+    "messages": [
+     [
+      "server_hello",
+      {
+       "suite": "0xC02F",
+       "version": "0x0303"
+      }
+     ],
+     [
+      "certificate"
+     ],
+     [
+      "ecdhe",
+      {
+       "group": "0x0017",
+       "point": 65
+      }
+     ],
+     [
+      "done"
+     ]
+    ],
+    "split": 200
+   },
+   "expected": {
+    "evidence": "announced",
+    "facts": {
+     "kind": "server_hello",
+     "version": "TLS1.2",
+     "suite": "0xC02F",
+     "group": "0x0017"
+    }
+   },
+   "note": "The same flight cut into records of 200 bytes.",
+   "sha256": "a27cbb4501bcb75c87ffc2722b20ffa842aa3bb9489495f03b0faaccf4aaa339"
+  },
+  {
+   "id": "tls12.hello_fragmented",
+   "family": "announced",
+   "offer": {
+    "versions": [
+     "TLS1.2"
+    ],
+    "categories": [
+     "aead_pfs"
+    ]
+   },
+   "offer_class": "modern",
+   "reply": {
+    "messages": [
+     [
+      "server_hello",
+      {
+       "suite": "0xC02F",
+       "version": "0x0303"
+      }
+     ]
+    ],
+    "split": 40
+   },
+   "expected": {
+    "evidence": "announced",
+    "facts": {
+     "kind": "server_hello",
+     "version": "TLS1.2",
+     "suite": "0xC02F"
+    }
+   },
+   "note": "The ServerHello itself cut across three records.",
+   "sha256": "eddc6e1871bc1b3af9f70d96a4e4b354c9bf568b6c615b3f0aa5c740330ed562"
+  },
+  {
+   "id": "tls12.aead_pfs.slow",
+   "family": "announced",
+   "offer": {
+    "versions": [
+     "TLS1.2"
+    ],
+    "categories": [
+     "aead_pfs"
+    ]
+   },
+   "offer_class": "modern",
+   "reply": {
+    "messages": [
+     [
+      "server_hello",
+      {
+       "suite": "0xC02F",
+       "version": "0x0303"
+      }
+     ],
+     [
+      "certificate"
+     ],
+     [
+      "ecdhe",
+      {
+       "group": "0x0017",
+       "point": 65
+      }
+     ],
+     [
+      "done"
+     ]
+    ],
+    "behaviour": "reply_slowly"
+   },
+   "expected": {
+    "evidence": "announced",
+    "facts": {
+     "kind": "server_hello",
+     "version": "TLS1.2",
+     "suite": "0xC02F",
+     "group": "0x0017"
+    }
+   },
+   "note": "Sent one byte at a time.",
+   "sha256": "08d70b8f1e941337cd010d3bcb6db807dbbf710f5f42c5dc0e34b12d6f5f6f76"
+  },
+  {
+   "id": "tls12.hello_only",
+   "family": "announced",
+   "offer": {
+    "versions": [
+     "TLS1.2"
+    ],
+    "categories": [
+     "aead_pfs"
+    ]
+   },
+   "offer_class": "modern",
+   "reply": {
+    "messages": [
+     [
+      "server_hello",
+      {
+       "suite": "0xC02F",
+       "version": "0x0303"
+      }
+     ]
+    ]
+   },
+   "expected": {
+    "evidence": "announced",
+    "facts": {
+     "kind": "server_hello",
+     "version": "TLS1.2",
+     "suite": "0xC02F"
+    }
+   },
+   "note": "The ServerHello alone, in its own record: the choice is announced, nothing more.",
+   "sha256": "c340f12a07ab08aa1489cf1a8e10f0ed5355f96ff417cbafe63ffee60946bad2"
+  },
+  {
+   "id": "tls12.rsa_kex",
+   "family": "announced",
+   "offer": {
+    "versions": [
+     "TLS1.2"
+    ],
+    "categories": [
+     "rsa_kex"
+    ]
+   },
+   "offer_class": "legacy",
+   "reply": {
+    "messages": [
+     [
+      "server_hello",
+      {
+       "suite": "0x002F",
+       "version": "0x0303"
+      }
+     ],
+     [
+      "certificate"
+     ],
+     [
+      "done"
+     ]
+    ]
+   },
+   "expected": {
+    "evidence": "announced",
+    "facts": {
+     "kind": "server_hello",
+     "version": "TLS1.2",
+     "suite": "0x002F"
+    }
+   },
+   "sha256": "ec1cd6dca1def528bc1a54e555a243818be02919710fb6720ab620540fda6f75"
+  },
+  {
+   "id": "tls12.rsa_kex.gcm",
+   "family": "announced",
+   "offer": {
+    "versions": [
+     "TLS1.2"
+    ],
+    "categories": [
+     "rsa_kex"
+    ]
+   },
+   "offer_class": "legacy",
+   "reply": {
+    "messages": [
+     [
+      "server_hello",
+      {
+       "suite": "0x009C",
+       "version": "0x0303"
+      }
+     ],
+     [
+      "certificate"
+     ],
+     [
+      "done"
+     ]
+    ]
+   },
+   "expected": {
+    "evidence": "announced",
+    "facts": {
+     "kind": "server_hello",
+     "version": "TLS1.2",
+     "suite": "0x009C"
+    }
+   },
+   "sha256": "9a3debd5a1a4ab30f6edc10d3e6a243824f5259e9ef88c2d0cfe43b2922a9109"
+  },
+  {
+   "id": "tls12.3des",
+   "family": "announced",
+   "offer": {
+    "versions": [
+     "TLS1.2"
+    ],
+    "categories": [
+     "3des"
+    ]
+   },
+   "offer_class": "legacy",
+   "reply": {
+    "messages": [
+     [
+      "server_hello",
+      {
+       "suite": "0x000A",
+       "version": "0x0303"
+      }
+     ],
+     [
+      "certificate"
+     ],
+     [
+      "done"
+     ]
+    ]
+   },
+   "expected": {
+    "evidence": "announced",
+    "facts": {
+     "kind": "server_hello",
+     "version": "TLS1.2",
+     "suite": "0x000A"
+    }
+   },
+   "sha256": "2f33ee4bfc194abe96685044a152e056fa9f53c01817334289cb7270cd328db8"
+  },
+  {
+   "id": "tls12.rc4",
+   "family": "announced",
+   "offer": {
+    "versions": [
+     "TLS1.2"
+    ],
+    "categories": [
+     "rc4"
+    ]
+   },
+   "offer_class": "legacy",
+   "reply": {
+    "messages": [
+     [
+      "server_hello",
+      {
+       "suite": "0x0005",
+       "version": "0x0303"
+      }
+     ],
+     [
+      "certificate"
+     ],
+     [
+      "done"
+     ]
+    ]
+   },
+   "expected": {
+    "evidence": "announced",
+    "facts": {
+     "kind": "server_hello",
+     "version": "TLS1.2",
+     "suite": "0x0005"
+    }
+   },
+   "sha256": "171f83f3a88ebbb563447779ec2a6d21bfc9dc4dfe09ac4fd8ebb4363a2bd07b"
+  },
+  {
+   "id": "tls12.null",
+   "family": "announced",
+   "offer": {
+    "versions": [
+     "TLS1.2"
+    ],
+    "categories": [
+     "null"
+    ]
+   },
+   "offer_class": "legacy",
+   "reply": {
+    "messages": [
+     [
+      "server_hello",
+      {
+       "suite": "0x0002",
+       "version": "0x0303"
+      }
+     ],
+     [
+      "certificate"
+     ],
+     [
+      "done"
+     ]
+    ]
+   },
+   "expected": {
+    "evidence": "announced",
+    "facts": {
+     "kind": "server_hello",
+     "version": "TLS1.2",
+     "suite": "0x0002"
+    }
+   },
+   "sha256": "9a8bc7eaa9f77aea4d03b34d584265638605da04929f421d8824772d46fea07e"
+  },
+  {
+   "id": "tls12.export",
+   "family": "announced",
+   "offer": {
+    "versions": [
+     "TLS1.2"
+    ],
+    "categories": [
+     "export"
+    ]
+   },
+   "offer_class": "legacy",
+   "reply": {
+    "messages": [
+     [
+      "server_hello",
+      {
+       "suite": "0x0003",
+       "version": "0x0303"
+      }
+     ],
+     [
+      "certificate"
+     ],
+     [
+      "done"
+     ]
+    ]
+   },
+   "expected": {
+    "evidence": "announced",
+    "facts": {
+     "kind": "server_hello",
+     "version": "TLS1.2",
+     "suite": "0x0003"
+    }
+   },
+   "sha256": "28c4ec169d12e37b5c5709ebd94ee9d0637f0e409f2acbe9a8ddda612a8ca047"
+  },
+  {
+   "id": "tls12.anon_dhe",
+   "family": "announced",
+   "offer": {
+    "versions": [
+     "TLS1.2"
+    ],
+    "categories": [
+     "anon"
+    ]
+   },
+   "offer_class": "legacy",
+   "reply": {
+    "messages": [
+     [
+      "server_hello",
+      {
+       "suite": "0x0034",
+       "version": "0x0303"
+      }
+     ],
+     [
+      "dhe",
+      {
+       "bits": 1024,
+       "signed": false
+      }
+     ],
+     [
+      "done"
+     ]
+    ]
+   },
+   "expected": {
+    "evidence": "announced",
+    "facts": {
+     "kind": "server_hello",
+     "version": "TLS1.2",
+     "suite": "0x0034",
+     "dh_bits": 1024
+    }
+   },
+   "note": "Anonymous: no certificate, an unsigned key exchange.",
+   "sha256": "f1a63a1fe6d296a8aec99c5431a016e8c54d0f01d0c532f28e9d474d3c0ba31e"
+  },
+  {
+   "id": "tls12.ecdhe_p224",
+   "family": "announced",
+   "offer": {
+    "versions": [
+     "TLS1.2"
+    ],
+    "categories": [
+     "aead_pfs"
+    ],
+    "groups": [
+     "secp224r1"
+    ]
+   },
+   "offer_class": "legacy",
+   "reply": {
+    "messages": [
+     [
+      "server_hello",
+      {
+       "suite": "0xC02F",
+       "version": "0x0303"
+      }
+     ],
+     [
+      "certificate"
+     ],
+     [
+      "ecdhe",
+      {
+       "group": "0x0015",
+       "point": 57
+      }
+     ],
+     [
+      "done"
+     ]
+    ]
+   },
+   "expected": {
+    "evidence": "announced",
+    "facts": {
+     "kind": "server_hello",
+     "version": "TLS1.2",
+     "suite": "0xC02F",
+     "group": "0x0015"
+    }
+   },
+   "sha256": "f4d85d6c9efbf7cfecf6140a6e87e0f67e30849a7a6c44d8b08e52cacc863084"
+  },
+  {
+   "id": "tls11.version",
+   "family": "announced",
+   "offer": {
+    "versions": [
+     "TLS1.1"
+    ],
+    "categories": [
+     "cbc_pfs"
+    ]
+   },
+   "offer_class": "legacy",
+   "reply": {
+    "messages": [
+     [
+      "server_hello",
+      {
+       "suite": "0xC013",
+       "version": "0x0302"
+      }
+     ],
+     [
+      "certificate"
+     ],
+     [
+      "ecdhe",
+      {
+       "group": "0x0017",
+       "point": 65
+      }
+     ],
+     [
+      "done"
+     ]
+    ],
+    "record_version": "0x0302"
+   },
+   "expected": {
+    "evidence": "announced",
+    "facts": {
+     "kind": "server_hello",
+     "version": "TLS1.1",
+     "suite": "0xC013",
+     "group": "0x0017"
+    }
+   },
+   "sha256": "7499138108980e58bd00f3228f344e0ad08d81e00deeafe25527575308ea4657"
+  },
+  {
+   "id": "tls10.version",
+   "family": "announced",
+   "offer": {
+    "versions": [
+     "TLS1.0"
+    ],
+    "categories": [
+     "cbc_pfs"
+    ]
+   },
+   "offer_class": "legacy",
+   "reply": {
+    "messages": [
+     [
+      "server_hello",
+      {
+       "suite": "0xC013",
+       "version": "0x0301"
+      }
+     ],
+     [
+      "certificate"
+     ],
+     [
+      "ecdhe",
+      {
+       "group": "0x0017",
+       "point": 65
+      }
+     ],
+     [
+      "done"
+     ]
+    ],
+    "record_version": "0x0301"
+   },
+   "expected": {
+    "evidence": "announced",
+    "facts": {
+     "kind": "server_hello",
+     "version": "TLS1.0",
+     "suite": "0xC013",
+     "group": "0x0017"
+    }
+   },
+   "sha256": "10b1ce1345cd2bf233851590851ce4b17871c79fb2f675b27fb6acceee4b254c"
+  },
+  {
+   "id": "ssl3.version",
+   "family": "announced",
+   "offer": {
+    "versions": [
+     "SSLv3"
+    ],
+    "categories": [
+     "rsa_kex"
+    ]
+   },
+   "offer_class": "legacy",
+   "reply": {
+    "messages": [
+     [
+      "server_hello",
+      {
+       "suite": "0x002F",
+       "version": "0x0300"
+      }
+     ],
+     [
+      "certificate"
+     ],
+     [
+      "done"
+     ]
+    ],
+    "record_version": "0x0300"
+   },
+   "expected": {
+    "evidence": "announced",
+    "facts": {
+     "kind": "server_hello",
+     "version": "SSLv3",
+     "suite": "0x002F"
+    }
+   },
+   "sha256": "097ad43fa562e5d43684e43c5dc3e18c33b7fbd7fa3786c245d3c63186eaf31b"
+  },
+  {
+   "id": "tls13.aes128gcm",
+   "family": "announced",
+   "offer": {
+    "versions": [
+     "TLS1.3"
+    ],
+    "categories": [
+     "tls13"
+    ]
+   },
+   "offer_class": "modern",
+   "reply": {
+    "messages": [
+     [
+      "server_hello_13",
+      {
+       "suite": "0x1301",
+       "group": "0x001D"
+      }
+     ]
+    ]
+   },
+   "expected": {
+    "evidence": "announced",
+    "facts": {
+     "kind": "server_hello",
+     "version": "TLS1.3",
+     "suite": "0x1301",
+     "group": "0x001D"
+    }
+   },
+   "sha256": "076f1ce07af44e2efc1e7aadcd7d72e5c6516003aef3feb4b7b012f27e5c68cc"
+  },
+  {
+   "id": "tls13.aes256gcm",
+   "family": "announced",
+   "offer": {
+    "versions": [
+     "TLS1.3"
+    ],
+    "categories": [
+     "tls13"
+    ]
+   },
+   "offer_class": "modern",
+   "reply": {
+    "messages": [
+     [
+      "server_hello_13",
+      {
+       "suite": "0x1302",
+       "group": "0x001D"
+      }
+     ]
+    ]
+   },
+   "expected": {
+    "evidence": "announced",
+    "facts": {
+     "kind": "server_hello",
+     "version": "TLS1.3",
+     "suite": "0x1302",
+     "group": "0x001D"
+    }
+   },
+   "sha256": "8f2ebb1585659a207cab01977136015db601efbcc885382ae5e586bca87df7ad"
+  },
+  {
+   "id": "tls13.chacha20",
+   "family": "announced",
+   "offer": {
+    "versions": [
+     "TLS1.3"
+    ],
+    "categories": [
+     "tls13"
+    ]
+   },
+   "offer_class": "modern",
+   "reply": {
+    "messages": [
+     [
+      "server_hello_13",
+      {
+       "suite": "0x1303",
+       "group": "0x001D"
+      }
+     ]
+    ]
+   },
+   "expected": {
+    "evidence": "announced",
+    "facts": {
+     "kind": "server_hello",
+     "version": "TLS1.3",
+     "suite": "0x1303",
+     "group": "0x001D"
+    }
+   },
+   "sha256": "e17657ae4e9f2afcc78d24f83e4667cf4a48271d229bd50c0a0bf40819fdda4d"
+  },
+  {
+   "id": "tls13.ccm",
+   "family": "announced",
+   "offer": {
+    "versions": [
+     "TLS1.3"
+    ],
+    "categories": [
+     "tls13"
+    ]
+   },
+   "offer_class": "modern",
+   "reply": {
+    "messages": [
+     [
+      "server_hello_13",
+      {
+       "suite": "0x1304",
+       "group": "0x001D"
+      }
+     ]
+    ]
+   },
+   "expected": {
+    "evidence": "announced",
+    "facts": {
+     "kind": "server_hello",
+     "version": "TLS1.3",
+     "suite": "0x1304",
+     "group": "0x001D"
+    }
+   },
+   "sha256": "9f68f6581764f9ef6e6c9c340638924d1f9b9cd121cfe44db1fdd74ec1d662ae"
+  },
+  {
+   "id": "tls13.ccm8",
+   "family": "announced",
+   "offer": {
+    "versions": [
+     "TLS1.3"
+    ],
+    "categories": [
+     "tls13"
+    ]
+   },
+   "offer_class": "modern",
+   "reply": {
+    "messages": [
+     [
+      "server_hello_13",
+      {
+       "suite": "0x1305",
+       "group": "0x001D"
+      }
+     ]
+    ]
+   },
+   "expected": {
+    "evidence": "announced",
+    "facts": {
+     "kind": "server_hello",
+     "version": "TLS1.3",
+     "suite": "0x1305",
+     "group": "0x001D"
+    }
+   },
+   "sha256": "428c3b9e34f5a32067b4434c6aa093c8c7997e4a87c547676b8d30a666ba77c3"
+  },
+  {
+   "id": "tls13.hrr.x25519",
+   "family": "announced",
+   "offer": {
+    "versions": [
+     "TLS1.3"
+    ],
+    "categories": [
+     "tls13"
+    ]
+   },
+   "offer_class": "modern",
+   "reply": {
+    "messages": [
+     [
+      "hello_retry_request",
+      {
+       "suite": "0x1301",
+       "group": "0x001D"
+      }
+     ]
+    ]
+   },
+   "expected": {
+    "evidence": "announced",
+    "facts": {
+     "kind": "hello_retry_request",
+     "version": "TLS1.3",
+     "suite": "0x1301",
+     "group": "0x001D"
+    }
+   },
+   "note": "A ClientHello with an empty key_share: the HelloRetryRequest names the group and the suite.",
+   "sha256": "5e4d8b647be2245c7ba54113f1dd62b4ee4b4af3b3d951f87d2719243f47e4e2"
+  },
+  {
+   "id": "tls13.hrr.p256",
+   "family": "announced",
+   "offer": {
+    "versions": [
+     "TLS1.3"
+    ],
+    "categories": [
+     "tls13"
+    ]
+   },
+   "offer_class": "modern",
+   "reply": {
+    "messages": [
+     [
+      "hello_retry_request",
+      {
+       "suite": "0x1301",
+       "group": "0x0017"
+      }
+     ]
+    ]
+   },
+   "expected": {
+    "evidence": "announced",
+    "facts": {
+     "kind": "hello_retry_request",
+     "version": "TLS1.3",
+     "suite": "0x1301",
+     "group": "0x0017"
+    }
+   },
+   "note": "A ClientHello with an empty key_share: the HelloRetryRequest names the group and the suite.",
+   "sha256": "50094c1c19a3f3bb4a85cb180d1912e3a1af82c551f27900960c2804af70698a"
+  },
+  {
+   "id": "tls13.hrr.p384",
+   "family": "announced",
+   "offer": {
+    "versions": [
+     "TLS1.3"
+    ],
+    "categories": [
+     "tls13"
+    ]
+   },
+   "offer_class": "modern",
+   "reply": {
+    "messages": [
+     [
+      "hello_retry_request",
+      {
+       "suite": "0x1301",
+       "group": "0x0018"
+      }
+     ]
+    ]
+   },
+   "expected": {
+    "evidence": "announced",
+    "facts": {
+     "kind": "hello_retry_request",
+     "version": "TLS1.3",
+     "suite": "0x1301",
+     "group": "0x0018"
+    }
+   },
+   "note": "A ClientHello with an empty key_share: the HelloRetryRequest names the group and the suite.",
+   "sha256": "0aabc075906ac1c9bb96cbf5f32ee1d0cf198761f176cdba61115c2e3363495f"
+  },
+  {
+   "id": "tls13.hrr.ffdhe2048",
+   "family": "announced",
+   "offer": {
+    "versions": [
+     "TLS1.3"
+    ],
+    "categories": [
+     "tls13"
+    ]
+   },
+   "offer_class": "modern",
+   "reply": {
+    "messages": [
+     [
+      "hello_retry_request",
+      {
+       "suite": "0x1301",
+       "group": "0x0100"
+      }
+     ]
+    ]
+   },
+   "expected": {
+    "evidence": "announced",
+    "facts": {
+     "kind": "hello_retry_request",
+     "version": "TLS1.3",
+     "suite": "0x1301",
+     "group": "0x0100"
+    }
+   },
+   "note": "A ClientHello with an empty key_share: the HelloRetryRequest names the group and the suite.",
+   "sha256": "b1b055ead9908bbdd9bd971a24258a05d7c7ea0687056ec5ecedb6c5cccfcfee"
+  },
+  {
+   "id": "tls13.hrr.x25519mlkem768",
+   "family": "announced",
+   "offer": {
+    "versions": [
+     "TLS1.3"
+    ],
+    "categories": [
+     "tls13"
+    ]
+   },
+   "offer_class": "modern",
+   "reply": {
+    "messages": [
+     [
+      "hello_retry_request",
+      {
+       "suite": "0x1301",
+       "group": "0x11EC"
+      }
+     ]
+    ]
+   },
+   "expected": {
+    "evidence": "announced",
+    "facts": {
+     "kind": "hello_retry_request",
+     "version": "TLS1.3",
+     "suite": "0x1301",
+     "group": "0x11EC"
+    }
+   },
+   "note": "A ClientHello with an empty key_share: the HelloRetryRequest names the group and the suite.",
+   "sha256": "3c260e15acd214b507d55ad05a0e64517c10713b63888622eaec5f2386d98ed5"
+  },
+  {
+   "id": "alert.handshake_failure",
+   "family": "alert",
+   "offer": {
+    "versions": [
+     "TLS1.2"
+    ],
+    "categories": [
+     "aead_pfs"
+    ]
+   },
+   "offer_class": "modern",
+   "reply": {
+    "alert": "handshake_failure"
+   },
+   "expected": {
+    "evidence": "alert_refusal",
+    "facts": {
+     "kind": "alert",
+     "alert": "handshake_failure",
+     "level": 2
+    }
+   },
+   "sha256": "c29a73f289598bf8a30a3e10ccfc7b981dd824f11838b3149c9a71cffe4670bd"
+  },
+  {
+   "id": "alert.handshake_failure.legacy",
+   "family": "alert",
+   "offer": {
+    "versions": [
+     "TLS1.2"
+    ],
+    "categories": [
+     "rc4"
+    ]
+   },
+   "offer_class": "legacy",
+   "reply": {
+    "alert": "handshake_failure"
+   },
+   "expected": {
+    "evidence": "alert_refusal",
+    "facts": {
+     "kind": "alert",
+     "alert": "handshake_failure",
+     "level": 2
+    }
+   },
+   "sha256": "c29a73f289598bf8a30a3e10ccfc7b981dd824f11838b3149c9a71cffe4670bd"
+  },
+  {
+   "id": "alert.protocol_version",
+   "family": "alert",
+   "offer": {
+    "versions": [
+     "TLS1.0"
+    ],
+    "categories": [
+     "cbc_pfs"
+    ]
+   },
+   "offer_class": "legacy",
+   "reply": {
+    "alert": "protocol_version"
+   },
+   "expected": {
+    "evidence": "alert_refusal",
+    "facts": {
+     "kind": "alert",
+     "alert": "protocol_version",
+     "level": 2
+    }
+   },
+   "sha256": "92d1e67c28687211c457a5d704ea7927d2d1af99f8b5dfcb5364a272cd5b60c2"
+  },
+  {
+   "id": "alert.insufficient_security",
+   "family": "alert",
+   "offer": {
+    "versions": [
+     "TLS1.2"
+    ],
+    "categories": [
+     "cbc_pfs"
+    ]
+   },
+   "offer_class": "modern",
+   "reply": {
+    "alert": "insufficient_security"
+   },
+   "expected": {
+    "evidence": "alert_refusal",
+    "facts": {
+     "kind": "alert",
+     "alert": "insufficient_security",
+     "level": 2
+    }
+   },
+   "sha256": "eb0f31f723db2d71f025e624ef2570b0a4af98edde8986d8390f4f807759d463"
+  },
+  {
+   "id": "alert.internal_error",
+   "family": "alert",
+   "offer": {
+    "versions": [
+     "TLS1.2"
+    ],
+    "categories": [
+     "aead_pfs"
+    ]
+   },
+   "offer_class": "modern",
+   "reply": {
+    "alert": "internal_error"
+   },
+   "expected": {
+    "evidence": "inconclusive",
+    "facts": {
+     "kind": "alert",
+     "alert": "internal_error",
+     "level": 2
+    },
+    "cause": "other_alert"
+   },
+   "sha256": "bea1ef924ffeb55bbe3176a40e04f2e00c1f24e0424764cd90b7e9eb433e2e74"
+  },
+  {
+   "id": "alert.warning_close_notify",
+   "family": "alert",
+   "offer": {
+    "versions": [
+     "TLS1.2"
+    ],
+    "categories": [
+     "aead_pfs"
+    ]
+   },
+   "offer_class": "modern",
+   "reply": {
+    "alert": "close_notify",
+    "level": 1
+   },
+   "expected": {
+    "evidence": "inconclusive",
+    "facts": {
+     "kind": "alert",
+     "alert": "close_notify",
+     "level": 1
+    },
+    "cause": "other_alert"
+   },
+   "sha256": "ef9f0b0f2e4ec6ef302118382b91271ce01fad52a2fce88663dd9508844e6ce9"
+  },
+  {
+   "id": "net.close",
+   "family": "network",
+   "offer": {
+    "versions": [
+     "TLS1.2"
+    ],
+    "categories": [
+     "aead_pfs"
+    ]
+   },
+   "offer_class": "modern",
+   "reply": {
+    "behaviour": "close"
+   },
+   "expected": {
+    "evidence": "inconclusive",
+    "facts": null,
+    "cause": "closed"
+   },
+   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+   "id": "net.reset",
+   "family": "network",
+   "offer": {
+    "versions": [
+     "TLS1.2"
+    ],
+    "categories": [
+     "aead_pfs"
+    ]
+   },
+   "offer_class": "modern",
+   "reply": {
+    "behaviour": "reset"
+   },
+   "expected": {
+    "evidence": "inconclusive",
+    "facts": null,
+    "cause": "reset"
+   },
+   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+   "id": "net.silence",
+   "family": "network",
+   "offer": {
+    "versions": [
+     "TLS1.2"
+    ],
+    "categories": [
+     "aead_pfs"
+    ]
+   },
+   "offer_class": "modern",
+   "reply": {
+    "behaviour": "silence"
+   },
+   "expected": {
+    "evidence": "inconclusive",
+    "facts": null,
+    "cause": "timeout"
+   },
+   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+   "id": "proto.oversize_record",
+   "family": "protocol",
+   "offer": {
+    "versions": [
+     "TLS1.2"
+    ],
+    "categories": [
+     "aead_pfs"
+    ]
+   },
+   "offer_class": "modern",
+   "reply": {
+    "oversize": 18432
+   },
+   "expected": {
+    "evidence": "inconclusive",
+    "facts": null,
+    "cause": "malformed"
+   },
+   "sha256": "ff6ee6b221423535248a6adbb9cae2da094a56c0afba0eec9322e97e7e7de4bd"
+  },
+  {
+   "id": "proto.truncated",
+   "family": "protocol",
+   "offer": {
+    "versions": [
+     "TLS1.2"
+    ],
+    "categories": [
+     "aead_pfs"
+    ]
+   },
+   "offer_class": "modern",
+   "reply": {
+    "of": "tls12.aead_pfs.p256",
+    "keep": 30
+   },
+   "expected": {
+    "evidence": "inconclusive",
+    "facts": null,
+    "cause": "malformed"
+   },
+   "sha256": "959d1f8d278a46c1eaac14a0b19cca0b1319208ee6957f3e971c92dac6fe399b"
+  },
+  {
+   "id": "proto.length_mismatch",
+   "family": "protocol",
+   "offer": {
+    "versions": [
+     "TLS1.2"
+    ],
+    "categories": [
+     "aead_pfs"
+    ]
+   },
+   "offer_class": "modern",
+   "reply": {
+    "of": "tls12.hello_only",
+    "patch": [
+     6,
+     "0000ff"
+    ]
+   },
+   "expected": {
+    "evidence": "inconclusive",
+    "facts": null,
+    "cause": "malformed"
+   },
+   "note": "The length of the ServerHello says 255 bytes; the record holds fewer.",
+   "sha256": "9f83221246d0c3e919f5b3bee39eed1c6b04117e0e801f176674171064b66732"
+  },
+  {
+   "id": "proto.unknown_record_type",
+   "family": "protocol",
+   "offer": {
+    "versions": [
+     "TLS1.2"
+    ],
+    "categories": [
+     "aead_pfs"
+    ]
+   },
+   "offer_class": "modern",
+   "reply": {
+    "record": "0x63",
+    "hex": "0203"
+   },
+   "expected": {
+    "evidence": "inconclusive",
+    "facts": null,
+    "cause": "malformed"
+   },
+   "sha256": "61d46dff310ac1e479742fa7d0af91cb444f45ada1bb181cf31b70d7e2ff96b4"
+  },
+  {
+   "id": "proto.change_cipher_spec_first",
+   "family": "protocol",
+   "offer": {
+    "versions": [
+     "TLS1.3"
+    ],
+    "categories": [
+     "tls13"
+    ]
+   },
+   "offer_class": "modern",
+   "reply": {
+    "record": "0x14",
+    "hex": "01"
+   },
+   "expected": {
+    "evidence": "inconclusive",
+    "facts": null,
+    "cause": "malformed"
+   },
+   "sha256": "d1774c31f81e6a3d13089a34305b3663334ac79cbf358c7572a5fe5f47e36c1c"
+  },
+  {
+   "id": "proto.http_banner",
+   "family": "protocol",
+   "offer": {
+    "versions": [
+     "TLS1.2"
+    ],
+    "categories": [
+     "aead_pfs"
+    ]
+   },
+   "offer_class": "modern",
+   "reply": {
+    "ascii": "HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n"
+   },
+   "expected": {
+    "evidence": "inconclusive",
+    "facts": null,
+    "cause": "malformed"
+   },
+   "sha256": "a77baa56d6af3ab9c0645598c2d6eb5e6d80761a63b74a43f8fe116919590669"
+  },
+  {
+   "id": "proto.bad_version",
+   "family": "protocol",
+   "offer": {
+    "versions": [
+     "TLS1.2"
+    ],
+    "categories": [
+     "aead_pfs"
+    ]
+   },
+   "offer_class": "modern",
+   "reply": {
+    "of": "tls12.hello_only",
+    "patch": [
+     9,
+     "7f1c"
+    ]
+   },
+   "expected": {
+    "evidence": "inconclusive",
+    "facts": null,
+    "cause": "malformed"
+   },
+   "sha256": "cd9b311ef7086206da0cb7b0ce57ba9a432165d19942929cd2d7d6c9d9f7627c"
+  },
+  {
+   "id": "proto.compression",
+   "family": "protocol",
+   "offer": {
+    "versions": [
+     "TLS1.2"
+    ],
+    "categories": [
+     "aead_pfs"
+    ]
+   },
+   "offer_class": "modern",
+   "reply": {
+    "of": "tls12.hello_only",
+    "patch": [
+     78,
+     "01"
+    ]
+   },
+   "expected": {
+    "evidence": "inconclusive",
+    "facts": null,
+    "cause": "malformed"
+   },
+   "note": "Compression method 1: never chosen by a TLS 1.2 or 1.3 server the bench can read.",
+   "sha256": "982e300a94a6e5a0c6dda03651d440d6c10bef4d19d3a016dc66168333dd80a3"
+  },
+  {
+   "id": "proto.trailing_after_done",
+   "family": "protocol",
+   "offer": {
+    "versions": [
+     "TLS1.2"
+    ],
+    "categories": [
+     "aead_pfs"
+    ]
+   },
+   "offer_class": "modern",
+   "reply": {
+    "of": "tls12.aead_pfs.p256",
+    "append": "16030300040e000000"
+   },
+   "expected": {
+    "evidence": "inconclusive",
+    "facts": null,
+    "cause": "malformed"
+   },
+   "note": "A second record after ServerHelloDone.",
+   "sha256": "064537a03bc7c093568a65689647153ace73fc0903656daf8e36e8d650fd7ab0"
+  },
+  {
+   "id": "proto.alert_bad_level",
+   "family": "protocol",
+   "offer": {
+    "versions": [
+     "TLS1.2"
+    ],
+    "categories": [
+     "aead_pfs"
+    ]
+   },
+   "offer_class": "modern",
+   "reply": {
+    "of": "alert.handshake_failure",
+    "patch": [
+     5,
+     "07"
+    ]
+   },
+   "expected": {
+    "evidence": "inconclusive",
+    "facts": null,
+    "cause": "malformed"
+   },
+   "sha256": "f0dd28c51a219277dbf18f737870d0176f8d2b55030369db96e0bac10b899277"
+  }
+ ],
+ "fleets": [
+  {
+   "id": "fleet.same_front_different_back",
+   "note": "Two addresses of one name answer the essential offers alike (TLS 1.2 AEAD with PFS, TLS 1.3 with AES-GCM) and differ on one deeper offer (TLS 1.3 with CCM_8). A result measured on one address is never the result of the other.",
+   "addresses": {
+    "127.0.0.1": {
+     "tls12.aead": "tls12.aead_pfs.p256",
+     "tls13.gcm": "tls13.aes128gcm",
+     "tls13.ccm8": "tls13.ccm8"
+    },
+    "127.0.0.2": {
+     "tls12.aead": "tls12.aead_pfs.p256",
+     "tls13.gcm": "tls13.aes128gcm",
+     "tls13.ccm8": "alert.handshake_failure"
+    }
+   }
+  }
+ ]
+}
