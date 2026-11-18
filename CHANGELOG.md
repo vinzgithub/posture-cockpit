@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.7.0 — 2026-11-16
+## 0.7.0 — 2026-11-17 (publié sur GitHub et GHCR)
 
 - Nouveau contrôle facultatif « Chiffrement SMTP des serveurs de réception (STARTTLS) » (`mail.smtp_starttls`, poids 5, messagerie) :
   - STARTTLS et le certificat des MX sur le port 25 ;
@@ -23,7 +23,7 @@
 - Schéma SQLite 5 inchangé : aucune migration. Retour vers la 0.6.1 par changement d'image ; l'aller-retour depuis l'image officielle 0.6.1 est vérifié en CI et sur une copie de la production. Après un retour, la 0.6.1 affiche le contrôle SMTP par ses identifiants techniques et peut comparer deux analyses 0.7.0 de portées différentes (voir INSTALLATION, « Retour entre versions au schéma 5 »).
 - Notes observées des contrôles existants, scoring, événements et sécurité réseau conservés ; seuls les deux champs SMTP s'ajoutent à l'API.
 
-**Publication :** à renseigner après les opérations (PR vers `main`, tag et GitHub Release v0.7.0, workflow GHCR, digests des tags `0.7.0`, `0.7` et `latest`). Voir `docs/developer/RELEASE_V070.fr.md`.
+**Publication :** PR #44 à #53 (par `integration/v0.7.0`) et #54 fusionnées dans `main` (commit `b04b6c7c61ed86575f08d8714b44e0f6bfaf2ca9`), puis tag et GitHub Release [v0.7.0](https://github.com/vinzgithub/posture-cockpit/releases/tag/v0.7.0) le 17 novembre 2026. Le [workflow de publication GHCR #44252216523](https://github.com/vinzgithub/posture-cockpit/actions/runs/44252216523), lancé le 18 novembre 2026, a terminé ses 13 jobs avec succès. Les tags `0.7.0`, `0.7` et `latest` ont été relus dans le registre et pointent vers le digest unique `sha256:edc18c687847d2a9d1475d0f88fbfca117295eda0be7a998b0194e380982fd53`. **La publication n'entraîne aucun déploiement ni mise à jour des instances existantes.** Voir `docs/developer/RELEASE_V070.fr.md`.
 
 ## 0.6.1 — 2026-10-24 (publié sur GitHub et GHCR)
 
