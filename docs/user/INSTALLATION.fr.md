@@ -4,17 +4,17 @@
 
 ## Avec Docker (recommandé)
 
-**Nouvelle installation uniquement :** ces commandes créent une instance neuve en **v0.7.0**. Si vous avez déjà des données v0.4.1 ou antérieures, suivez la [mise à jour](#mise-à-jour), exportez une sauvegarde vérifiée hors du volume Docker et désactivez l'ordonnanceur avant la migration. La v0.7.0 conserve le schéma SQLite 5, comme les v0.5.0 à v0.6.1 ; revenir au schéma 4 nécessite une restauration.
+**Nouvelle installation uniquement :** ces commandes créent une instance neuve en **v0.7.1**. Si vous avez déjà des données v0.4.1 ou antérieures, suivez la [mise à jour](#mise-à-jour), exportez une sauvegarde vérifiée hors du volume Docker et désactivez l'ordonnanceur avant la migration. La v0.7.1 conserve le schéma SQLite 5, comme les v0.5.0 à v0.7.0 ; revenir au schéma 4 nécessite une restauration.
 
 Il faut Docker Engine et **Docker Compose 2.24 ou plus récent** (`docker compose version`). Rien à compiler, pas besoin de Git : l'image officielle est publiée sur `ghcr.io/vinzgithub/posture-cockpit`, pour les processeurs amd64 et arm64.
 
 ```bash
 mkdir posture-cockpit && cd posture-cockpit
-curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.7.0/compose.yaml
+curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.7.1/compose.yaml
 docker compose up -d
 ```
 
-Le fichier [`compose.yaml`](../../compose.yaml) désigne une version précise de l'image (`0.7.0`), jamais `latest` : une installation ne change pas de version toute seule. Il garde les protections : utilisateur sans privilèges (uid 10001), système en lecture seule, aucune capacité Linux, `no-new-privileges`, `/tmp` en mémoire. Les données vont dans le volume `posture-cockpit_posture-cockpit-data`, quel que soit le dossier d'installation.
+Le fichier [`compose.yaml`](../../compose.yaml) désigne une version précise de l'image (`0.7.1`), jamais `latest` : une installation ne change pas de version toute seule. Il garde les protections : utilisateur sans privilèges (uid 10001), système en lecture seule, aucune capacité Linux, `no-new-privileges`, `/tmp` en mémoire. Les données vont dans le volume `posture-cockpit_posture-cockpit-data`, quel que soit le dossier d'installation.
 
 ### Premier démarrage : le code d'initialisation
 
@@ -32,7 +32,7 @@ Pour une installation automatisée, `POSTURE_COCKPIT_SETUP_CODE` fixe le code (1
 ### Vérifier
 
 ```bash
-curl http://localhost:8080/healthz                       # {"status":"ok","version":"0.7.0"}
+curl http://localhost:8080/healthz                       # {"status":"ok","version":"0.7.1"}
 docker compose exec posture-cockpit posture-cockpit info  # version, schéma, comptes, analyses
 ```
 
@@ -41,7 +41,7 @@ docker compose exec posture-cockpit posture-cockpit info  # version, schéma, co
 Ne modifiez pas `compose.yaml` : une mise à jour le remplace. Les réglages vont dans un fichier `.env` facultatif, à côté de lui ; le modèle [`.env.example`](../../.env.example) les décrit tous, en commentaire :
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.7.0/.env.example -o .env
+curl -fsSL https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.7.1/.env.example -o .env
 nano .env                 # décommentez les lignes utiles
 docker compose up -d      # applique les changements
 ```
@@ -207,12 +207,14 @@ La clé de session étant restaurée, les sessions ouvertes restent valides ; le
 2. Remplacez `compose.yaml` par celui de la nouvelle version, puis redémarrez :
 
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.7.0/compose.yaml   # la version voulue
+curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.7.1/compose.yaml   # la version voulue
 docker compose up -d
 docker compose exec posture-cockpit posture-cockpit info
 ```
 
 Docker télécharge la nouvelle image et recrée le conteneur sur le même volume. Au démarrage, la base est mise à niveau automatiquement. Votre `.env` n'est pas touché ; s'il fixe `POSTURE_COCKPIT_IMAGE`, passez-le à la nouvelle version.
+
+**Passage de la 0.7.0 à la 0.7.1** : changement d'image seulement. Schéma 5 et génération 5 inchangés, aucune migration, aucun recalcul ; mêmes réglages. Les analyses restent comparables entre elles. La 0.7.1 corrige trois défauts d'affichage de la 0.7.0 et présente à part, sans les interpréter, les résultats qu'une version plus récente aurait enregistrés (voir [Retour entre versions au schéma 5](#retour-entre-versions-au-schéma-5-v050-à-v071)).
 
 **Passage de la 0.6.x à la 0.7.0** :
 
@@ -342,9 +344,13 @@ docker compose exec posture-cockpit posture-cockpit disable-totp <identifiant>  
 docker compose exec posture-cockpit posture-cockpit make-admin <identifiant>
 ```
 
-### Retour entre versions au schéma 5 (v0.5.0 à v0.7.0)
+### Retour entre versions au schéma 5 (v0.5.0 à v0.7.1)
 
 Avant tout changement d’image : sauvegarde vérifiée hors du volume, ordonnanceur désactivé, arrêt propre de l’instance. Le schéma 5 reste identique : le retour à une image officielle épinglée peut réutiliser le volume courant sans restaurer une ancienne sauvegarde. Les données créées après la mise à niveau doivent être conservées. La v0.5.0 retrouve ses anciennes projections, notamment DMARC, sans changer les notes observées. Tester ce retour sur copie isolée ; ne jamais démarrer simultanément deux instances sur le volume. Le retour au schéma 4 reste une autre procédure exigeant une restauration.
+
+**De la 0.7.1 à la 0.7.0** : remettez le `compose.yaml` de la 0.7.0 (et `POSTURE_COCKPIT_IMAGE` dans le `.env`, s'il est fixé), puis redémarrez. Les données ne changent pas : la 0.7.0 relit tout ce que la 0.7.1 a enregistré, avec les mêmes notes et les mêmes comparaisons. Elle retrouve ses trois défauts d'affichage (phrase sur le port 25 sans dialogue SMTP, « 1 adresses publiées », styles du graphique de l'historique refusés par la politique de sécurité du navigateur). L'aller-retour 0.7.0 → 0.7.1 → 0.7.0 → 0.7.1 sur le même volume est vérifié en CI depuis l'image officielle de la 0.7.0, épinglée par son digest.
+
+**Après une version plus récente** : une analyse enregistrée par une version postérieure peut contenir des résultats que la 0.7.1 ne connaît pas. Elle les présente à part (« Résultats d'une version plus récente »), par leur identifiant, leur statut enregistré et leurs valeurs relevées bornées, sans les proposer dans le plan de corrections ni dans les simulations. Un retour direct vers la 0.7.0 les afficherait par leurs identifiants techniques : revenez plutôt vers la 0.7.1.
 
 **De la 0.7.0 à la 0.6.1** : remettez le `compose.yaml` de la 0.6.1 (et `POSTURE_COCKPIT_IMAGE` dans le `.env`, s'il est fixé), puis redémarrez. Les réglages propres à la 0.7.0 (`POSTURE_COCKPIT_SMTP_PROBE`, `POSTURE_COCKPIT_SMTP_EHLO_NAME` et les trois réglages des rapports PDF) sont sans effet en 0.6.1. La 0.6.1 relit les analyses faites en 0.7.0, pages et historique compris : l'aller-retour 0.6.1 → 0.7.0 → 0.6.1 → 0.7.0 sur le même volume est vérifié en CI depuis l'image officielle de la 0.6.1, épinglée par son digest. Les analyses de la 0.7.0 gardent leur génération 5 : la 0.6.1 ne les compare pas aux siennes.
 

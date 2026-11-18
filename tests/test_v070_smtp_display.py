@@ -134,13 +134,14 @@ def test_warn_and_its_readiness(instance):
 
 
 def test_probe_off_shows_na_and_no_table(instance):
-    """F05.01, A1a, F06: the probe off: NA, readiness "cannot be confirmed" with the probe off as its cause, the
-    limit of the measure, and no table (nothing was measured)."""
+    """F05.01, A1a, F06: the probe off: NA, readiness "cannot be confirmed" with the probe off as its cause, and
+    no table (nothing was measured). Version 0.7.1, correction 1: no limit of port 25 either, since port 25 was
+    not reached (test_v071_corrections.py)."""
     page = instance(probe=False).scan(world({MX1: {V4: "tls_verified"}}))
     part = smtp_part(page)
     assert 'data-rule="F05.01"' in part and "Impossible à confirmer" in part
     assert "Sonde SMTP désactivée sur cette instance." in part and "<table" not in part
-    assert "ne prouve pas que d&#39;autres expéditeurs le joignent" in part
+    assert "ne prouve pas que d&#39;autres expéditeurs le joignent" not in part
 
 
 # ------------------------------------------------------------------ the five states of readiness (F06)
@@ -153,10 +154,11 @@ def test_probe_off_shows_na_and_no_table(instance):
     (changed(healthy(), dns={f"{DOMAIN} MX": ["0 ."]}), "not_applicable", "Sans objet")])
 def test_the_five_states_of_readiness(instance, data, state, label):
     """F06: the five states, in the words of the catalogue of PR-C, apart from the verdict; an OK never shows
-    "ready" by itself (the unconfirmed case is OK); the scope sentence is always there."""
+    "ready" by itself (the unconfirmed case is OK). The scope sentence is there when port 25 was reached, and
+    only then (version 0.7.1, correction 1): not for a domain without MX, where no dialogue took place."""
     part = smtp_part(instance().scan(data))
     assert f'smtp-ready-{state}">{label}</span>' in part
-    assert "garantie de livraison depuis Internet" in part
+    assert ("garantie de livraison depuis Internet" in part) is (state != "not_applicable")
 
 
 # ------------------------------------------------------------------ rows, causes and certificates (P1)

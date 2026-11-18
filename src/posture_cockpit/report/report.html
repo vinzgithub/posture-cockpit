@@ -133,13 +133,15 @@
       {% endfor %}
       </tbody>
     </table>
+    {# Version 0.7.1 (D7): the results of a newer version, counted and named in one line, never detailed. #}
+    {% if unknown %}<p class="annex-unknown">{{ unknown }}</p>{% endif %}
     {% if smtp and smtp.probe_enabled %}
     <!-- Version 0.7: the SMTP measure of the MX, as stored (report/smtp.py) -->
     <div class="smtp-annex">
       <h3 class="smtp-annex-title">{{ t('smtp.report_title') }}</h3>
       <p class="smtp-readiness"><strong>{{ t('smtp.readiness') }} :</strong> {{ smtp.readiness.label }}{% if smtp.readiness.causes %} — {{ smtp.readiness.causes | join(' ') }}{% endif %}</p>
       {% if smtp.readiness.policy %}<p class="smtp-small">{{ t('smtp.policy', state=smtp.readiness.policy.label) }}{% if smtp.readiness.policy.uncovered %} — {{ t('smtp.uncovered', hosts=smtp.readiness.policy.uncovered) }}{% endif %}</p>{% endif %}
-      <p class="smtp-small">{{ smtp.readiness.scope }}</p>
+      {% if smtp.readiness.scope %}<p class="smtp-small smtp-scope">{{ smtp.readiness.scope }}</p>{% endif %}
       {% if smtp.rows %}
       <table class="smtp-rows">
         <thead><tr><th>{{ t('smtp.col.mx') }}</th><th>{{ t('smtp.col.address') }}</th><th>{{ t('smtp.col.stage') }}</th><th>{{ t('smtp.col.certificate') }}</th><th>{{ t('smtp.col.result') }}</th></tr></thead>

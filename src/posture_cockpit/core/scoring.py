@@ -403,11 +403,14 @@ def _assessment(findings: list[Finding], unknown: bool) -> Assessment:
 
 
 def simulate(current: Sequence[Finding], selected_check_ids: Sequence[str],
-             registry: VerdictRegistry) -> Simulation:
+             registry: VerdictRegistry, *, frozen: frozenset[str] = frozenset()) -> Simulation:
     """Pure combined scenario. IDs are validated before any projection is constructed.
 
     Worst/best describe conclusive measurements of newly unblocked dependents only.
     An unknown remedy effect withholds both estimates; observations remain untouched.
+
+    Version 0.7.1 (D7): the findings in ``frozen`` (results this version cannot explain, unknown.py) are
+    held as recorded: never a candidate, never hypothesized, part of every scenario as they are.
     """
     selected = tuple(selected_check_ids)
     if (len(selected) > 20 or any(not isinstance(check_id, str) for check_id in selected)
@@ -418,7 +421,8 @@ def simulate(current: Sequence[Finding], selected_check_ids: Sequence[str],
         raise ValueError("duplicate observation ids")
     for check_id in selected:
         f = by_id.get(check_id)
-        if f is None or f.status not in (Status.FAIL, Status.WARN) or f.outcome.remedy is None:
+        if (f is None or f.status not in (Status.FAIL, Status.WARN) or f.outcome.remedy is None
+                or check_id in frozen):
             raise ValueError("invalid simulation candidate")
     expected = {check_id: expected_status(by_id[check_id]) for check_id in selected}
     assumptions = [Assumption(check_id, "remedy" if status is not None else "unknown_effect", status)
@@ -432,7 +436,7 @@ def simulate(current: Sequence[Finding], selected_check_ids: Sequence[str],
             assert status is not None
             low.append(_hypothesis(f, status))
             high.append(_hypothesis(f, status))
-        elif unblocks and _unmeasured(f):
+        elif unblocks and _unmeasured(f) and f.check_id not in frozen:
             check = registry.get(f.check_id)
             verdicts = check.verdicts if check is not None else None
             if not verdicts or any(v not in CREDIT for v in verdicts):
@@ -509,18 +513,19 @@ def _delta(before: Assessment, after: Assessment) -> int | None:
 
 
 def _ranked(findings: Sequence[Finding], status: Status, selected: list[str],
-            registry: VerdictRegistry) -> list[PlanItem]:
+            registry: VerdictRegistry, frozen: frozenset[str]) -> list[PlanItem]:
     """Keep the existing per-domain priority order; assess each combined scenario."""
-    candidates = [f for f in findings if f.status is status and f.outcome.remedy is not None]
+    candidates = [f for f in findings if f.status is status and f.outcome.remedy is not None
+                  and f.check_id not in frozen]
     candidates.sort(key=lambda f: (-f.weight * (1 - CREDIT[status]), f.outcome.remedy.minutes, f.check_id))  # type: ignore[union-attr]
     items = []
-    before = simulate(findings, selected, registry)
+    before = simulate(findings, selected, registry, frozen=frozen)
     for f in candidates:
         if expected_status(f) is None:
             items.append(PlanItem(f, None))
             continue
         selected.append(f.check_id)
-        after = simulate(findings, selected, registry)
+        after = simulate(findings, selected, registry, frozen=frozen)
         worst_delta = _delta(before.worst, after.worst)
         best_delta = _delta(before.best, after.best)
         # Rounding and caps can give the optimistic curve a smaller incremental
@@ -534,12 +539,15 @@ def _ranked(findings: Sequence[Finding], status: Status, selected: list[str],
     return items
 
 
-def plan(findings: Sequence[Finding], registry: VerdictRegistry | None = None) -> Plan:
+def plan(findings: Sequence[Finding], registry: VerdictRegistry | None = None, *,
+         frozen: frozenset[str] = frozenset()) -> Plan:
+    """The plan of fixes. ``frozen`` (version 0.7.1, D7): results this version cannot explain, never
+    proposed and held as recorded in every projection (see :func:`simulate`)."""
     registry = registry if registry is not None else _builtin_registry()
     selected: list[str] = []
-    priorities = _ranked(findings, Status.FAIL, selected, registry)
-    target = simulate(findings, [item.finding.check_id for item in priorities], registry)
-    improvements = _ranked(findings, Status.WARN, selected, registry)
+    priorities = _ranked(findings, Status.FAIL, selected, registry, frozen)
+    target = simulate(findings, [item.finding.check_id for item in priorities], registry, frozen=frozen)
+    improvements = _ranked(findings, Status.WARN, selected, registry, frozen)
     return Plan(priorities, improvements, target.now, target.worst,
                 target.best if target.conditional or target.best != target.worst else None)
 

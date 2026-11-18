@@ -11,6 +11,7 @@ from ..core.model import CAUSE_DEPENDENCY, HTTPS_FAMILY, Role, Status
 from ..core.remediation import expected_status
 from ..i18n import Catalog
 from ..storage import Row, Scan
+from ..unknown import known
 from .views import plan_view
 
 
@@ -29,9 +30,10 @@ def context(catalog: Catalog, lang: str, domain: Row, scan: Scan, states: list[S
     previous = states[1] if len(states) > 1 else None
     changes = check_changes(previous, current)
     order = {"regressed": 0, "new_issue": 0, "unmeasured": 1, "improved": 2, "not_applicable": 3}
+    # Version 0.7.1 (D7): a result this version cannot explain is no transition here (unknown.py).
     transitions = [Transition(change, previous, current, last_conclusive(states, change.check_id))
                    for change in sorted(changes.changes, key=lambda c: (order.get(c.kind, 4), c.check_id))
-                   if previous is not None]
+                   if previous is not None and known(catalog, change.check_id)]
     findings = scan.current()
     view = plan_view(catalog, lang, scan, domain, registry)
     candidates = []
@@ -41,6 +43,7 @@ def context(catalog: Catalog, lang: str, domain: Row, scan: Scan, states: list[S
         candidates.append({"task": task, "observed": finding.status,
                            "expected": expected_status(finding)})
     dependencies = [f for f in findings if f.family == HTTPS_FAMILY and f.role is Role.DEPENDENT
+                    and known(catalog, f.check_id)
                     and (f.status is Status.BLOCKED
                          or (f.status is Status.ERROR and f.outcome.evidence.get("cause") == CAUSE_DEPENDENCY))]
     # Version 0.7 (PR-D, P3): a comparison refused because a scope is unknown (an error of the engine on the

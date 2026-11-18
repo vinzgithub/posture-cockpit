@@ -24,7 +24,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from starlette.datastructures import FormData
 from starlette.exceptions import HTTPException
 
-from .. import __version__
+from .. import __version__, unknown
 from ..i18n import LOCALES, fmt_date, pick_locale
 from ..report.smtp import view as smtp_view
 from ..security import csrf_token, csrf_valid
@@ -263,6 +263,8 @@ def render(request: Request, template: str, status: int = 200, **context: Any) -
         "t": text,
         # Version 0.7 (PR-D): the stored evidence of mail.smtp_starttls, ready to show (report/smtp.py).
         "smtp_view": lambda finding: smtp_view(finding.outcome.evidence, text),
+        # Version 0.7.1 (D7): the title of a check, or a generic one for a result of a newer version.
+        "check_title": lambda check_id: unknown.title(catalog, lang, check_id),
         "date": day,
         "local_time": hour,
         "path": request.url.path,

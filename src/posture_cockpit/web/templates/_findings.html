@@ -3,7 +3,9 @@
    Needs: scan, categories, rechecks, summary (the wording of a finding). The evidence of mail.smtp_starttls
    stored before it was bounded (correction 2 of 0.7.0) and beyond its limit is shown bounded (storage/scans.py),
    never whole: its original, unchanged, is a link away (routes/domains.py, evidence). So is the evidence of
-   mail.mx and mail.mta_sts stored before correction 4 with lists beyond their bounds (mail_evidence.py). #}
+   mail.mx and mail.mta_sts stored before correction 4 with lists beyond their bounds (mail_evidence.py).
+   Version 0.7.1 (D7): ``categories`` holds the findings this version can explain; ``unknown`` (unknown.py) the
+   results of a newer version, shown apart after them (_unknown.html). #}
 {% from "_macros.html" import status_icon %}
 {% for category, findings in categories.items() %}
 <section class="panel details" aria-labelledby="cat-{{ category }}">
@@ -13,7 +15,7 @@
     <li class="check status-{{ f.status.value }}" id="{{ f.check_id }}">
       {{ status_icon(f.status.value) }}
       <div class="check-body">
-        <p class="check-title"><strong>{{ t(f.check_id ~ '.title') }}</strong>
+        <p class="check-title"><strong>{{ check_title(f.check_id) }}</strong>
           <span class="badge badge-{{ f.status.value }}">{{ t('status.' ~ f.status.value) }}</span>
           {% if f.check_id in rechecks %}<span class="muted small">{{ t('details.rechecked', date=date(rechecks[f.check_id].checked_at)) }}</span>{% endif %}
         </p>
@@ -37,3 +39,4 @@
   </ul>
 </section>
 {% endfor %}
+{% if unknown %}{% include "_unknown.html" %}{% endif %}

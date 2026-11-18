@@ -817,7 +817,7 @@
   "smtp.cert.names": "Names: {names}",
   "smtp.cert.issuer": "Issuer: {issuer}",
   "smtp.cert.until": "Valid until {date}",
-  "smtp.limits": "Limits of the measure: {mx} MX, {addresses} published addresses, {sockets} connections opened, {dialogues} SMTP dialogues, {spent} attempts of the {budget} allowed, deadline of {seconds} s.",
+  "smtp.limits": "Limits of the measure: {mx} MX, {addresses:published address|published addresses}, {sockets:connection opened|connections opened}, {dialogues:SMTP dialogue|SMTP dialogues}, {spent:attempt|attempts} of the {budget} allowed, deadline of {seconds} s.",
   "smtp.limits_reached": "The deadline was reached: the completed observations are kept.",
   "smtp.report_title": "Mail: STARTTLS of the receiving servers",
   "mc.reason.scope_unknown": "The result of the SMTP check of one of the scans is unknown (engine error): the comparison is not possible. It proves neither a regression nor a resolution of the domain; open events stay open.",
@@ -855,5 +855,17 @@
   "smtp.stage.essentials": "only the facts that decided are kept for each address",
   "smtp.stage.core": "only the verdict, its causes, the counts and the MX named are kept",
   "smtp.over_limit": "Even so, it exceeds this limit: it is kept whole rather than lose the verdict or its counts.",
-  "smtp.display_bounded": "Evidence stored before the evidence was bounded ({kib} KiB): it is shown here bounded to {limit} KiB, and kept unchanged."
+  "smtp.display_bounded": "Evidence stored before the evidence was bounded ({kib} KiB): it is shown here bounded to {limit} KiB, and kept unchanged.",
+  "unknown.heading": "Results from a newer version",
+  "unknown.intro": "This scan was recorded by Posture Cockpit {version}. This version ({current}) cannot explain the results below: they are shown as recorded, without interpretation, and are proposed neither in the plan of fixes nor in the simulations. Update Posture Cockpit to see their details.",
+  "unknown.title": "Result this version does not recognise",
+  "unknown.weighted": "Counted in the score and the coverage with the weight the newer version gave it ({weight}).",
+  "unknown.unweighted": "No effect on the score or the coverage.",
+  "unknown.in_category": "Category: {category}.",
+  "unknown.evidence_cut": "Values shown cut to {shown} KiB of {kib} KiB.",
+  "unknown.more": "{n:other unrecognised result is|other unrecognised results are} not shown.",
+  "unknown.check": "Unrecognised check ({id})",
+  "unknown.category": "Other category ({name})",
+  "unknown.report": "{n:result recorded by a newer version of Posture Cockpit is|results recorded by a newer version of Posture Cockpit are} not detailed in this report: {ids}.",
+  "unknown.more_ids": "and {n:other|others}"
 }

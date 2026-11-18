@@ -1,0 +1,33 @@
+{# Copyright © 2026 Vincent Fournet · SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 -#}
+{# Version 0.7.1 (D7): the results of a scan this version cannot explain (recorded by a newer version), shown
+   apart and as recorded: identifier, stored status and weight, the version that recorded the scan, the raw
+   evidence. ``unknown`` is unknown.py's view: every string is bounded there and escaped here, nothing is marked
+   safe and nothing is worded from a key the catalogue does not hold. They take no part in the plan, the
+   simulations, the checks not evaluated or the transitions. #}
+{% from "_macros.html" import status_icon %}
+<section class="panel details unknown-results" aria-labelledby="unknown-results">
+  <h2 id="unknown-results">{{ t('unknown.heading') }}</h2>
+  <p>{{ t('unknown.intro', version=unknown.version, current=unknown.current) }}</p>
+  <ul class="checks">
+    {% for item in unknown.results %}
+    <li class="check status-{{ item.status }}">
+      {{ status_icon(item.status) }}
+      <div class="check-body">
+        <p class="check-title"><strong>{{ t('unknown.title') }}</strong>
+          <span class="badge badge-{{ item.status }}">{{ item.status_label }}</span></p>
+        <p>{{ t('unknown.weighted', weight=item.weight) if item.weighted else t('unknown.unweighted') }}
+          <span class="muted small">{{ t('unknown.in_category', category=item.category) }}</span></p>
+        {% if item.evidence %}
+        <details>
+          <summary>{{ t('details.evidence') }}</summary>
+          {% if item.cut %}<p class="small muted">{{ t('unknown.evidence_cut', shown=item.shown_kib, kib=item.kib) }}</p>{% endif %}
+          <pre class="evidence">{{ item.evidence }}</pre>
+        </details>
+        {% endif %}
+      </div>
+      <code class="check-id muted small">{{ item.id }}</code>
+    </li>
+    {% endfor %}
+  </ul>
+  {% if unknown.more %}<p class="small muted">{{ t('unknown.more', n=unknown.more) }}</p>{% endif %}
+</section>

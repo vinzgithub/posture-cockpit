@@ -817,7 +817,7 @@
   "smtp.cert.names": "Noms : {names}",
   "smtp.cert.issuer": "Émetteur : {issuer}",
   "smtp.cert.until": "Valide jusqu'au {date}",
-  "smtp.limits": "Limites de la mesure : {mx} MX, {addresses} adresses publiées, {sockets} connexions ouvertes, {dialogues} dialogues SMTP, {spent} tentatives sur les {budget} permises, échéance de {seconds} s.",
+  "smtp.limits": "Limites de la mesure : {mx} MX, {addresses:adresse publiée|adresses publiées}, {sockets:connexion ouverte|connexions ouvertes}, {dialogues:dialogue SMTP|dialogues SMTP}, {spent:tentative|tentatives} sur les {budget} permises, échéance de {seconds} s.",
   "smtp.limits_reached": "L'échéance a été atteinte : les observations achevées sont conservées.",
   "smtp.report_title": "Messagerie : STARTTLS des serveurs de réception",
   "mc.reason.scope_unknown": "Le résultat du contrôle SMTP de l'une des analyses est inconnu (erreur du moteur) : la comparaison est impossible. Ce n'est la preuve ni d'une régression ni d'une résolution du domaine ; les événements ouverts restent ouverts.",
@@ -855,5 +855,17 @@
   "smtp.stage.essentials": "seuls les faits déterminants de chaque adresse sont conservés",
   "smtp.stage.core": "seuls le verdict, ses causes, les compteurs et le MX cité sont conservés",
   "smtp.over_limit": "Même ainsi, elle dépasse cette limite : elle est conservée entière plutôt que de perdre le verdict ou ses compteurs.",
-  "smtp.display_bounded": "Preuve enregistrée avant le bornage des preuves ({kib} Kio) : elle est présentée ici bornée à {limit} Kio, et conservée sans modification."
+  "smtp.display_bounded": "Preuve enregistrée avant le bornage des preuves ({kib} Kio) : elle est présentée ici bornée à {limit} Kio, et conservée sans modification.",
+  "unknown.heading": "Résultats d'une version plus récente",
+  "unknown.intro": "Cette analyse a été enregistrée par Posture Cockpit {version}. Cette version ({current}) ne sait pas expliquer les résultats ci-dessous : ils sont présentés tels qu'enregistrés, sans interprétation, et ne sont proposés ni dans le plan de corrections, ni dans les simulations. Mettez Posture Cockpit à jour pour en voir le détail.",
+  "unknown.title": "Résultat non reconnu par cette version",
+  "unknown.weighted": "Pris en compte dans la note et la couverture avec le poids que lui a donné la version plus récente ({weight}).",
+  "unknown.unweighted": "Sans effet sur la note et la couverture.",
+  "unknown.in_category": "Catégorie : {category}.",
+  "unknown.evidence_cut": "Valeurs affichées tronquées à {shown} Kio sur {kib} Kio.",
+  "unknown.more": "{n:autre résultat non reconnu n'est pas affiché|autres résultats non reconnus ne sont pas affichés}.",
+  "unknown.check": "Contrôle non reconnu ({id})",
+  "unknown.category": "Autre catégorie ({name})",
+  "unknown.report": "{n:résultat enregistré par une version plus récente de Posture Cockpit n'est pas détaillé|résultats enregistrés par une version plus récente de Posture Cockpit ne sont pas détaillés} dans ce rapport : {ids}.",
+  "unknown.more_ids": "et {n:autre|autres}"
 }

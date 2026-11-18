@@ -4,17 +4,17 @@
 
 ## With Docker (recommended)
 
-**Fresh installations only:** these commands create a new **v0.7.0** instance. If you already have data from v0.4.1 or earlier, follow [Updating](#updating), make a verified backup outside the Docker volume and disable the scheduler before upgrading. v0.7.0 keeps SQLite schema 5, like v0.5.0 to v0.6.1; changing the image alone does not downgrade a database.
+**Fresh installations only:** these commands create a new **v0.7.1** instance. If you already have data from v0.4.1 or earlier, follow [Updating](#updating), make a verified backup outside the Docker volume and disable the scheduler before upgrading. v0.7.1 keeps SQLite schema 5, like v0.5.0 to v0.7.0; changing the image alone does not downgrade a database.
 
 You need Docker Engine and **Docker Compose 2.24 or later** (`docker compose version`). Nothing to build, no Git: the official image is published on `ghcr.io/vinzgithub/posture-cockpit`, for amd64 and arm64 processors.
 
 ```bash
 mkdir posture-cockpit && cd posture-cockpit
-curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.7.0/compose.yaml
+curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.7.1/compose.yaml
 docker compose up -d
 ```
 
-The [`compose.yaml`](../../compose.yaml) file names an exact version of the image (`0.7.0`), never `latest`: an installation never changes version on its own. It keeps the protections: unprivileged user (uid 10001), read-only system, no Linux capability, `no-new-privileges`, `/tmp` in memory. The data goes to the volume `posture-cockpit_posture-cockpit-data`, whatever the installation folder.
+The [`compose.yaml`](../../compose.yaml) file names an exact version of the image (`0.7.1`), never `latest`: an installation never changes version on its own. It keeps the protections: unprivileged user (uid 10001), read-only system, no Linux capability, `no-new-privileges`, `/tmp` in memory. The data goes to the volume `posture-cockpit_posture-cockpit-data`, whatever the installation folder.
 
 ### First start: the setup code
 
@@ -32,7 +32,7 @@ For an automated installation, `POSTURE_COCKPIT_SETUP_CODE` sets the code (at le
 ### Check
 
 ```bash
-curl http://localhost:8080/healthz                       # {"status":"ok","version":"0.7.0"}
+curl http://localhost:8080/healthz                       # {"status":"ok","version":"0.7.1"}
 docker compose exec posture-cockpit posture-cockpit info  # version, schema, accounts, scans
 ```
 
@@ -41,7 +41,7 @@ docker compose exec posture-cockpit posture-cockpit info  # version, schema, acc
 Do not edit `compose.yaml`: an update replaces it. Settings go in an optional `.env` file next to it; the [`.env.example`](../../.env.example) template describes them all, commented out:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.7.0/.env.example -o .env
+curl -fsSL https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.7.1/.env.example -o .env
 nano .env                 # uncomment the lines you need
 docker compose up -d      # applies the changes
 ```
@@ -207,12 +207,14 @@ As the session key is restored, open sessions stay valid; accounts, two-factor a
 2. Replace `compose.yaml` with the one of the new version, then restart:
 
 ```bash
-curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.7.0/compose.yaml   # the version you want
+curl -fsSLO https://raw.githubusercontent.com/vinzgithub/posture-cockpit/v0.7.1/compose.yaml   # the version you want
 docker compose up -d
 docker compose exec posture-cockpit posture-cockpit info
 ```
 
 Docker downloads the new image and recreates the container on the same volume. At start, the database is upgraded automatically. Your `.env` is left as it is; if it sets `POSTURE_COCKPIT_IMAGE`, change it to the new version.
+
+**From 0.7.0 to 0.7.1**: a change of image only. Schema 5 and generation 5 unchanged, no migration, no recalculation; same settings. Scans stay comparable with each other. 0.7.1 corrects three display defects of 0.7.0 and shows apart, without interpreting them, the results a newer version may have recorded (see [Returning between schema-5 versions](#returning-between-schema-5-versions-v050-to-v071)).
 
 **From 0.6.x to 0.7.0**:
 
@@ -342,9 +344,13 @@ docker compose exec posture-cockpit posture-cockpit disable-totp <username>   # 
 docker compose exec posture-cockpit posture-cockpit make-admin <username>
 ```
 
-### Returning between schema-5 versions (v0.5.0 to v0.7.0)
+### Returning between schema-5 versions (v0.5.0 to v0.7.1)
 
 Before changing images: verify a backup outside the volume, disable scheduling and stop the instance cleanly. Schema 5 is unchanged: a pinned official older image can reuse the current volume without restoring an earlier backup. Data created after the upgrade must remain available. v0.5.0 shows its older projections, including DMARC, while observed scores remain unchanged. Test on an isolated copy; never run two instances concurrently on that volume. Returning to schema 4 still requires a separate restore procedure.
+
+**From 0.7.1 to 0.7.0**: put back the `compose.yaml` of 0.7.0 (and `POSTURE_COCKPIT_IMAGE` in the `.env`, if it is set), then restart. The data does not change: 0.7.0 reads everything 0.7.1 recorded, with the same scores and the same comparisons. It shows its three display defects again (the sentence on port 25 without any SMTP dialogue, "1 published addresses", the styles of the history chart refused by the browser's security policy). The round trip 0.7.0 → 0.7.1 → 0.7.0 → 0.7.1 on the same volume is checked in CI from the official image of 0.7.0, pinned by its digest.
+
+**After a newer version**: a scan recorded by a later version may hold results 0.7.1 does not know. It shows them apart ("Results from a newer version"), by their identifier, their stored status and their bounded recorded values, without proposing them in the plan of fixes or in the simulations. A direct return to 0.7.0 would show them by their technical identifiers: return to 0.7.1 instead.
 
 **From 0.7.0 to 0.6.1**: put back the `compose.yaml` of 0.6.1 (and `POSTURE_COCKPIT_IMAGE` in the `.env`, if it is set), then restart. The settings of 0.7.0 (`POSTURE_COCKPIT_SMTP_PROBE`, `POSTURE_COCKPIT_SMTP_EHLO_NAME` and the three settings of PDF reports) have no effect in 0.6.1. 0.6.1 reads the scans made with 0.7.0, pages and history included: the round trip 0.6.1 → 0.7.0 → 0.6.1 → 0.7.0 on the same volume is checked in CI from the official image of 0.6.1, pinned by its digest. The scans of 0.7.0 keep their generation 5: 0.6.1 does not compare them with its own.
 

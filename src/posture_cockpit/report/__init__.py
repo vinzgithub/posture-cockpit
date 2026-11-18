@@ -37,6 +37,8 @@ from ..core.model import Effort, Finding, Status
 from ..i18n import Catalog, finding_summary, finding_verdict, fmt_date
 from ..storage import Scan
 from ..timezones import UTC, local, offset_label
+from ..unknown import category as category_label
+from ..unknown import known_only, report_line, unknown_ids
 from .smtp import view as smtp_view
 
 REPORT_DIR = Path(__file__).parent
@@ -74,7 +76,11 @@ def report_context(catalog: Catalog, lang: str, scan: Scan, author: str = "", tz
                    historical: bool = False, now: datetime | None = None) -> dict[str, Any]:
     """Everything the report template shows, already worded. ``now``: when the PDF is made (tests)."""
     findings = scan.current()
-    plan = scoring.plan(findings)
+    # Version 0.7.1 (D7): the results of a newer version are never proposed nor named here (unknown.py): one
+    # line of the annex says how many there are. The score, the coverage and the counts stay those of 0.7.0.
+    frozen = unknown_ids(catalog, scan.findings) | unknown_ids(catalog, findings)
+    named = known_only(catalog, findings)
+    plan = scoring.plan(findings, frozen=frozen)
     result = scan.assessment()
     counts = scoring.counts(findings)
 
@@ -127,7 +133,7 @@ def report_context(catalog: Catalog, lang: str, scan: Scan, author: str = "", tz
 
     categories = []
     for category, assessment in scoring.by_category(findings).items():
-        items = [f for f in findings if f.category == category and f.status.scored]
+        items = [f for f in named if f.category == category and f.status.scored]
         worst = next((f for status in (Status.FAIL, Status.WARN) for f in items if f.status is status), None)
         if assessment.score is None:
             # The category may have reliable FAIL/WARN findings despite insufficient coverage.
@@ -139,7 +145,7 @@ def report_context(catalog: Catalog, lang: str, scan: Scan, author: str = "", tz
             comment = finding_verdict(catalog, lang, worst, scan.domain)
         else:
             comment = t("report.all_ok")
-        categories.append({"label": t(f"category.{category}"), "score": assessment.score,
+        categories.append({"label": category_label(catalog, lang, category), "score": assessment.score,
                            "partial": assessment.partial, "comment": comment})
 
     # What could not be measured, by cause. Checks with the same reason share one line (the ten
@@ -154,7 +160,7 @@ def report_context(catalog: Catalog, lang: str, scan: Scan, author: str = "", tz
 
     gaps = [{"cause": f.outcome.evidence.get("cause", "dependency" if f.status is Status.BLOCKED else "network"),
              "title": t(f"{f.check_id}.title"), "reason": gap_reason(f)}
-            for f in findings if f.status in {Status.ERROR, Status.BLOCKED}]
+            for f in named if f.status in {Status.ERROR, Status.BLOCKED}]
 
     root = next((f for f in findings if f.check_id == "web.https_redirect"), None)
     if root is not None:
@@ -165,7 +171,7 @@ def report_context(catalog: Catalog, lang: str, scan: Scan, author: str = "", tz
                     gaps.append({"cause": cause, "title": f"{host} ({address})", "reason": ""})
 
     annex = []
-    for f in findings:
+    for f in named:
         annex.append({
             "id": f.check_id, "status": f.status.value, "status_label": t(f"status.{f.status.value}"),
             "title": t(f"{f.check_id}.title"),
@@ -194,7 +200,8 @@ def report_context(catalog: Catalog, lang: str, scan: Scan, author: str = "", tz
         "perimeter": scan.perimeter,
         "diagnosis": diagnosis, "conclusion": conclusion, "prescriptions": prescriptions,
         "improvements": improvements, "categories": categories, "annex": annex, "gaps": gaps, "smtp": smtp,
-        "checks_count": len(findings), "addresses": scan.addresses(), "plan": plan,
+        "checks_count": len(named), "unknown": report_line(catalog, lang, findings),
+        "addresses": scan.addresses(), "plan": plan,
         "gap_groups": {cause: _same_reason([g for g in gaps if g["cause"] == cause])
                        for cause in ("network", "dependency", "tool", "policy", "budget")},
     }

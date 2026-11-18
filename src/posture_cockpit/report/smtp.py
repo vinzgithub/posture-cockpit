@@ -8,16 +8,16 @@ shown as stored, in the words of the catalogues, whatever the configuration is n
 an engine error (no structured evidence) or a scan made before 0.7 give no view (:func:`view`
 returns None) and the page shows what it shows for any check.
 
-The view reads, in order (progressive reading): the readiness for enforce, apart from the verdict,
-with its causes and its limit (measured from this instance, no guarantee of delivery from the
-Internet); one row per MX and address (name, preference, address and family, the stages the dialogue
-reached with their reply codes, TLS, the certificate: verified, refused, or read without
-verification for the diagnosis, and the result or the exact cause of a measure not made: per address
-from the probe, per MX from ``silent_mx``, never the global cause of F05.08 on every server); the
-limits of the measure (addresses, connections, budget, deadline), and how many MX the evidence left out
-(``mx_omitted``: invalid names or beyond the sample, never contacted; every MX measured is kept). The
-notes of the evidence are not repeated: the text of every finding already ends with them
-(i18n.finding_summary).
+The view reads, in order (progressive reading): the readiness for enforce, apart from the verdict, with
+its causes and its limit (measured from this instance, no guarantee of delivery from the Internet; said
+only when an SMTP dialogue took place, version 0.7.1); one row per MX and address (name, preference,
+address and family, the stages the dialogue reached with their reply codes, TLS, the certificate:
+verified, refused, or read without verification for the diagnosis, and the result or the exact cause of
+a measure not made: per address from the probe, per MX from ``silent_mx``, never the global cause of
+F05.08 on every server); the limits of the measure (addresses, connections, budget, deadline), and how
+many MX the evidence left out (``mx_omitted``: invalid names or beyond the sample, never contacted;
+every MX measured is kept). The notes of the evidence are not repeated: the text of every finding
+already ends with them (i18n.finding_summary).
 
 The evidence is bounded when it is stored (checks/smtp_evidence.py, correction 2 of 0.7.0): what it left
 out is said where it was, from its exact counts, never shown as measured: a row per MX for the addresses
@@ -91,7 +91,7 @@ def view(evidence: Mapping[str, Any] | None, t: Text) -> dict[str, Any] | None:
         return None
     found = evidence.get("bounds")
     bounds: Mapping[str, Any] = found if isinstance(found, Mapping) else {}
-    return {"rule": evidence["rule"], "readiness": _readiness(evidence["readiness"], t),
+    return {"rule": evidence["rule"], "readiness": _readiness(evidence["readiness"], t, _dialogues(evidence) > 0),
             "rows": [row for mx in evidence.get("mx", []) for row in _rows(mx, evidence, t)],
             "limits": _limits(evidence, t), "omitted": int(evidence.get("mx_omitted") or 0),
             "core": bounds.get("stage") == "core", "counts": _counts(evidence, t),
@@ -128,7 +128,17 @@ def _display(bounds: Mapping[str, Any], t: Text) -> str:
     return t("smtp.display_bounded", kib=_kib(bounds.get("original_bytes")), limit=_kib(bounds.get("limit_bytes")))
 
 
-def _readiness(readiness: Mapping[str, Any], t: Text) -> dict[str, Any]:
+def _dialogues(evidence: Mapping[str, Any]) -> int:
+    """The SMTP dialogues the measure held (``exhaustivity.dialogues``); 0 when the evidence does not say."""
+    counts = evidence.get("exhaustivity")
+    value = counts.get("dialogues") if isinstance(counts, Mapping) else None
+    return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+
+def _readiness(readiness: Mapping[str, Any], t: Text, reached: bool) -> dict[str, Any]:
+    """The readiness for enforce. Its limit (port 25 reached from this instance is no guarantee of delivery
+    from the Internet) is said only when port 25 was reached, i.e. when at least one SMTP dialogue took place
+    (version 0.7.1, correction 1): never with the probe off, nor when no address could be reached."""
     state = readiness.get("state", "unconfirmed")
     policy = readiness.get("policy")
     shown = None
@@ -138,7 +148,7 @@ def _readiness(readiness: Mapping[str, Any], t: Text) -> dict[str, Any]:
                  "uncovered": _names(policy.get("uncovered", []), t, omitted=policy.get("uncovered_omitted"))}
     return {"state": state, "label": t(f"{KEY}.readiness.{state}"), "badge": READINESS_BADGES.get(state, "na"),
             "causes": [t(f"{KEY}.readiness.cause.{c}") for c in readiness.get("causes", [])],
-            "policy": shown, "scope": t(f"{KEY}.readiness.scope")}
+            "policy": shown, "scope": t(f"{KEY}.readiness.scope") if reached else ""}
 
 
 def _listed_cause(mx: Mapping[str, Any], evidence: Mapping[str, Any]) -> str:
