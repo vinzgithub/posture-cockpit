@@ -31,6 +31,8 @@ from ...i18n import finding_summary
 from ...scanner import DEMO_DOMAIN, InternalScansDisabled
 from ...storage import CorruptScan, Row, Scan
 from ...storage.schedules import Schedule
+from ...unknown import known
+from ...unknown import view as unknown_view
 from ..deps import (
     audit,
     checked_form,
@@ -211,7 +213,8 @@ def details_page(request: Request, domain: Row, user: Row, status: int = 200, **
     form = context.pop("schedule_form", None)
     if form is None:
         form = _schedule_form(schedule)
-    return render(request, "details.html", status=status, scan=scan, categories=_by_category(scan),
+    return render(request, "details.html", status=status, scan=scan, categories=_by_category(request, scan),
+                  unknown=_unknown(request, scan),
                   summary=_summary(request), result=scan.assessment(), registry=s.registry, rechecks=scan.rechecks,
                   domain=domain, history=s.scans.history(domain["id"]), full_coverage=scoring.FULL_COVERAGE,
                   schedule=schedule, schedule_form=form, can_schedule=bool(user["is_admin"]),
@@ -263,11 +266,19 @@ async def update_schedule(request: Request, name: str, user: Row = Depends(requi
     return redirect(f"/domains/{name}/details#schedule")
 
 
-def _by_category(scan: Scan) -> dict[str, list[Finding]]:
+def _by_category(request: Request, scan: Scan) -> dict[str, list[Finding]]:
+    """The findings this version can explain, by category; the others are shown apart (:func:`_unknown`)."""
+    catalog = services(request).catalog
     categories: dict[str, list[Finding]] = {}
     for finding in scan.current():
-        categories.setdefault(finding.category, []).append(finding)
+        if known(catalog, finding.check_id):
+            categories.setdefault(finding.category, []).append(finding)
     return categories
+
+
+def _unknown(request: Request, scan: Scan) -> dict | None:
+    """Version 0.7.1 (D7): the results of a newer version, shown apart as recorded (unknown.py)."""
+    return unknown_view(services(request).catalog, lang_of(request), scan.current(), scan.version)
 
 
 def _summary(request: Request) -> Callable[[Finding, str], str]:
@@ -326,7 +337,8 @@ async def history_detail(request: Request, name: str, scan_id: str, user: Row = 
     domain = visible_domain(request, name, user)
     scan = stored_scan(request, domain, scan_id)
     newest = next(iter(s.scans.history(domain["id"], limit=1)), None)  # the scan the plan of fixes shows
-    return render(request, "history_detail.html", domain=domain, scan=scan, categories=_by_category(scan),
+    return render(request, "history_detail.html", domain=domain, scan=scan, categories=_by_category(request, scan),
+                  unknown=_unknown(request, scan),
                   summary=_summary(request), result=scan.assessment(), registry=s.registry,
                   rechecks=scan.rechecks, newest=newest, full_coverage=scoring.FULL_COVERAGE)
 

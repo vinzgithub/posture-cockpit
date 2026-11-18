@@ -3,6 +3,7 @@
 """Bounded portfolio enrichment and factual scheduler state; no risk score."""
 from __future__ import annotations
 
+from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass, replace
 from datetime import datetime
@@ -12,6 +13,7 @@ from ..core.compare import CheckChange, Snapshot, check_changes, compare_check, 
 from ..storage import Row
 from ..storage.portfolio import DomainFilter, DomainPage
 from ..storage.schedules import Schedule
+from ..unknown import known, unknown_ids
 from .scheduler import STALE, Scheduler, status
 from .services import Services
 
@@ -52,8 +54,11 @@ def scheduler_state(s: Services, scheduler: Scheduler | None, now: datetime) -> 
     return "off" if not s.config.scheduler else "stalled"
 
 
-def latest_transition(states: list[Snapshot]) -> Transition | None:
-    """Last proven transition within 30 states, without crossing a rules/inventory boundary."""
+def latest_transition(states: list[Snapshot],
+                      shown: Callable[[str], bool] = lambda check_id: True) -> Transition | None:
+    """Last proven transition within 30 states, without crossing a rules/inventory boundary. ``shown``
+    (version 0.7.1, D7): whether a check can be named here; a result this version cannot explain is no
+    transition (unknown.py)."""
     for index in range(min(len(states) - 1, 29)):
         current, previous = states[index], states[index + 1]
         changes = check_changes(previous, current)
@@ -61,6 +66,8 @@ def latest_transition(states: list[Snapshot]) -> Transition | None:
             return None
         candidates = []
         for change in changes.changes:
+            if not shown(change.check_id):
+                continue
             before_at, missed = previous.at, 0
             if change.kind == "unmeasured":
                 # A later conclusive status may be compared with a known earlier one;
@@ -110,13 +117,15 @@ def load(s: Services, filters: DomainFilter, *, internal: bool, scheduler: str, 
         view = DomainView(row, schedule, runs.get(did), events.get(did, {}), unreadable=row["scan_id"] in unreadable)
         try:
             snapshots = [Snapshot.from_row(dict(state)) for state in histories.get(did, [])]
-            view.transition = latest_transition(snapshots)
+            view.transition = latest_transition(snapshots, lambda check_id: known(s.catalog, check_id))
         except (ValueError, TypeError, KeyError):
             view.transition = None
         scan = scans.get(row["scan_id"])
         if scan is not None:
             try:
-                items = scoring.plan(scan.current(), s.registry).items
+                current = scan.current()
+                frozen = unknown_ids(s.catalog, scan.findings) | unknown_ids(s.catalog, current)
+                items = scoring.plan(current, s.registry, frozen=frozen).items
                 if items:
                     finding = items[0].finding
                     view.first_id = finding.check_id

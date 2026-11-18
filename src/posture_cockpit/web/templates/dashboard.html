@@ -46,7 +46,7 @@
         {% if row.measured_at %}<p class="small">{{ date(row.measured_at) }} {{ local_time(row.measured_at) }} · {{ t('mc.origin.' ~ row.measurement_origin) }}</p>{% else %}<p class="small">{{ t('pf.no_measurement') }}</p>{% endif %}
       </td>
       <td data-label="{{ t('pf.transition') }}">{% if domain.transition %}{% set change = domain.transition %}
-        <p>{{ t(change.change.check_id ~ '.title') }}</p><p class="small">{{ t('status.' ~ change.change.previous) }} → {{ t('status.' ~ change.change.current) }}</p>
+        <p>{{ check_title(change.change.check_id) }}</p><p class="small">{{ t('status.' ~ change.change.previous) }} → {{ t('status.' ~ change.change.current) }}</p>
         <p class="small">{{ date(change.at) }} {{ local_time(change.at) }} · {{ t('mc.change.' ~ change.change.kind) }}</p>
         {% if change.missed %}<p class="small">{{ t('pf.missed', n=change.missed) }}</p>{% endif %}
         {% else %}<p class="small muted">{{ t('pf.no_transition') }}</p>{% endif %}

@@ -9,6 +9,7 @@ from starlette.exceptions import HTTPException
 from ...core import scoring
 from ...core.compare import Snapshot
 from ...storage import CorruptScan, Row
+from ...unknown import unknown_ids
 from .. import mission_control
 from ..deps import lang_of, redirect, render, require_user, t, visible_domain
 from ..services import services
@@ -55,7 +56,10 @@ def _page(request: Request, name: str, user: Row, *, simulate: bool):
     result = None
     if simulate:
         try:
-            result = scoring.simulate(scan.current(), selected, s.registry)
+            current = scan.current()
+            # Version 0.7.1 (D7): a result this version cannot explain is never a candidate (unknown.py).
+            frozen = unknown_ids(s.catalog, scan.findings) | unknown_ids(s.catalog, current)
+            result = scoring.simulate(current, selected, s.registry, frozen=frozen)
         except ValueError:
             raise HTTPException(400) from None
     view = mission_control.context(s.catalog, lang_of(request), domain, scan, states, s.registry)

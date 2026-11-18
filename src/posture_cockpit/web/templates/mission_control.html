@@ -13,7 +13,7 @@
 {% endmacro %}
 {% macro transition(row) %}
 <li class="mc-transition">
-  <p><a href="/domains/{{ scan.domain }}/details#{{ row.change.check_id }}"><strong>{{ t(row.change.check_id ~ '.title') }}</strong></a> · {{ t('mc.change.' ~ row.change.kind) }}</p>
+  <p><a href="/domains/{{ scan.domain }}/details#{{ row.change.check_id }}"><strong>{{ check_title(row.change.check_id) }}</strong></a> · {{ t('mc.change.' ~ row.change.kind) }}</p>
   <p><time datetime="{{ row.previous.at }}">{{ date(row.previous.at) }} {{ local_time(row.previous.at) }}</time> : <span class="badge badge-{{ row.change.previous }}">{{ t('status.' ~ row.change.previous) }}</span>
     → <time datetime="{{ row.current.at }}">{{ date(row.current.at) }} {{ local_time(row.current.at) }}</time> : <span class="badge badge-{{ row.change.current }}">{{ t('status.' ~ row.change.current) }}</span></p>
   {% if row.last.state and row.last.missed %}<p class="small">{{ t('mc.last_conclusive', date=date(row.last.state.at), time=local_time(row.last.state.at), status=t('status.' ~ row.last.state.checks[row.change.check_id]), n=row.last.missed | length) }}</p>
@@ -52,7 +52,7 @@
 
 {% if dependencies %}<section class="panel" aria-labelledby="mc-https">
   <h2 id="mc-https">{{ t('mc.dependencies') }}</h2><p>{{ t('mc.dependency_help') }}</p>
-  <ul>{% for f in dependencies %}<li><a href="/domains/{{ scan.domain }}/details#{{ f.check_id }}">{{ t(f.check_id ~ '.title') }}</a> — {{ t('status.' ~ f.status.value) }}</li>{% endfor %}</ul>
+  <ul>{% for f in dependencies %}<li><a href="/domains/{{ scan.domain }}/details#{{ f.check_id }}">{{ check_title(f.check_id) }}</a> — {{ t('status.' ~ f.status.value) }}</li>{% endfor %}</ul>
 </section>{% endif %}
 
 <section class="panel mc-simulator" aria-labelledby="mc-whatif">
@@ -93,12 +93,12 @@
     {% if simulation.conditional %}{{ assessment(simulation.best, t('mc.best')) }}{% endif %}
   </div>
   {% if simulation.now.score is not none and simulation.worst.score is not none and simulation.best.score is not none %}<p>{% if not simulation.conditional and simulation.worst.score == simulation.best.score %}{{ t('mc.exact_delta', n=('%+d' | format(simulation.worst.score - simulation.now.score))) }}{% else %}{{ t('mc.conditional_delta', low=('%+d' | format(simulation.worst.score - simulation.now.score)), high=('%+d' | format(simulation.best.score - simulation.now.score))) }}{% endif %}</p>{% endif %}
-  {% if simulation.unmeasured %}<p>{{ t('mc.future_measurements') }}</p><ul>{% for check_id in simulation.unmeasured %}<li>{{ t(check_id ~ '.title') }}</li>{% endfor %}</ul>{% endif %}
+  {% if simulation.unmeasured %}<p>{{ t('mc.future_measurements') }}</p><ul>{% for check_id in simulation.unmeasured %}<li>{{ check_title(check_id) }}</li>{% endfor %}</ul>{% endif %}
   {% for assumption in simulation.assumptions if assumption.kind == 'registry_fallback' %}<p class="small">{{ t('mc.fallback', check=assumption.check_id) }}</p>{% endfor %}
   <p class="small muted">{{ t('mc.not_prediction') }}</p>
 </section>{% endif %}
 
-{% if plan.unknown %}<aside class="flash flash-warn"><p>{{ t('projection.excluded') }}</p><ul>{% for cid in plan.unknown %}<li>{{ t(cid ~ '.title') }}</li>{% endfor %}</ul></aside>{% endif %}
+{% if plan.unknown %}<aside class="flash flash-warn"><p>{{ t('projection.excluded') }}</p><ul>{% for cid in plan.unknown %}<li>{{ check_title(cid) }}</li>{% endfor %}</ul></aside>{% endif %}
 <section class="panel" aria-labelledby="mc-actions">
   <h2 id="mc-actions">{{ t('mc.active_actions') }}</h2>
   {% if candidates %}<ol>{% for candidate in candidates %}<li><a href="/domains/{{ scan.domain }}?task={{ candidate.task.check_id }}#task">{{ candidate.task.title }}</a> — {{ t('status.' ~ candidate.observed.value) }}</li>{% endfor %}</ol>{% else %}<p>{{ t('mc.no_candidates') }}</p>{% endif %}

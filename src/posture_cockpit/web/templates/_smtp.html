@@ -15,7 +15,7 @@
     {% if smtp.readiness.policy %}<p class="small">{{ t('smtp.policy', state=smtp.readiness.policy.label) }}
       {% if smtp.readiness.policy.covered %}— <span class="smtp-hosts">{{ t('smtp.covered', hosts=smtp.readiness.policy.covered) }}</span>{% endif %}
       {% if smtp.readiness.policy.uncovered %}— <span class="smtp-hosts">{{ t('smtp.uncovered', hosts=smtp.readiness.policy.uncovered) }}</span>{% endif %}</p>{% endif %}
-    <p class="small muted">{{ smtp.readiness.scope }}</p>
+    {% if smtp.readiness.scope %}<p class="small muted smtp-scope">{{ smtp.readiness.scope }}</p>{% endif %}
   </div>
   {% if smtp.rows %}
   <h3 class="smtp-title">{{ t('smtp.title') }}</h3>

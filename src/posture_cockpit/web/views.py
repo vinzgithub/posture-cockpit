@@ -16,6 +16,8 @@ from ..core import providers, scoring
 from ..core.model import DnsChange, Finding, Status
 from ..i18n import Catalog, finding_summary
 from ..storage import Row, Scan
+from ..unknown import category as category_label
+from ..unknown import known_only, unknown_ids
 
 EFFORT_KEYS = {"easy": "effort.easy", "medium": "effort.medium", "delegate": "effort.delegate"}
 
@@ -199,17 +201,20 @@ def task_view(catalog: Catalog, lang: str, scan: Scan, finding: Finding, number:
 
 
 def gaps(catalog: Catalog, lang: str, domain: str, findings: list[Finding]) -> list[GapView]:
-    """The checks that could not be evaluated, with the reason (timeout, unreachable, destination refused)."""
+    """The checks that could not be evaluated, with the reason (timeout, unreachable, destination refused).
+    A result this version cannot explain is not listed (0.7.1, D7: unknown.py)."""
     return [GapView(f.check_id, catalog.text(lang, f"{f.check_id}.title"), finding_summary(catalog, lang, f, domain))
-            for f in findings if f.status is Status.ERROR]
+            for f in known_only(catalog, findings) if f.status is Status.ERROR]
 
 
 def plan_view(catalog: Catalog, lang: str, scan: Scan, domain_row: Row,
               registry: scoring.VerdictRegistry | None = None) -> PlanView:
     findings = scan.findings
     current = scan.current()
-    plan = scoring.plan(current, registry)
-    original = scoring.plan(findings, registry)
+    # Version 0.7.1 (D7): results this version cannot explain are never proposed, held as recorded.
+    frozen = unknown_ids(catalog, findings) | unknown_ids(catalog, current)
+    plan = scoring.plan(current, registry, frozen=frozen)
+    original = scoring.plan(findings, registry, frozen=frozen)
     nameservers = _nameservers(findings)
     detected = providers.detect(nameservers)
     host_ids = [h.id for h in providers.DNS_HOSTS] + [providers.OTHER.id]
@@ -240,7 +245,7 @@ def plan_view(catalog: Catalog, lang: str, scan: Scan, domain_row: Row,
         priorities=priorities, improvements=improvements, completed=completed,
         completed_priorities=sum(t.check_id in {i.finding.check_id for i in original.priorities} for t in completed),
         counts={status.value: counts.get(status, 0) for status in Status},
-        categories=[(cat, catalog.text(lang, f"category.{cat}"), a) for cat, a in scoring.by_category(current).items()],
+        categories=[(cat, category_label(catalog, lang, cat), a) for cat, a in scoring.by_category(current).items()],
         gaps=gaps(catalog, lang, scan.domain, current),
         dns_hosts=hosts, dns_host=selected, detected_host=detected.name if detected else "", nameservers=nameservers,
     )

@@ -21,8 +21,8 @@
 </div>
 {% endif %}
 {% if history | length > 1 %}
-<div class="history-chart" style="margin:14px 0 18px;max-width:850px">
-  <svg class="history-trend" viewBox="0 0 640 148" style="display:block;width:100%;height:auto;max-height:200px" role="img" aria-label="{{ t('details.history') }}">
+<div class="history-chart">
+  <svg class="history-trend" viewBox="0 0 640 148" role="img" aria-label="{{ t('details.history') }}">
     <line x1="50" y1="16" x2="622" y2="16" stroke="currentColor" stroke-opacity=".12" stroke-dasharray="3 4"/>
     <line x1="50" y1="106" x2="622" y2="106" stroke="currentColor" stroke-opacity=".25"/>
     <text x="42" y="19" font-size="10" text-anchor="end" fill="currentColor">100</text>
