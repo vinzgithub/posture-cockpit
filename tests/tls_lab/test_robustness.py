@@ -21,7 +21,9 @@ STREAM = "1982b1525f081039abb3663d90aa9cad9a62925861dcdea54bc5a92964e97949"
 CORPUS = {500: "e9c1b8eb8a4b0cf45f2a265ddef3a0684a5bc16f64babe1c998f162de2e3f3ca",
           20000: "f32a14ca6f958e2054733c528a0e4f567d9d5963e08d90c52cd102d8759b06e5"}
 COUNT = int(os.environ.get("TLS_LAB_FUZZ_COUNT", "20000"))
-SLOW = 0.05  # seconds: one input read slower than this fails
+# Seconds: one input read slower than this fails. Natively an input takes well under 1 ms; the margin is for
+# the emulated ARM64 of the CI (about 0.1 s seen at worst); a quadratic reading of 20 KiB would take seconds.
+SLOW = 0.25
 
 
 def test_the_stream_of_numbers_is_the_same_everywhere():

@@ -17,7 +17,7 @@ Limits, said plainly:
   no second flight, no timing (the network anomalies are scenarios of the catalogue, not mutations);
 - the corpus is as good as its seeds: the 50 replies of the catalogue;
 - no coverage is measured; the tests check only that the reader under test never fails otherwise than by
-  refusing the input (``Malformed``), and never takes long on one input;
+  refusing the input (``Malformed``), and never takes long on one input (250 ms, a margin for emulation);
 - the size of the corpus is a parameter: the CI runs a few thousand inputs (``TLS_LAB_FUZZ_COUNT``), gate G1
   asks for 100 000 on the prototype of PR-A2.
 """

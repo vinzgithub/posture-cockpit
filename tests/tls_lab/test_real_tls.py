@@ -181,32 +181,47 @@ def s_server(certs):
         process.wait(5)
 
 
-def s_client(address: tuple, *options: str) -> None:
+def s_client(address: tuple, *options: str) -> str:
+    """Run ``openssl s_client`` once; returns what it printed (for the diagnosis of a refusal)."""
     command = [OPENSSL, "s_client", "-connect", f"{address[0]}:{address[1]}", *options]
-    subprocess.run(command, input=b"", capture_output=True, timeout=10, check=False)  # noqa: S603 - the bench's own
+    done = subprocess.run(command, input=b"", capture_output=True, timeout=10, check=False)  # noqa: S603 - the bench's own
+    return (done.stdout + done.stderr).decode(errors="replace")
 
 
-def recorded_by(address: tuple, *client_options: str) -> bytes:
+def recorded_by(address: tuple, *client_options: str) -> tuple[bytes, str]:
     with Relay(address) as relay:
-        s_client(relay.address, *client_options)
+        said = s_client(relay.address, *client_options)
         time.sleep(0.05)
-        return wire.plaintext_prefix(bytes(relay.transcripts[0].to_client)) if relay.transcripts else b""
+        flight = wire.plaintext_prefix(bytes(relay.transcripts[0].to_client)) if relay.transcripts else b""
+    return flight, said
+
+
+def openssl_version() -> str:
+    done = subprocess.run([OPENSSL, "version"], capture_output=True, timeout=5, check=False)  # noqa: S603
+    return done.stdout.decode().strip()
 
 
 def test_tls13_ccm_8_chosen_by_openssl_reads_as_the_catalogue_says(s_server):
-    """The ssl module cannot offer CCM_8; openssl can: the suite code of the catalogue is the real one."""
+    """The ssl module cannot offer CCM_8; openssl can: the suite code of the catalogue is the real one.
+
+    At security level 0 on both sides. Some builds of openssl refuse it even so: the test is then skipped,
+    counted, with the version and what openssl said, never passed by default."""
     suite = "TLS_AES_128_CCM_8_SHA256"
-    address = s_server("-ciphersuites", suite, "-tls1_3")
-    flight = recorded_by(address, "-tls1_3", "-ciphersuites", suite)
+    level = ("-cipher", "ALL:@SECLEVEL=0")
+    address = s_server("-ciphersuites", suite, "-tls1_3", *level)
+    flight, said = recorded_by(address, "-tls1_3", "-ciphersuites", suite, *level)
     content_type, version, body = wire.records(flight)[0]
     facts = wire.read_flight(wire.record(content_type, body, version))
+    if facts.kind == "alert":
+        lines = [line for line in said.splitlines() if "error" in line.lower() or "alert" in line.lower()][:3]
+        pytest.skip(f"{openssl_version()} refuses CCM_8 here (alert {facts.alert}): {' | '.join(lines)}")
     assert facts.version == "TLS1.3" and facts.suite == 0x1305 and wire.SUITES[0x1305].name == suite
 
 
 def test_a_real_hello_retry_request_for_p384(s_server):
     """openssl chooses the groups on both sides: the client's first share is x25519, the server wants P-384."""
     address = s_server("-tls1_3", "-groups", "P-384")
-    flight = recorded_by(address, "-tls1_3", "-groups", "X25519:P-384")
+    flight, _ = recorded_by(address, "-tls1_3", "-groups", "X25519:P-384")
     content_type, version, body = wire.records(flight)[0]
     facts = wire.read_flight(wire.record(content_type, body, version))
     assert facts.kind == "hello_retry_request" and facts.group == 0x0018
